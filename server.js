@@ -10,12 +10,11 @@ config();
 
 const app = express();
 const PORT = 3001;
-const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
+let anthropicKey = process.env.ANTHROPIC_API_KEY || "";
 const PROXY_TOKEN = process.env.PROXY_TOKEN;
 
-if (!ANTHROPIC_KEY) {
-  console.error("Missing ANTHROPIC_API_KEY in .env");
-  process.exit(1);
+if (!anthropicKey) {
+  console.warn("No ANTHROPIC_API_KEY in .env — AI features disabled until key is set via UI");
 }
 
 // Initialize database and seed reference data
@@ -81,13 +80,36 @@ function validateBody(req, res, next) {
   next();
 }
 
+// --- API Key management ---
+// GET: check if key is configured (never returns the actual key)
+app.get("/api/ai/status", (req, res) => {
+  res.json({
+    configured: !!anthropicKey,
+    masked: anthropicKey ? anthropicKey.slice(0, 7) + "..." + anthropicKey.slice(-4) : null,
+  });
+});
+
+// POST: set the API key at runtime
+app.post("/api/ai/key", (req, res) => {
+  const { key } = req.body;
+  if (!key || typeof key !== "string" || !key.startsWith("sk-ant-")) {
+    return res.status(400).json({ error: "Invalid API key format. Must start with sk-ant-" });
+  }
+  anthropicKey = key.trim();
+  res.json({ configured: true, masked: anthropicKey.slice(0, 7) + "..." + anthropicKey.slice(-4) });
+});
+
+// --- AI proxy ---
 app.post("/api/ai", aiLimiter, authCheck, validateBody, async (req, res) => {
+  if (!anthropicKey) {
+    return res.status(503).json({ error: "No API key configured. Add your Anthropic API key in Settings." });
+  }
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": ANTHROPIC_KEY,
+        "x-api-key": anthropicKey,
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify(req.sanitizedBody),
@@ -107,5 +129,6 @@ app.post("/api/ai", aiLimiter, authCheck, validateBody, async (req, res) => {
 registerRoutes(app);
 
 app.listen(PORT, () => {
-  console.log(`CardVault API proxy running on http://localhost:${PORT}`);
+  console.log(`CardVault API running on http://localhost:${PORT}`);
+  if (!anthropicKey) console.log("  AI features: disabled (no API key — set via Settings UI)");
 });
