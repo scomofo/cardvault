@@ -3,6 +3,7 @@ import { ToastProvider } from "./components/Toast";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { DataProvider, useData } from "./lib/DataContext";
 import { IconCamera, IconCards, IconDollar, IconTools, IconSettings } from "./components/Icons";
+import GlobalSearch from "./components/GlobalSearch";
 import ScanView from "./components/ScanView";
 import BatchView from "./components/BatchView";
 import CatalogView from "./components/CatalogView";
@@ -80,6 +81,7 @@ function AppContent() {
           <span className="gold">Card</span><span style={{ color: "var(--tx)" }}>Vault</span>
         </h1>
         <div className="flex items-center gap-8">
+          <GlobalSearch onNavigate={setView} />
           {userName && <span className="text-xs text-dim" style={{ letterSpacing: ".5px" }}>{userName}</span>}
           <button className="btn btn-outline btn-sm" onClick={() => setView("cards")}>
             {activeCount} cards
