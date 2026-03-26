@@ -110,7 +110,29 @@ export default function ScanView({ onNavigate }) {
       let frontImgId = null, backImgId = null;
       if (frontImg) { frontImgId = `img_${id}_front`; await saveImage(frontImgId, frontImg); }
       if (backImg) { backImgId = `img_${id}_back`; await saveImage(backImgId, backImg); }
-      const entry = { id, ...card, frontImgId, backImgId, priceEstimate: priceEst, priceHistory, listing: { ...listing }, binder: card.binder || "", status: card.status || "inventory", listedOn: card.listedOn || [], ...(gradingData ? { centering: gradingData.centering, corners: gradingData.corners, edges: gradingData.edges, surface: gradingData.surface, projected_grade: gradingData.projected_grade, vault_status: gradingData.vault_status, condition_report: gradingData.condition_report } : {}), ...(cvResult?.centering ? { cv_centering_lr: cvResult.centering.lr, cv_centering_tb: cvResult.centering.tb, cv_centering_score: cvResult.centering.score, cv_processed: 1 } : {}), createdAt: new Date().toISOString() };
+      const entry = {
+        id, ...card,
+        costBasis: parseFloat(card.costBasis) || 0,
+        frontImgId, backImgId,
+        priceEstimate: priceEst, priceHistory,
+        binder: card.binder || "",
+        status: card.status || "inventory",
+        listedOn: card.listedOn || [],
+        ...(gradingData ? {
+          centering: gradingData.centering, corners: gradingData.corners,
+          edges: gradingData.edges, surface: gradingData.surface,
+          projected_grade: gradingData.projected_grade,
+          vault_status: gradingData.vault_status,
+          condition_report: gradingData.condition_report,
+        } : {}),
+        ...(cvResult?.centering ? {
+          cv_centering_lr: cvResult.centering.lr,
+          cv_centering_tb: cvResult.centering.tb,
+          cv_centering_score: cvResult.centering.score,
+          cv_processed: 1,
+        } : {}),
+        createdAt: new Date().toISOString(),
+      };
       setCatalog((p) => [entry, ...p]);
       toast.success(`Saved: ${card.name || "Card"}`);
       return entry;

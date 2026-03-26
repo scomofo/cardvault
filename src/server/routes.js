@@ -122,19 +122,25 @@ export function registerRoutes(app) {
 
   app.post("/api/items", (req, res) => {
     try {
-      const b = req.body;
+      const b = toSnake(req.body);
       const id = b.id || uid();
       run(
         `INSERT INTO user_items
          (id, parallel_id, name, card_set, year, card_number, type, rarity,
           condition, parallel, binder, cost_basis, status, listed_on,
-          front_img_id, back_img_id, price_estimate, price_history, notes)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        [id, b.parallel_id || null, b.name, b.card_set ?? b.cardSet, b.year, b.card_number ?? b.cardNumber,
+          front_img_id, back_img_id, price_estimate, price_history, notes,
+          centering, corners, edges, surface, projected_grade, vault_status,
+          condition_report, cv_centering_lr, cv_centering_tb, cv_centering_score, cv_processed)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [id, b.parallel_id || null, b.name, b.card_set, b.year, b.card_number,
          b.type || "sports", b.rarity, b.condition || "near_mint", b.parallel,
-         b.binder, b.cost_basis ?? b.costBasis ?? 0, b.status || "inventory",
-         json(b.listed_on ?? b.listedOn), b.front_img_id ?? b.frontImgId, b.back_img_id ?? b.backImgId,
-         json(b.price_estimate ?? b.priceEstimate), json(b.price_history ?? b.priceHistory), b.notes]
+         b.binder, b.cost_basis ?? 0, b.status || "inventory",
+         json(b.listed_on), b.front_img_id, b.back_img_id,
+         json(b.price_estimate), json(b.price_history), b.notes,
+         b.centering || null, b.corners || null, b.edges || null, b.surface || null,
+         b.projected_grade || null, b.vault_status || null, b.condition_report || null,
+         b.cv_centering_lr || null, b.cv_centering_tb || null, b.cv_centering_score || null,
+         b.cv_processed || 0]
       );
       res.status(201).json(toCamel(get("SELECT * FROM user_items WHERE id = ?", [id]), ITEM_FIELD_MAP));
     } catch (e) {
@@ -153,12 +159,20 @@ export function registerRoutes(app) {
           parallel_id=?, name=?, card_set=?, year=?, card_number=?, type=?,
           rarity=?, condition=?, parallel=?, binder=?, cost_basis=?, status=?,
           listed_on=?, front_img_id=?, back_img_id=?, price_estimate=?,
-          price_history=?, notes=?, updated_at=datetime('now')
+          price_history=?, notes=?,
+          centering=?, corners=?, edges=?, surface=?, projected_grade=?,
+          vault_status=?, condition_report=?,
+          cv_centering_lr=?, cv_centering_tb=?, cv_centering_score=?, cv_processed=?,
+          updated_at=datetime('now')
          WHERE id=?`,
-        [b.parallel_id, b.name, b.card_set ?? b.cardSet, b.year, b.card_number ?? b.cardNumber, b.type,
-         b.rarity, b.condition, b.parallel, b.binder, b.cost_basis ?? b.costBasis ?? 0, b.status,
-         json(b.listed_on ?? b.listedOn), b.front_img_id ?? b.frontImgId, b.back_img_id ?? b.backImgId,
-         json(b.price_estimate ?? b.priceEstimate), json(b.price_history ?? b.priceHistory), b.notes, req.params.id]
+        [b.parallel_id, b.name, b.card_set, b.year, b.card_number, b.type,
+         b.rarity, b.condition, b.parallel, b.binder, b.cost_basis ?? 0, b.status,
+         json(b.listed_on), b.front_img_id, b.back_img_id,
+         json(b.price_estimate), json(b.price_history), b.notes,
+         b.centering, b.corners, b.edges, b.surface, b.projected_grade,
+         b.vault_status, b.condition_report,
+         b.cv_centering_lr, b.cv_centering_tb, b.cv_centering_score, b.cv_processed,
+         req.params.id]
       );
       res.json(toCamel(get("SELECT * FROM user_items WHERE id = ?", [req.params.id]), ITEM_FIELD_MAP));
     } catch (e) {

@@ -5,7 +5,7 @@ const WEIGHTS = { centering: 0.2, corners: 0.3, edges: 0.2, surface: 0.3 };
 
 export function calculateGrade(scores) {
   const { centering, corners, edges, surface } = scores;
-  const vals = [centering, corners, edges, surface].map(Number).filter((v) => !isNaN(v));
+  const vals = [centering, corners, edges, surface].map((v) => v != null ? Number(v) : NaN).filter((v) => !isNaN(v) && v > 0);
   if (vals.length < 4) return null;
 
   const floor = Math.min(...vals);
@@ -59,8 +59,10 @@ export function fullGradingAssessment(scores) {
 // Convert CV centering ratios (e.g. "48/52") to a 1-10 score
 export function centeringFromRatios(lr, tb) {
   try {
-    const leftPct = parseInt(lr.split("/")[0]);
-    const topPct = parseInt(tb.split("/")[0]);
+    if (!lr || !tb) return 10.0;
+    const leftPct = parseInt(String(lr).split("/")[0]);
+    const topPct = parseInt(String(tb).split("/")[0]);
+    if (isNaN(leftPct) || isNaN(topPct)) return 10.0;
     const hDev = Math.abs(leftPct - 50);
     const vDev = Math.abs(topPct - 50);
     const worst = Math.max(hDev, vDev);
