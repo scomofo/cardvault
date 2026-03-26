@@ -38,6 +38,24 @@ export function gradeToTerm(score) {
   return GRADE_SCALE.find((g) => score >= g.min) || GRADE_SCALE[GRADE_SCALE.length - 1];
 }
 
+// Vault Status — Traffic Light sorting system from Grading Integration Spec
+// GREEN = High-value grading candidate, YELLOW = Solid raw sale, RED = Bulk/discount
+export function assignVaultStatus(projectedGrade) {
+  if (projectedGrade >= 9.5) return { status: "GREEN", label: "Grading Candidate", color: "#4ade80" };
+  if (projectedGrade >= 8.5) return { status: "YELLOW", label: "Raw Sale", color: "#fbbf24" };
+  return { status: "RED", label: "Bulk / Budget", color: "#f87171" };
+}
+
+// Full grading assessment combining grade calculation + vault status
+export function fullGradingAssessment(scores) {
+  const grade = calculateGrade(scores);
+  if (!grade) return null;
+  const term = gradeToTerm(grade.final);
+  const vault = assignVaultStatus(grade.final);
+  const report = generateConditionReport(scores);
+  return { ...grade, term: term.term, termColor: term.color, action: term.action, vault, report };
+}
+
 // Generate eBay-ready condition description from sub-grades
 export function generateConditionReport(scores) {
   const { centering, corners, edges, surface } = scores;

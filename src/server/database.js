@@ -14,6 +14,7 @@ export function initDB() {
   db.pragma("foreign_keys = ON");
 
   createTables();
+  runMigrations();
   createIndexes();
   return db;
 }
@@ -127,6 +128,14 @@ function createTables() {
       price_estimate TEXT,
       price_history TEXT,
       notes TEXT,
+      -- Grading sub-scores (1-10 scale, from Grading Integration Spec)
+      centering INTEGER,
+      corners INTEGER,
+      edges INTEGER,
+      surface INTEGER,
+      projected_grade REAL,
+      vault_status TEXT, -- GREEN (grading candidate), YELLOW (raw sale), RED (bulk)
+      condition_report TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     );
@@ -227,6 +236,21 @@ function createTables() {
   `);
 }
 
+function runMigrations() {
+  // Add grading columns to existing user_items tables
+  const cols = db.prepare("PRAGMA table_info(user_items)").all().map((c) => c.name);
+  const addCol = (name, type) => {
+    if (!cols.includes(name)) db.exec(`ALTER TABLE user_items ADD COLUMN ${name} ${type}`);
+  };
+  addCol("centering", "INTEGER");
+  addCol("corners", "INTEGER");
+  addCol("edges", "INTEGER");
+  addCol("surface", "INTEGER");
+  addCol("projected_grade", "REAL");
+  addCol("vault_status", "TEXT");
+  addCol("condition_report", "TEXT");
+}
+
 function createIndexes() {
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_cards_set_id ON cards(set_id);
@@ -237,5 +261,6 @@ function createIndexes() {
     CREATE INDEX IF NOT EXISTS idx_sales_card_id ON sales(card_id);
     CREATE INDEX IF NOT EXISTS idx_sales_date ON sales(date);
     CREATE INDEX IF NOT EXISTS idx_listings_status ON listings(status);
+    CREATE INDEX IF NOT EXISTS idx_user_items_vault ON user_items(vault_status);
   `);
 }
