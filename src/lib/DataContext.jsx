@@ -31,7 +31,10 @@ export function useData() {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Diff two arrays by `id` and return added / removed / changed items. */
+/**
+ * Diff two arrays by `id` using updatedAt timestamps when available,
+ * falling back to shallow key comparison for changed detection.
+ */
 function diffById(prev, next) {
   const prevMap = new Map(prev.map((item) => [item.id, item]));
   const nextMap = new Map(next.map((item) => [item.id, item]));
@@ -40,21 +43,22 @@ function diffById(prev, next) {
   const removed = prev.filter((item) => !nextMap.has(item.id));
   const changed = next.filter((item) => {
     const old = prevMap.get(item.id);
-    return old && JSON.stringify(old) !== JSON.stringify(item);
+    if (!old) return false;
+    // Fast path: check updatedAt timestamp if available
+    if (item.updatedAt && old.updatedAt && item.updatedAt !== old.updatedAt) return true;
+    if (item.updatedAt && old.updatedAt && item.updatedAt === old.updatedAt) return false;
+    // Fallback: compare key count + values (cheaper than full JSON.stringify)
+    const keys = Object.keys(item);
+    if (keys.length !== Object.keys(old).length) return true;
+    return keys.some((k) => {
+      const a = item[k], b = old[k];
+      if (a === b) return false;
+      if (typeof a === "object" && typeof b === "object") return JSON.stringify(a) !== JSON.stringify(b);
+      return true;
+    });
   });
 
   return { added, removed, changed };
-}
-
-/** Create a debounced version of fn (delay ms). Returns [debouncedFn, cancel]. */
-function makeDebouncedFn(fn, delay = 500) {
-  let timer = null;
-  const debounced = (...args) => {
-    clearTimeout(timer);
-    timer = setTimeout(() => fn(...args), delay);
-  };
-  const cancel = () => clearTimeout(timer);
-  return [debounced, cancel];
 }
 
 // ---------------------------------------------------------------------------
@@ -85,31 +89,50 @@ export function DataProvider({ children }) {
   const [userName, _setUserName] = useState(() => loadString("user", ""));
   const [shipFrom, _setShipFrom] = useState(() => loadString("addr", ""));
 
-  // --- Sync queue (one debounce timer per collection) ---
+  // --- Sync system: ref-based to prevent race conditions ---
+  // Track the last state that was successfully synced to the server.
+  // On each debounced sync, diff against this ref (not the prev from setState).
   const syncTimers = useRef({});
+  const lastSynced = useRef({});
+  const syncInFlight = useRef({});
 
-  /** Fire-and-forget sync for array collections. */
-  const syncCollection = useCallback((apiObj, prev, next) => {
-    const { added, removed, changed } = diffById(prev, next);
+  /** Fire-and-forget sync: diffs current state against last-synced snapshot. */
+  const syncCollection = useCallback((key, apiObj, current) => {
+    // Prevent overlapping syncs for the same collection
+    if (syncInFlight.current[key]) return;
+
+    const prev = lastSynced.current[key] || [];
+    const { added, removed, changed } = diffById(prev, current);
     const ops = [];
     added.forEach((item) => ops.push(apiObj.create(item)));
     changed.forEach((item) => ops.push(apiObj.update(item.id, item)));
     removed.forEach((item) => ops.push(apiObj.delete(item.id)));
 
-    if (ops.length === 0) return;
+    if (ops.length === 0) {
+      lastSynced.current[key] = current;
+      return;
+    }
 
+    syncInFlight.current[key] = true;
     setSyncing(true);
     Promise.all(ops)
-      .catch((err) => console.warn("Sync error:", err))
-      .finally(() => setSyncing(false));
+      .then(() => {
+        // Only update lastSynced on success
+        lastSynced.current[key] = current;
+      })
+      .catch((err) => console.warn(`Sync error (${key}):`, err))
+      .finally(() => {
+        syncInFlight.current[key] = false;
+        setSyncing(false);
+      });
   }, []);
 
   /** Schedule a debounced sync for a given key / api pair. */
   const scheduleSyncCollection = useCallback(
-    (key, apiObj, prev, next) => {
+    (key, apiObj, current) => {
       clearTimeout(syncTimers.current[key]);
       syncTimers.current[key] = setTimeout(
-        () => syncCollection(apiObj, prev, next),
+        () => syncCollection(key, apiObj, current),
         500,
       );
     },
@@ -124,7 +147,7 @@ export function DataProvider({ children }) {
         const next = typeof updater === "function" ? updater(prev) : updater;
         saveData("catalog", next);
         if (useServerRef.current)
-          scheduleSyncCollection("catalog", itemsAPI, prev, next);
+          scheduleSyncCollection("catalog", itemsAPI, next);
         return next;
       });
     },
@@ -137,7 +160,7 @@ export function DataProvider({ children }) {
         const next = typeof updater === "function" ? updater(prev) : updater;
         saveData("sales", next);
         if (useServerRef.current)
-          scheduleSyncCollection("sales", salesAPI, prev, next);
+          scheduleSyncCollection("sales", salesAPI, next);
         return next;
       });
     },
@@ -150,7 +173,7 @@ export function DataProvider({ children }) {
         const next = typeof updater === "function" ? updater(prev) : updater;
         saveData("trades", next);
         if (useServerRef.current)
-          scheduleSyncCollection("trades", tradesAPI, prev, next);
+          scheduleSyncCollection("trades", tradesAPI, next);
         return next;
       });
     },
@@ -163,7 +186,7 @@ export function DataProvider({ children }) {
         const next = typeof updater === "function" ? updater(prev) : updater;
         saveData("watchlist", next);
         if (useServerRef.current)
-          scheduleSyncCollection("watchlist", watchlistAPI, prev, next);
+          scheduleSyncCollection("watchlist", watchlistAPI, next);
         return next;
       });
     },
@@ -176,7 +199,7 @@ export function DataProvider({ children }) {
         const next = typeof updater === "function" ? updater(prev) : updater;
         saveData("gradings", next);
         if (useServerRef.current)
-          scheduleSyncCollection("gradings", gradingsAPI, prev, next);
+          scheduleSyncCollection("gradings", gradingsAPI, next);
         return next;
       });
     },
@@ -189,7 +212,7 @@ export function DataProvider({ children }) {
         const next = typeof updater === "function" ? updater(prev) : updater;
         saveData("listings", next);
         if (useServerRef.current)
-          scheduleSyncCollection("listings", listingsAPI, prev, next);
+          scheduleSyncCollection("listings", listingsAPI, next);
         return next;
       });
     },
@@ -202,7 +225,7 @@ export function DataProvider({ children }) {
         const next = typeof updater === "function" ? updater(prev) : updater;
         saveData("purchases", next);
         if (useServerRef.current)
-          scheduleSyncCollection("purchases", purchasesAPI, prev, next);
+          scheduleSyncCollection("purchases", purchasesAPI, next);
         return next;
       });
     },
@@ -323,7 +346,16 @@ export function DataProvider({ children }) {
           // Migrate localStorage data to the server.
           try {
             await migrate();
-            // After migration, local data is authoritative – keep it as-is.
+            // After migration, local data is now on the server — snapshot as synced
+            lastSynced.current = {
+              catalog: loadData("catalog"),
+              sales: loadData("sales"),
+              trades: loadData("trades"),
+              watchlist: loadData("watchlist"),
+              gradings: loadData("gradings"),
+              listings: loadData("listings"),
+              purchases: loadData("purchases"),
+            };
           } catch (err) {
             console.warn("Migration failed, continuing with local data:", err);
           }
@@ -351,6 +383,17 @@ export function DataProvider({ children }) {
 
           _setPurchases(toArray(serverPurchases));
           saveData("purchases", toArray(serverPurchases));
+
+          // Initialize lastSynced refs so first sync doesn't re-push everything
+          lastSynced.current = {
+            catalog: toArray(serverCatalog),
+            sales: toArray(serverSales),
+            trades: toArray(serverTrades),
+            watchlist: toArray(serverWatchlist),
+            gradings: toArray(serverGradings),
+            listings: toArray(serverListings),
+            purchases: toArray(serverPurchases),
+          };
 
           if (serverSettings) {
             if (serverSettings.userName != null) {

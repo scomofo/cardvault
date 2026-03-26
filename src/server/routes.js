@@ -3,6 +3,52 @@ import crypto from "crypto";
 
 const uid = () => crypto.randomUUID();
 
+// ─── Field name conversion (snake_case DB ↔ camelCase React) ────────────
+const ITEM_FIELD_MAP = {
+  card_set: "set", card_number: "number", cost_basis: "costBasis",
+  listed_on: "listedOn", front_img_id: "frontImgId", back_img_id: "backImgId",
+  price_estimate: "priceEstimate", price_history: "priceHistory",
+  parallel_id: "parallelId", created_at: "createdAt", updated_at: "updatedAt",
+  projected_grade: "projected_grade", vault_status: "vault_status",
+  condition_report: "condition_report",
+  cv_centering_lr: "cv_centering_lr", cv_centering_tb: "cv_centering_tb",
+  cv_centering_score: "cv_centering_score", cv_processed: "cv_processed",
+  ebay_centering: "ebay_centering", ebay_corner_sharpness: "ebay_corner_sharpness",
+  ebay_edge_chipping: "ebay_edge_chipping",
+};
+
+const SALE_FIELD_MAP = {
+  card_id: "cardId", card_name: "cardName", card_set: "cardSet",
+  sale_price: "salePrice", cost_basis: "costBasis", shipping_cost: "shippingCost",
+  net_profit: "netProfit", listing_id: "listingId",
+};
+
+const LISTING_FIELD_MAP = {
+  card_id: "cardId", card_name: "cardName", card_set: "cardSet",
+  card_number: "cardNumber", start_price: "startPrice", buy_now_price: "buyNowPrice",
+  auction_end_date: "auctionEndDate", current_bid: "currentBid",
+  sold_price: "soldPrice", sold_date: "soldDate", created_at: "createdAt",
+};
+
+function toCamel(row, map) {
+  if (!row) return row;
+  const out = {};
+  for (const [k, v] of Object.entries(row)) {
+    const camelKey = map[k] || k;
+    // Parse JSON strings for array/object fields
+    if ((camelKey === "listedOn" || camelKey === "priceEstimate" || camelKey === "priceHistory") && typeof v === "string") {
+      try { out[camelKey] = JSON.parse(v); } catch { out[camelKey] = v; }
+    } else {
+      out[camelKey] = v;
+    }
+  }
+  return out;
+}
+
+function toCamelArray(rows, map) {
+  return (rows || []).map((r) => toCamel(r, map));
+}
+
 export function registerRoutes(app) {
   // ─── User Items (catalog) ───────────────────────────────────────────
   app.get("/api/items", (req, res) => {
@@ -27,7 +73,7 @@ export function registerRoutes(app) {
       };
       sql += ` ORDER BY ${sortMap[sort] || "created_at DESC"}`;
 
-      res.json(all(sql, params));
+      res.json(toCamelArray(all(sql, params), ITEM_FIELD_MAP));
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
@@ -37,7 +83,7 @@ export function registerRoutes(app) {
     try {
       const row = get("SELECT * FROM user_items WHERE id = ?", [req.params.id]);
       if (!row) return res.status(404).json({ error: "Item not found" });
-      res.json(row);
+      res.json(toCamel(row, ITEM_FIELD_MAP));
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
@@ -59,7 +105,7 @@ export function registerRoutes(app) {
          json(b.listed_on ?? b.listedOn), b.front_img_id ?? b.frontImgId, b.back_img_id ?? b.backImgId,
          json(b.price_estimate ?? b.priceEstimate), json(b.price_history ?? b.priceHistory), b.notes]
       );
-      res.status(201).json(get("SELECT * FROM user_items WHERE id = ?", [id]));
+      res.status(201).json(toCamel(get("SELECT * FROM user_items WHERE id = ?", [id]), ITEM_FIELD_MAP));
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
@@ -83,7 +129,7 @@ export function registerRoutes(app) {
          json(b.listed_on ?? b.listedOn), b.front_img_id ?? b.frontImgId, b.back_img_id ?? b.backImgId,
          json(b.price_estimate ?? b.priceEstimate), json(b.price_history ?? b.priceHistory), b.notes, req.params.id]
       );
-      res.json(get("SELECT * FROM user_items WHERE id = ?", [req.params.id]));
+      res.json(toCamel(get("SELECT * FROM user_items WHERE id = ?", [req.params.id]), ITEM_FIELD_MAP));
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
@@ -101,7 +147,7 @@ export function registerRoutes(app) {
 
   // ─── Sales ──────────────────────────────────────────────────────────
   app.get("/api/sales", (_req, res) => {
-    try { res.json(all("SELECT * FROM sales ORDER BY date DESC")); }
+    try { res.json(toCamelArray(all("SELECT * FROM sales ORDER BY date DESC"), SALE_FIELD_MAP)); }
     catch (e) { res.status(500).json({ error: e.message }); }
   });
 
@@ -121,7 +167,7 @@ export function registerRoutes(app) {
       if (b.card_id) {
         run("UPDATE user_items SET status = 'sold', updated_at = datetime('now') WHERE id = ?", [b.card_id]);
       }
-      res.status(201).json(get("SELECT * FROM sales WHERE id = ?", [id]));
+      res.status(201).json(toCamel(get("SELECT * FROM sales WHERE id = ?", [id]), SALE_FIELD_MAP));
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
@@ -135,7 +181,7 @@ export function registerRoutes(app) {
       const params = [];
       if (status) { sql += " WHERE status = ?"; params.push(status); }
       sql += " ORDER BY created_at DESC";
-      res.json(all(sql, params));
+      res.json(toCamelArray(all(sql, params), LISTING_FIELD_MAP));
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
@@ -159,7 +205,7 @@ export function registerRoutes(app) {
       if (b.card_id) {
         run("UPDATE user_items SET status = 'listed', updated_at = datetime('now') WHERE id = ?", [b.card_id]);
       }
-      res.status(201).json(get("SELECT * FROM listings WHERE id = ?", [id]));
+      res.status(201).json(toCamel(get("SELECT * FROM listings WHERE id = ?", [id]), LISTING_FIELD_MAP));
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
@@ -180,7 +226,7 @@ export function registerRoutes(app) {
          b.shipping, b.current_bid, b.status, b.sold_price, b.sold_date,
          b.notes, req.params.id]
       );
-      res.json(get("SELECT * FROM listings WHERE id = ?", [req.params.id]));
+      res.json(toCamel(get("SELECT * FROM listings WHERE id = ?", [req.params.id]), LISTING_FIELD_MAP));
     } catch (e) {
       res.status(500).json({ error: e.message });
     }

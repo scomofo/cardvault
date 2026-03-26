@@ -10,16 +10,29 @@ config();
 
 const app = express();
 const PORT = 3001;
+import { get as dbGet, run as dbRun } from "./src/server/database.js";
+
 let anthropicKey = process.env.ANTHROPIC_API_KEY || "";
 const PROXY_TOKEN = process.env.PROXY_TOKEN;
-
-if (!anthropicKey) {
-  console.warn("No ANTHROPIC_API_KEY in .env — AI features disabled until key is set via UI");
-}
 
 // Initialize database and seed reference data
 initDB();
 seedReferenceData();
+
+// Load persisted API key from settings table (survives restarts)
+if (!anthropicKey) {
+  try {
+    const row = dbGet("SELECT value FROM settings WHERE key = ?", ["anthropic_api_key"]);
+    if (row?.value) {
+      anthropicKey = row.value;
+      console.log("Loaded API key from database");
+    }
+  } catch { /* settings table may not exist yet on first run */ }
+}
+
+if (!anthropicKey) {
+  console.warn("No ANTHROPIC_API_KEY — AI features disabled until key is set via UI");
+}
 
 const ALLOWED_MODELS = [
   "claude-sonnet-4-20250514",
@@ -90,13 +103,22 @@ app.get("/api/ai/status", authCheck, (req, res) => {
   });
 });
 
-// POST: set the API key at runtime
+// POST: set the API key at runtime and persist to database
 app.post("/api/ai/key", authCheck, (req, res) => {
   const { key } = req.body;
   if (!key || typeof key !== "string" || !key.startsWith("sk-ant-")) {
     return res.status(400).json({ error: "Invalid API key format. Must start with sk-ant-" });
   }
   anthropicKey = key.trim();
+  // Persist to settings table so it survives server restarts
+  try {
+    dbRun(
+      "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      ["anthropic_api_key", anthropicKey]
+    );
+  } catch (e) {
+    console.warn("Failed to persist API key:", e.message);
+  }
   res.json({ configured: true, masked: anthropicKey.slice(0, 7) + "..." + anthropicKey.slice(-4) });
 });
 
