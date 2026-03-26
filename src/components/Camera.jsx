@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import { IconCamera, IconUpload, IconRefresh, IconX } from "./Icons";
 
 export default function Camera({ side, image, onCapture, onRetake, compact }) {
   const vRef = useRef(null);
@@ -26,18 +27,14 @@ export default function Camera({ side, image, onCapture, onRetake, compact }) {
   }, []);
 
   const stop = useCallback(() => {
-    if (sRef.current) {
-      sRef.current.getTracks().forEach((t) => t.stop());
-      sRef.current = null;
-    }
+    if (sRef.current) { sRef.current.getTracks().forEach((t) => t.stop()); sRef.current = null; }
     setLive(false);
   }, []);
 
   const snap = useCallback(() => {
     const v = vRef.current, c = cRef.current;
     if (!v || !c) return;
-    c.width = v.videoWidth;
-    c.height = v.videoHeight;
+    c.width = v.videoWidth; c.height = v.videoHeight;
     c.getContext("2d").drawImage(v, 0, 0);
     onCapture(c.toDataURL("image/jpeg", 0.9));
     stop();
@@ -57,39 +54,40 @@ export default function Camera({ side, image, onCapture, onRetake, compact }) {
 
   if (image) {
     return (
-      <div className="card" style={{ flex: "1 1 140px", minWidth: 120, textAlign: "center", position: "relative", padding: 8 }}>
-        <div style={{ position: "absolute", top: 4, left: 8, fontSize: 7, fontWeight: 900, letterSpacing: 2, color: "var(--acc)", textTransform: "uppercase" }}>{side}</div>
-        <img src={image} alt={`${side} of card`} style={{ width: "100%", maxHeight: mH, borderRadius: 8, objectFit: "contain", background: "#000", marginTop: 12 }} />
-        <button className="btn-g" onClick={onRetake} aria-label={`Retake ${side}`}>{"\u21bb"}</button>
+      <div className="card-elevated" style={{ flex: "1 1 140px", minWidth: 120, textAlign: "center", position: "relative", padding: 10 }}>
+        <span className="badge badge-acc" style={{ position: "absolute", top: 8, left: 8, fontSize: 9 }}>{side}</span>
+        <img src={image} alt={`${side} of card`} className="img-preview" style={{ width: "100%", maxHeight: mH, marginTop: 8 }} />
+        <button className="btn btn-ghost btn-sm mt-6 w-full" onClick={onRetake}>
+          <IconRefresh size={12} /> Retake
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="card" style={{ flex: "1 1 140px", minWidth: 120, textAlign: "center", position: "relative", padding: 8, borderStyle: "dashed" }}>
-      <div style={{ position: "absolute", top: 4, left: 8, fontSize: 7, fontWeight: 900, letterSpacing: 2, color: "var(--acc)", textTransform: "uppercase" }}>{side}</div>
+    <div style={{ flex: "1 1 140px", minWidth: 120, textAlign: "center", position: "relative", padding: 10, borderRadius: "var(--radius-lg)", border: "2px dashed var(--brd)", background: "var(--s1)" }}>
+      <span className="badge badge-dim" style={{ position: "absolute", top: 8, left: 8, fontSize: 9 }}>{side}</span>
       {live ? (
         <>
-          <video ref={vRef} style={{ width: "100%", maxHeight: mH, borderRadius: 8, objectFit: "cover", background: "#000" }} playsInline muted />
+          <video ref={vRef} style={{ width: "100%", maxHeight: mH, borderRadius: "var(--radius)", objectFit: "cover", background: "#000" }} playsInline muted />
           <canvas ref={cRef} style={{ display: "none" }} />
-          <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 6 }}>
-            <button onClick={snap} aria-label="Take photo" style={{ width: 44, height: 44, borderRadius: "50%", border: "3px solid var(--acc)", background: "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <div style={{ width: 30, height: 30, borderRadius: "50%", background: "linear-gradient(135deg,var(--acc),var(--acc2))" }} />
+          <div className="flex gap-8 justify-center mt-8">
+            <button onClick={snap} aria-label="Take photo" style={{ width: 48, height: 48, borderRadius: "50%", border: "3px solid var(--acc)", background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+              <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg,var(--acc),var(--acc2))" }} />
             </button>
-            <button className="btn-g" onClick={stop} aria-label="Cancel">{"\u2715"}</button>
+            <button className="btn btn-ghost btn-sm" onClick={stop}><IconX size={14} /></button>
           </div>
         </>
       ) : (
-        <div style={{ padding: compact ? "10px 0" : "16px 0" }}>
-          <div style={{ fontSize: compact ? 24 : 36, opacity: .3, marginBottom: 4 }}>{side === "front" ? "\ud83c\udca0" : "\ud83c\udca1"}</div>
-          <p style={{ color: "var(--dim)", fontSize: 10, marginBottom: 8 }}>{side}</p>
-          {camError && (
-            <p style={{ color: "var(--red)", fontSize: 9, marginBottom: 6 }}>{camError}. Use upload instead.</p>
-          )}
-          <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
-            <button className="btn-a" onClick={start} aria-label={`Open camera for ${side}`}>{"\ud83d\udcf7"}</button>
-            <label className="btn-o" style={{ cursor: "pointer" }}>
-              {"\ud83d\udcc1"}<input type="file" accept="image/*" onChange={upload} style={{ display: "none" }} aria-label={`Upload ${side} image`} />
+        <div style={{ padding: compact ? "12px 0" : "20px 0" }}>
+          <div style={{ fontSize: compact ? 28 : 40, opacity: .25, marginBottom: 8 }}>{side === "front" ? "\ud83c\udca0" : "\ud83c\udca1"}</div>
+          <p className="text-xxs text-dim mb-8">{side}</p>
+          {camError && <p className="text-xxs text-red mb-6">{camError}</p>}
+          <div className="flex gap-8 justify-center">
+            <button className="btn btn-primary btn-sm" onClick={start}><IconCamera size={14} /> Camera</button>
+            <label className="btn btn-outline btn-sm" style={{ cursor: "pointer" }}>
+              <IconUpload size={14} /> Upload
+              <input type="file" accept="image/*" onChange={upload} style={{ display: "none" }} />
             </label>
           </div>
         </div>

@@ -23,23 +23,24 @@ export default function SetsView() {
   );
 
   return (
-    <div className="fade">
-      <h2 style={{ fontSize: 16, fontWeight: 800, marginBottom: 10 }}>Set Completion</h2>
+    <div>
       {setCompletion.length === 0 && (
-        <p style={{ color: "var(--dim)", textAlign: "center", padding: 30 }}>No sets &mdash; add "Set" field to cards</p>
+        <div className="card empty-state" style={{ padding: 32 }}>
+          <div className="empty-desc">No sets &mdash; add "Set" field to your cards</div>
+        </div>
       )}
       {setCompletion.map((s, i) => (
-        <div key={s.name} className="card fade" style={{ marginBottom: 6, animationDelay: `${i * .03}s` }}>
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
+        <div key={s.name} className="card fade mb-8" style={{ animationDelay: `${i * .03}s` }}>
+          <div className="flex justify-between items-center">
             <div>
-              <strong style={{ fontSize: 13 }}>{s.name}</strong>
-              <div style={{ fontSize: 9, color: "var(--dim)" }}>{s.cards.length} cards &middot; {s.nums.size} unique #s</div>
+              <strong className="text-sm">{s.name}</strong>
+              <div className="text-xxs text-dim mt-4">{s.cards.length} cards &middot; {s.nums.size} unique #s</div>
             </div>
-            <span className="gold" style={{ fontWeight: 800 }}>{fmtShort(s.cards.reduce((t, c) => t + (parseFloat(c.priceEstimate?.mid) || 0), 0))}</span>
+            <span className="gold fw-800">{fmtShort(s.cards.reduce((t, c) => t + (parseFloat(c.priceEstimate?.mid) || 0), 0))}</span>
           </div>
           {maxCards > 0 && (
-            <div style={{ marginTop: 6, height: 4, background: "var(--brd)", borderRadius: 4 }}>
-              <div style={{ height: "100%", width: `${Math.round((s.cards.length / maxCards) * 100)}%`, background: "linear-gradient(90deg,var(--acc),var(--acc2))", borderRadius: 4 }} />
+            <div className="progress-track mt-8">
+              <div className="progress-fill" style={{ width: `${Math.round((s.cards.length / maxCards) * 100)}%` }} />
             </div>
           )}
         </div>

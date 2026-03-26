@@ -3,6 +3,7 @@ import { useToast } from "./Toast";
 import { useData } from "../lib/DataContext";
 import { uid, fmtShort } from "../lib/utils";
 import { aiPrice } from "../lib/ai";
+import { IconPlus, IconRefresh, IconX, Spinner } from "./Icons";
 
 export default function Watchlist() {
   const { watchlist, setWatchlist } = useData();
@@ -17,11 +18,7 @@ export default function Watchlist() {
 
   const addWatch = () => {
     if (!input.name) { toast.error("Enter card name"); return; }
-    setWatchlist((p) => [...p, {
-      id: uid(), ...input,
-      targetPrice: parseFloat(input.targetPrice) || 0,
-      currentPrice: null, priceHistory: null, checking: false,
-    }]);
+    setWatchlist((p) => [...p, { id: uid(), ...input, targetPrice: parseFloat(input.targetPrice) || 0, currentPrice: null, priceHistory: null, checking: false }]);
     setInput({ name: "", set: "", number: "", targetPrice: "" });
     toast.success("Added to watchlist");
   };
@@ -51,56 +48,59 @@ export default function Watchlist() {
         setWatchlist((p) => p.map((x) => (x.id === w.id ? { ...x, checking: false } : x)));
       }
     }
-    setCheckingAll(false);
-    toast.success("All prices checked");
+    setCheckingAll(false); toast.success("All prices checked");
   };
 
   const removeWatch = (id) => {
-    if (window.confirm("Remove this card from your watchlist?")) {
-      setWatchlist((p) => p.filter((x) => x.id !== id));
-    }
+    if (window.confirm("Remove from watchlist?")) setWatchlist((p) => p.filter((x) => x.id !== id));
   };
 
   return (
-    <div className="fade">
-      <h2 style={{ fontSize: 16, fontWeight: 800, marginBottom: 10 }}>
-        Watchlist {alerts > 0 && <span style={{ color: "var(--grn)" }}>({alerts} alerts)</span>}
-      </h2>
-      <div className="card" style={{ marginBottom: 10 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
-          <input className="inp" placeholder="Card *" value={input.name} onChange={(e) => setInput((p) => ({ ...p, name: e.target.value }))} />
-          <input className="inp" placeholder="Target $" type="number" value={input.targetPrice} onChange={(e) => setInput((p) => ({ ...p, targetPrice: e.target.value }))} />
+    <div>
+      <div className="flex items-center gap-8 mb-10">
+        <h2 className="section-title" style={{ marginBottom: 0 }}>Watchlist</h2>
+        {alerts > 0 && <span className="badge badge-grn">{alerts} alerts</span>}
+      </div>
+
+      <div className="card-elevated mb-12">
+        <div className="form-grid">
+          <input className="inp" placeholder="Card name *" value={input.name} onChange={(e) => setInput((p) => ({ ...p, name: e.target.value }))} />
+          <input className="inp" placeholder="Target price $" type="number" value={input.targetPrice} onChange={(e) => setInput((p) => ({ ...p, targetPrice: e.target.value }))} />
         </div>
-        <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-          <button className="btn-a" onClick={addWatch}>+ Watch</button>
+        <div className="flex gap-6 mt-8">
+          <button className="btn btn-primary btn-sm" onClick={addWatch}><IconPlus size={12} /> Watch</button>
           {watchlist.length > 0 && (
-            <button className="btn-a" style={{ padding: "4px 8px", fontSize: 9 }} onClick={checkAllPrices} disabled={checkingAll}>
-              {checkingAll ? "\u23f3 Checking..." : "Check All Prices"}
+            <button className="btn btn-outline btn-sm" onClick={checkAllPrices} disabled={checkingAll}>
+              {checkingAll ? <Spinner size={12} /> : <IconRefresh size={12} />} Check All
             </button>
           )}
         </div>
       </div>
 
       {watchlist.length === 0 && (
-        <p style={{ color: "var(--dim)", textAlign: "center", padding: 30 }}>No cards on your watchlist</p>
+        <div className="card empty-state" style={{ padding: 32 }}>
+          <div className="empty-desc">No cards on your watchlist</div>
+        </div>
       )}
 
       {watchlist.map((w) => {
         const hit = w.currentPrice && w.targetPrice && w.currentPrice <= w.targetPrice;
         return (
-          <div key={w.id} className="card" style={{ marginBottom: 6, borderColor: hit ? "var(--grn)" : "var(--brd)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <strong style={{ fontSize: 12 }}>{w.name}</strong>
+          <div key={w.id} className="card mb-6" style={{ borderColor: hit ? "var(--grn-brd)" : undefined }}>
+            <div className="flex justify-between items-center">
+              <strong className="text-sm">{w.name}</strong>
               {w.currentPrice
-                ? <span style={{ fontWeight: 800, color: hit ? "var(--grn)" : "var(--acc)" }}>{fmtShort(w.currentPrice)}</span>
-                : <span style={{ color: "var(--dim)" }}>&mdash;</span>
+                ? <span className={`fw-800 ${hit ? "text-grn" : "gold"}`} style={{ fontSize: 15 }}>{fmtShort(w.currentPrice)}</span>
+                : <span className="text-dim">&mdash;</span>
               }
             </div>
-            {hit && <div style={{ fontSize: 10, color: "var(--grn)", fontWeight: 700, marginTop: 2 }}>At/below {fmtShort(w.targetPrice)} target!</div>}
-            <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
-              <button className="btn-a" style={{ padding: "3px 8px", fontSize: 9 }} onClick={() => checkPrice(w.id)} disabled={w.checking}>{w.checking ? "\u23f3" : "\ud83d\udd04"}</button>
-              <div style={{ flex: 1 }} />
-              <button className="btn-g" style={{ padding: "3px 6px", fontSize: 8, color: "var(--red)" }} onClick={() => removeWatch(w.id)}>&times;</button>
+            {hit && <div className="badge badge-grn mt-4">At/below {fmtShort(w.targetPrice)} target!</div>}
+            <div className="flex gap-6 mt-6 items-center">
+              <button className="btn btn-primary btn-sm" style={{ padding: "4px 10px" }} onClick={() => checkPrice(w.id)} disabled={w.checking}>
+                {w.checking ? <Spinner size={10} /> : <IconRefresh size={12} />}
+              </button>
+              <div className="flex-1" />
+              <button className="btn btn-ghost btn-sm" style={{ padding: "4px 6px", color: "var(--red)" }} onClick={() => removeWatch(w.id)}><IconX size={12} /></button>
             </div>
           </div>
         );

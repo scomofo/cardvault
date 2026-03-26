@@ -2,6 +2,9 @@ import express from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import { config } from "dotenv";
+import { initDB } from "./src/server/database.js";
+import { seedReferenceData } from "./src/server/seed.js";
+import { registerRoutes } from "./src/server/routes.js";
 
 config();
 
@@ -14,6 +17,10 @@ if (!ANTHROPIC_KEY) {
   console.error("Missing ANTHROPIC_API_KEY in .env");
   process.exit(1);
 }
+
+// Initialize database and seed reference data
+initDB();
+seedReferenceData();
 
 const ALLOWED_MODELS = [
   "claude-sonnet-4-20250514",
@@ -95,6 +102,9 @@ app.post("/api/ai", aiLimiter, authCheck, validateBody, async (req, res) => {
     res.status(502).json({ error: "AI proxy failed" });
   }
 });
+
+// Register database REST API routes
+registerRoutes(app);
 
 app.listen(PORT, () => {
   console.log(`CardVault API proxy running on http://localhost:${PORT}`);

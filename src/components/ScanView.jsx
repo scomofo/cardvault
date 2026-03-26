@@ -7,6 +7,7 @@ import { CONDITIONS, TYPES, PLATFORMS, SHIP_CA, EMPTY_CARD, EMPTY_LISTING } from
 import { condOf, fmtShort, uid } from "../lib/utils";
 import { aiRecognize, aiPrice } from "../lib/ai";
 import { saveImage } from "../lib/storage";
+import { IconSearch, IconZap, IconChevron, IconCopy, IconExternalLink, Spinner } from "./Icons";
 
 export default function ScanView({ onNavigate }) {
   const toast = useToast();
@@ -68,169 +69,236 @@ export default function ScanView({ onNavigate }) {
     catch { toast.error("Copy failed"); }
   };
 
-  const steps = ["\ud83d\udcf8 Capture", "\ud83d\udd0d Identify", "\ud83d\udccb Details", "\ud83d\udcb0 List"];
+  const steps = ["Capture", "Identify", "Details", "List"];
 
   return (
     <>
-      <div style={{ display: "flex", gap: 4, marginBottom: 14, overflowX: "auto" }}>
+      <h1 className="page-title">Scan Card</h1>
+
+      <div className="stepper">
         {steps.map((s, i) => (
-          <button key={i} onClick={() => setStep(i)} aria-label={`Step ${i + 1}: ${s}`} style={{
-            flex: 1, padding: "9px 4px", borderRadius: 8, border: "none", fontSize: 12,
-            fontWeight: i === step ? 800 : 500, textAlign: "center", minWidth: 0,
-            background: i === step ? "linear-gradient(135deg,var(--acc),var(--acc2))" : i < step ? "#d4a01722" : "var(--s2)",
-            color: i === step ? "#08090d" : i < step ? "var(--acc)" : "var(--dim)",
-          }}>{s}</button>
+          <button key={i} onClick={() => setStep(i)} aria-label={`Step ${i + 1}: ${s}`}
+            className={`stepper-step ${i === step ? "current" : i < step ? "completed" : "upcoming"}`}>
+            {i < step ? "\u2713" : i + 1}. {s}
+          </button>
         ))}
       </div>
 
       {step === 0 && (
-        <section className="fade">
-          <div className="card card-glow">
-            <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 10 }}>Photograph Card</h2>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <section className="slide-up">
+          <div className="card-hero mb-12">
+            <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>Photograph Card</h2>
+            <div className="flex gap-10" style={{ flexWrap: "wrap" }}>
               <Camera side="front" image={frontImg} onCapture={setFrontImg} onRetake={() => setFrontImg(null)} />
               <Camera side="back" image={backImg} onCapture={setBackImg} onRetake={() => setBackImg(null)} />
             </div>
           </div>
-          {/* Photography tips from Card Docs */}
-          <details style={{ marginTop: 10 }}>
-            <summary style={{ fontSize: 13, fontWeight: 700, color: "var(--acc)", cursor: "pointer", padding: "8px 0" }}>Photo Tips for Best Results</summary>
-            <div className="card" style={{ marginTop: 6, fontSize: 12, lineHeight: 1.7, color: "var(--dim)" }}>
-              <div style={{ fontWeight: 700, color: "var(--tx)", marginBottom: 4 }}>Lighting & Setup</div>
-              <div>Use a <b style={{ color: "var(--tx)" }}>black background</b> for chrome/white-bordered cards, grey for vintage/dark cards</div>
-              <div>Position camera <b style={{ color: "var(--tx)" }}>parallel to card</b> &mdash; tilt 5-10&deg; if you see reflections</div>
-              <div>Use diffused lighting to avoid hot spots on glossy surfaces</div>
-              <div style={{ fontWeight: 700, color: "var(--tx)", marginTop: 8, marginBottom: 4 }}>iPhone Tips</div>
-              <div>Use <b style={{ color: "var(--tx)" }}>2x or 3x telephoto</b> lens &mdash; avoid 1x wide (causes barrel distortion)</div>
-              <div>Tap &amp; hold to lock <b style={{ color: "var(--tx)" }}>AE/AF Lock</b> &mdash; prevents focus hunting between cards</div>
-              <div>Enable grid lines for consistent centering</div>
-              <div style={{ fontWeight: 700, color: "var(--tx)", marginTop: 8, marginBottom: 4 }}>Before Each Shot</div>
-              <div>Blow off dust with an air blower &mdash; avoids phantom surface flaws</div>
-              <div>For holos/refractors, shine a small LED at an angle to catch the rainbow</div>
+
+          <details className="mb-12">
+            <summary style={{ fontSize: 13, fontWeight: 700, color: "var(--acc)", cursor: "pointer", padding: "8px 0", display: "flex", alignItems: "center", gap: 6 }}>
+              Photo Tips for Best Results
+            </summary>
+            <div className="card mt-6" style={{ fontSize: 12, lineHeight: 1.8, color: "var(--dim)" }}>
+              <div className="fw-700 mb-4" style={{ color: "var(--tx)" }}>Lighting & Setup</div>
+              <div>Use a <b style={{ color: "var(--tx)" }}>black background</b> for chrome/white-bordered cards</div>
+              <div>Position camera <b style={{ color: "var(--tx)" }}>parallel to card</b> &mdash; tilt 5-10&deg; for reflections</div>
+              <div className="fw-700 mt-8 mb-4" style={{ color: "var(--tx)" }}>iPhone Tips</div>
+              <div>Use <b style={{ color: "var(--tx)" }}>2x or 3x telephoto</b> &mdash; avoid 1x wide (barrel distortion)</div>
+              <div>Tap &amp; hold for <b style={{ color: "var(--tx)" }}>AE/AF Lock</b></div>
             </div>
           </details>
-          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-            <button className="btn-a" style={{ flex: 1, padding: "14px 0", opacity: frontImg ? 1 : .4 }} disabled={!frontImg} onClick={() => { doRecognize(); setStep(1); }}>AI Identify &rarr;</button>
-            <button className="btn-o" style={{ padding: "14px 16px", opacity: frontImg ? 1 : .4 }} disabled={!frontImg} onClick={() => setStep(1)}>Skip &rarr;</button>
+
+          <div className="flex gap-8">
+            <button className="btn btn-primary btn-lg flex-1" disabled={!frontImg} onClick={() => { doRecognize(); setStep(1); }}>
+              <IconZap size={16} /> AI Identify
+            </button>
+            <button className="btn btn-outline btn-lg" disabled={!frontImg} onClick={() => setStep(1)}>
+              Skip <IconChevron size={14} />
+            </button>
           </div>
         </section>
       )}
 
       {step === 1 && (
-        <section className="fade">
-          <div className="card card-glow">
-            <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 6 }}>Identify & Price</h2>
+        <section className="slide-up">
+          <div className="card-hero mb-12">
+            <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>Identify & Price</h2>
+
             {status && (
-              <div style={{ fontSize: 13, fontWeight: 600, color: searching || recognizing ? "var(--acc)" : results.length ? "var(--grn)" : "var(--red)", marginBottom: 8 }}>
-                {(searching || recognizing) && <span style={{ marginRight: 5, animation: "pulse 1.5s infinite" }}>{"\u25cf"}</span>}{status}
+              <div className="badge mb-8" style={{ display: "inline-flex" }}>
+                {(searching || recognizing) && <Spinner size={12} />}
+                <span className={searching || recognizing ? "badge-acc" : results.length ? "badge-grn" : "badge-red"}>{status}</span>
               </div>
             )}
+
             {frontImg && (
-              <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: 10 }}>
-                <img src={frontImg} alt="Card front" style={{ height: 65, borderRadius: 6, border: "1px solid var(--brd)", objectFit: "contain", background: "#000" }} />
-                {backImg && <img src={backImg} alt="Card back" style={{ height: 65, borderRadius: 6, border: "1px solid var(--brd)", objectFit: "contain", background: "#000" }} />}
+              <div className="flex gap-8 justify-center mb-10">
+                <img src={frontImg} alt="Front" className="img-preview" style={{ height: 70 }} />
+                {backImg && <img src={backImg} alt="Back" className="img-preview" style={{ height: 70 }} />}
               </div>
             )}
-            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-              <input className="inp" placeholder="Card name or search..." aria-label="Search cards" value={searchQ} onChange={(e) => setSearchQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && doSearch()} />
-              <button className="btn-a" style={{ padding: "10px 16px" }} onClick={doSearch} disabled={searching} aria-label="Search">{searching ? "\u23f3" : "\ud83d\udd0d"}</button>
-              {frontImg && <button className="btn-o" style={{ padding: "10px 12px" }} onClick={doRecognize} disabled={recognizing} aria-label="AI recognize">{"\ud83e\udd16"}</button>}
+
+            <div className="flex gap-8 mb-10">
+              <input className="inp" placeholder="Card name or search..." value={searchQ}
+                onChange={(e) => setSearchQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && doSearch()} />
+              <button className="btn btn-primary" onClick={doSearch} disabled={searching}>
+                {searching ? <Spinner size={14} /> : <IconSearch size={16} />}
+              </button>
+              {frontImg && (
+                <button className="btn btn-outline" onClick={doRecognize} disabled={recognizing}>
+                  {recognizing ? <Spinner size={14} /> : <IconZap size={16} />}
+                </button>
+              )}
             </div>
-            <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
-              {[{ l: "eBay Sold", h: `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(searchQ)}&LH_Sold=1&LH_Complete=1` }, { l: "TCGplayer", h: `https://www.tcgplayer.com/search/all/product?q=${encodeURIComponent(searchQ)}` }, { l: "130point", h: `https://130point.com/sales/?search=${encodeURIComponent(searchQ)}` }].map((x) => (
-                <a key={x.l} href={x.h} target="_blank" rel="noopener noreferrer" style={{ padding: "4px 10px", borderRadius: 6, background: "var(--s3)", border: "1px solid var(--brd)", fontSize: 11, fontWeight: 600 }}>{x.l}</a>
+
+            <div className="flex gap-6 flex-wrap mb-8">
+              {[{ l: "eBay Sold", h: `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(searchQ)}&LH_Sold=1&LH_Complete=1` },
+                { l: "TCGplayer", h: `https://www.tcgplayer.com/search/all/product?q=${encodeURIComponent(searchQ)}` },
+                { l: "130point", h: `https://130point.com/sales/?search=${encodeURIComponent(searchQ)}` }].map((x) => (
+                <a key={x.l} href={x.h} target="_blank" rel="noopener noreferrer" className="link-chip">
+                  {x.l} <IconExternalLink size={10} />
+                </a>
               ))}
             </div>
+
             {results.length > 0 && (
               <>
-                <div className="glass" style={{ display: "flex", justifyContent: "space-around", padding: "14px 0", borderRadius: 10, margin: "8px 0" }}>
-                  <div style={{ textAlign: "center" }}><div className="lbl" style={{ margin: 0 }}>Low</div><div style={{ fontSize: 18, fontWeight: 800, color: "var(--red)" }}>{fmtShort(priceEst.low)}</div></div>
-                  <div style={{ textAlign: "center" }}><div className="lbl" style={{ margin: 0 }}>Market</div><div style={{ fontSize: 28, fontWeight: 900 }} className="gold">{fmtShort(priceEst.mid)}</div></div>
-                  <div style={{ textAlign: "center" }}><div className="lbl" style={{ margin: 0 }}>High</div><div style={{ fontSize: 18, fontWeight: 800, color: "var(--grn)" }}>{fmtShort(priceEst.high)}</div></div>
+                <div className="glass" style={{ display: "flex", justifyContent: "space-around", padding: "16px 0", borderRadius: "var(--radius)", margin: "10px 0" }}>
+                  <div className="stat-item">
+                    <div className="lbl" style={{ margin: 0 }}>Low</div>
+                    <div className="stat-value text-red" style={{ fontSize: 18 }}>{fmtShort(priceEst.low)}</div>
+                  </div>
+                  <div className="stat-item">
+                    <div className="lbl" style={{ margin: 0 }}>Market</div>
+                    <div className="stat-value gold" style={{ fontSize: 28 }}>{fmtShort(priceEst.mid)}</div>
+                  </div>
+                  <div className="stat-item">
+                    <div className="lbl" style={{ margin: 0 }}>High</div>
+                    <div className="stat-value text-grn" style={{ fontSize: 18 }}>{fmtShort(priceEst.high)}</div>
+                  </div>
                 </div>
-                {priceHistory.length > 1 && <div style={{ margin: "12px 0" }}><PriceChart data={priceHistory} /></div>}
-                <div className="lbl" style={{ marginTop: 12 }}>Recent Sales</div>
+
+                {priceHistory.length > 1 && <div className="mt-12 mb-12"><PriceChart data={priceHistory} /></div>}
+
+                <div className="lbl mt-12">Recent Sales</div>
                 {results.map((r, i) => (
-                  <a key={r.url || `${r.title}-${i}`} href={r.url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid var(--brd)" }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13 }}>{r.title}</div>
-                      <div style={{ fontSize: 11, color: "var(--dim)" }}>{r.source} &middot; {r.date}</div>
+                  <a key={r.url || `${r.title}-${i}`} href={r.url} target="_blank" rel="noopener noreferrer"
+                    className="card-interactive flex items-center gap-8 mb-4" style={{ padding: "10px 14px", textDecoration: "none", color: "inherit" }}>
+                    <div className="flex-1" style={{ minWidth: 0 }}>
+                      <div className="text-sm truncate">{r.title}</div>
+                      <div className="text-xxs text-dim">{r.source} &middot; {r.date}</div>
                     </div>
-                    <span style={{ fontSize: 16, fontWeight: 700, color: "var(--acc)" }}>{fmtShort(r.price)}</span>
+                    <span className="gold fw-700" style={{ fontSize: 16 }}>{fmtShort(r.price)}</span>
                   </a>
                 ))}
               </>
             )}
           </div>
-          <button className="btn-a" style={{ width: "100%", marginTop: 12, padding: "14px 0" }} onClick={() => setStep(2)}>Continue &rarr;</button>
+          <button className="btn btn-primary btn-lg btn-full" onClick={() => setStep(2)}>Continue <IconChevron size={14} /></button>
         </section>
       )}
 
       {step === 2 && (
-        <section className="fade">
-          <div className="card card-glow">
-            <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>Card Details</h2>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <section className="slide-up">
+          <div className="card-hero mb-12">
+            <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>Card Details</h2>
+            <div className="form-grid mb-10">
               {[["Name *", "name"], ["Set", "set"], ["Year", "year"], ["Card #", "number"], ["Rarity", "rarity"], ["Parallel", "parallel"]].map(([l, k]) => (
-                <label key={k} className="fld">{l}<input className="inp" value={card[k]} onChange={(e) => setCard((p) => ({ ...p, [k]: e.target.value }))} /></label>
+                <label key={k} className="fld"><span className="lbl">{l}</span><input className="inp" value={card[k]} onChange={(e) => setCard((p) => ({ ...p, [k]: e.target.value }))} /></label>
               ))}
             </div>
-            <div className="lbl" style={{ marginTop: 12 }}>Type</div>
-            <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-              {TYPES.map((t) => (
-                <button key={t.v} onClick={() => setCard((p) => ({ ...p, type: t.v }))} className="chip" style={{ borderColor: card.type === t.v ? "var(--acc)" : "var(--brd)", color: card.type === t.v ? "var(--acc)" : "var(--dim)", background: card.type === t.v ? "#d4a01712" : "transparent" }}>{t.i} {t.l}</button>
-              ))}
+
+            <div className="form-section">
+              <div className="lbl">Type</div>
+              <div className="chip-row">
+                {TYPES.map((t) => (
+                  <button key={t.v} onClick={() => setCard((p) => ({ ...p, type: t.v }))}
+                    className={`chip ${card.type === t.v ? "active" : ""}`}>
+                    {t.i} {t.l}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="lbl" style={{ marginTop: 12 }}>Condition</div>
-            <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-              {CONDITIONS.map((c) => (
-                <button key={c.v} onClick={() => setCard((p) => ({ ...p, condition: c.v }))} className="chip" style={{ borderColor: card.condition === c.v ? c.c : "var(--brd)", color: card.condition === c.v ? c.c : "var(--dim)", background: card.condition === c.v ? c.c + "18" : "transparent" }}>{c.s}</button>
-              ))}
+
+            <div className="form-section">
+              <div className="lbl">Condition</div>
+              <div className="chip-row">
+                {CONDITIONS.map((c) => (
+                  <button key={c.v} onClick={() => setCard((p) => ({ ...p, condition: c.v }))}
+                    className="chip" style={{
+                      borderColor: card.condition === c.v ? c.c : undefined,
+                      color: card.condition === c.v ? c.c : undefined,
+                      background: card.condition === c.v ? c.c + "15" : undefined
+                    }}>
+                    {c.s}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}>
-              <label className="fld">Cost (CAD)<input className="inp" type="number" step="0.01" value={card.costBasis} onChange={(e) => setCard((p) => ({ ...p, costBasis: e.target.value }))} /></label>
-              <label className="fld">Binder<input className="inp" value={card.binder} onChange={(e) => setCard((p) => ({ ...p, binder: e.target.value }))} /></label>
+
+            <div className="form-grid mt-12">
+              <label className="fld"><span className="lbl">Cost (CAD)</span><input className="inp" type="number" step="0.01" value={card.costBasis} onChange={(e) => setCard((p) => ({ ...p, costBasis: e.target.value }))} /></label>
+              <label className="fld"><span className="lbl">Binder</span><input className="inp" value={card.binder} onChange={(e) => setCard((p) => ({ ...p, binder: e.target.value }))} /></label>
             </div>
           </div>
-          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-            <button className="btn-a" style={{ flex: 1, padding: "14px 0" }} onClick={async () => { await saveCard(); reset(); }}>Save</button>
-            <button className="btn-o" style={{ flex: 1, padding: "14px 0" }} onClick={() => {
+
+          <div className="flex gap-8">
+            <button className="btn btn-primary btn-lg flex-1" onClick={async () => { await saveCard(); reset(); }}>Save Card</button>
+            <button className="btn btn-outline btn-lg flex-1" onClick={() => {
               const co = condOf(card.condition);
               setListing((p) => ({ ...p, title: [card.name, card.set, card.number && `#${card.number}`, `[${co.s}]`].filter(Boolean).join(" "), description: [card.name, card.set && `Set: ${card.set}`, card.rarity && `Rarity: ${card.rarity}`, `Condition: ${co.l}`, "Ships tracked from Canada"].filter(Boolean).join("\n"), price: priceEst.mid || "" }));
               setStep(3);
-            }}>Listing &rarr;</button>
+            }}>Create Listing <IconChevron size={14} /></button>
           </div>
         </section>
       )}
 
       {step === 3 && (
-        <section className="fade">
-          <div className="card card-glow">
-            <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 10 }}>Listing</h2>
-            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 12 }}>
-              {PLATFORMS.map((p) => (
-                <button key={p.v} onClick={() => setListing((prev) => ({ ...prev, platform: p.v }))} className="chip" style={{ borderColor: listing.platform === p.v ? "var(--acc)" : "var(--brd)", color: listing.platform === p.v ? "var(--acc)" : "var(--dim)", fontWeight: 700 }}>{p.l}</button>
-              ))}
+        <section className="slide-up">
+          <div className="card-hero mb-12">
+            <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>Listing</h2>
+
+            <div className="form-section">
+              <div className="lbl">Platform</div>
+              <div className="chip-row">
+                {PLATFORMS.map((p) => (
+                  <button key={p.v} onClick={() => setListing((prev) => ({ ...prev, platform: p.v }))}
+                    className={`chip ${listing.platform === p.v ? "active" : ""}`}>{p.l}</button>
+                ))}
+              </div>
             </div>
-            <label className="fld">Title<input className="inp" style={{ fontWeight: 600 }} value={listing.title} onChange={(e) => setListing((p) => ({ ...p, title: e.target.value }))} /></label>
-            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-              <label className="fld" style={{ flex: 1 }}>Price (CAD)<input className="inp" style={{ fontSize: 18, fontWeight: 700 }} type="number" step="0.01" value={listing.price} onChange={(e) => setListing((p) => ({ ...p, price: e.target.value }))} /></label>
-              <label className="fld" style={{ width: 80 }}>Ship $<input className="inp" type="number" step="0.01" value={listing.shipping} onChange={(e) => setListing((p) => ({ ...p, shipping: e.target.value }))} /></label>
+
+            <label className="fld mb-8"><span className="lbl">Title</span>
+              <input className="inp fw-600" value={listing.title} onChange={(e) => setListing((p) => ({ ...p, title: e.target.value }))} />
+            </label>
+
+            <div className="form-grid mb-8">
+              <label className="fld"><span className="lbl">Price (CAD)</span>
+                <input className="inp fw-800" style={{ fontSize: 18 }} type="number" step="0.01" value={listing.price} onChange={(e) => setListing((p) => ({ ...p, price: e.target.value }))} />
+              </label>
+              <label className="fld"><span className="lbl">Shipping $</span>
+                <input className="inp" type="number" step="0.01" value={listing.shipping} onChange={(e) => setListing((p) => ({ ...p, shipping: e.target.value }))} />
+              </label>
             </div>
-            <label className="fld" style={{ marginTop: 8 }}>Description<textarea className="inp" style={{ minHeight: 80, resize: "vertical" }} value={listing.description} onChange={(e) => setListing((p) => ({ ...p, description: e.target.value }))} /></label>
-            <div className="lbl" style={{ marginTop: 12 }}>Canada Post Shipping</div>
-            <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 6 }}>Recommended: Tracked Packet (~$13 CAD, 4-7 days)</div>
-            <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+
+            <label className="fld mb-10"><span className="lbl">Description</span>
+              <textarea className="inp" style={{ minHeight: 80, resize: "vertical" }} value={listing.description} onChange={(e) => setListing((p) => ({ ...p, description: e.target.value }))} />
+            </label>
+
+            <div className="lbl">Canada Post Shipping</div>
+            <div className="text-xs text-dim mb-6">Recommended: Tracked Packet (~$13 CAD, 4-7 days)</div>
+            <div className="flex gap-6 flex-wrap">
               {SHIP_CA.map((s) => (
-                <span key={s.l} style={{ fontSize: 11, background: "var(--s3)", border: "1px solid var(--brd)", borderRadius: 6, padding: "4px 8px", color: "var(--dim)" }}>{s.l} {s.p}</span>
+                <span key={s.l} className="badge badge-dim">{s.l} {s.p}</span>
               ))}
             </div>
           </div>
-          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-            <button className="btn-a" style={{ flex: 1, padding: "14px 0" }} onClick={copyListing} aria-label="Copy listing">Copy</button>
-            <button className="btn-o" style={{ flex: 1, padding: "14px 0" }} onClick={() => saveCard()}>Save</button>
+
+          <div className="flex gap-8">
+            <button className="btn btn-primary btn-lg flex-1" onClick={copyListing}><IconCopy size={14} /> Copy</button>
+            <button className="btn btn-outline btn-lg flex-1" onClick={() => saveCard()}>Save</button>
           </div>
-          <button className="btn-g" style={{ width: "100%", marginTop: 8 }} onClick={reset}>+ New Card</button>
+          <button className="btn btn-ghost btn-lg btn-full mt-8" onClick={reset}>+ New Card</button>
         </section>
       )}
     </>

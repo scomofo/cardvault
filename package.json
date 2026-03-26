@@ -11,6 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "better-sqlite3": "^12.8.0",
     "concurrently": "^9.1.0",
     "cors": "^2.8.6",
     "dotenv": "^16.4.0",
