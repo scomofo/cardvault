@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useRef } from "react";
+import { createContext, useContext, useState, useCallback, useRef, useMemo } from "react";
 
 const ToastCtx = createContext(null);
 
@@ -19,22 +19,18 @@ export function ToastProvider({ children }) {
     }, duration);
   }, []);
 
-  const toast = useCallback({
-    success: (msg) => addToast(msg, "success"),
-    error: (msg) => addToast(msg, "error", 5000),
-    info: (msg) => addToast(msg, "info"),
+  const api = useMemo(() => {
+    const fn = (msg, type) => addToast(msg, type);
+    fn.success = (msg) => addToast(msg, "success");
+    fn.error = (msg) => addToast(msg, "error", 5000);
+    fn.info = (msg) => addToast(msg, "info");
+    return fn;
   }, [addToast]);
-
-  // Make toast callable with methods
-  const api = useCallback((msg, type) => addToast(msg, type), [addToast]);
-  api.success = (msg) => addToast(msg, "success");
-  api.error = (msg) => addToast(msg, "error", 5000);
-  api.info = (msg) => addToast(msg, "info");
 
   return (
     <ToastCtx.Provider value={api}>
       {children}
-      <div className="toast-container">
+      <div className="toast-container" role="alert" aria-live="polite">
         {toasts.map((t) => (
           <div key={t.id} className={`toast toast-${t.type}${t.removing ? " removing" : ""}`}>
             {t.message}

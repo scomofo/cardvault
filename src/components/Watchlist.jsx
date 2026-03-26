@@ -1,11 +1,14 @@
 import { useState, useMemo } from "react";
 import { useToast } from "./Toast";
+import { useData } from "../lib/DataContext";
 import { uid, fmtShort } from "../lib/utils";
 import { aiPrice } from "../lib/ai";
 
-export default function Watchlist({ watchlist, setWatchlist }) {
+export default function Watchlist() {
+  const { watchlist, setWatchlist } = useData();
   const toast = useToast();
   const [input, setInput] = useState({ name: "", set: "", number: "", targetPrice: "" });
+  const [checkingAll, setCheckingAll] = useState(false);
 
   const alerts = useMemo(
     () => watchlist.filter((w) => w.currentPrice && w.targetPrice && w.currentPrice <= w.targetPrice).length,
@@ -36,6 +39,28 @@ export default function Watchlist({ watchlist, setWatchlist }) {
     }
   };
 
+  const checkAllPrices = async () => {
+    if (watchlist.length === 0) return;
+    setCheckingAll(true);
+    setWatchlist((p) => p.map((x) => ({ ...x, checking: true })));
+    for (const w of watchlist) {
+      const d = await aiPrice(w.name);
+      if (d) {
+        setWatchlist((p) => p.map((x) => (x.id === w.id ? { ...x, checking: false, currentPrice: parseFloat(d.priceEstimate?.mid) || x.currentPrice, priceHistory: d.priceHistory } : x)));
+      } else {
+        setWatchlist((p) => p.map((x) => (x.id === w.id ? { ...x, checking: false } : x)));
+      }
+    }
+    setCheckingAll(false);
+    toast.success("All prices checked");
+  };
+
+  const removeWatch = (id) => {
+    if (window.confirm("Remove this card from your watchlist?")) {
+      setWatchlist((p) => p.filter((x) => x.id !== id));
+    }
+  };
+
   return (
     <div className="fade">
       <h2 style={{ fontSize: 16, fontWeight: 800, marginBottom: 10 }}>
@@ -46,8 +71,19 @@ export default function Watchlist({ watchlist, setWatchlist }) {
           <input className="inp" placeholder="Card *" value={input.name} onChange={(e) => setInput((p) => ({ ...p, name: e.target.value }))} />
           <input className="inp" placeholder="Target $" type="number" value={input.targetPrice} onChange={(e) => setInput((p) => ({ ...p, targetPrice: e.target.value }))} />
         </div>
-        <button className="btn-a" style={{ marginTop: 6 }} onClick={addWatch}>+ Watch</button>
+        <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+          <button className="btn-a" onClick={addWatch}>+ Watch</button>
+          {watchlist.length > 0 && (
+            <button className="btn-a" style={{ padding: "4px 8px", fontSize: 9 }} onClick={checkAllPrices} disabled={checkingAll}>
+              {checkingAll ? "\u23f3 Checking..." : "Check All Prices"}
+            </button>
+          )}
+        </div>
       </div>
+
+      {watchlist.length === 0 && (
+        <p style={{ color: "var(--dim)", textAlign: "center", padding: 30 }}>No cards on your watchlist</p>
+      )}
 
       {watchlist.map((w) => {
         const hit = w.currentPrice && w.targetPrice && w.currentPrice <= w.targetPrice;
@@ -64,7 +100,7 @@ export default function Watchlist({ watchlist, setWatchlist }) {
             <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
               <button className="btn-a" style={{ padding: "3px 8px", fontSize: 9 }} onClick={() => checkPrice(w.id)} disabled={w.checking}>{w.checking ? "\u23f3" : "\ud83d\udd04"}</button>
               <div style={{ flex: 1 }} />
-              <button className="btn-g" style={{ padding: "3px 6px", fontSize: 8, color: "var(--red)" }} onClick={() => setWatchlist((p) => p.filter((x) => x.id !== w.id))}>&times;</button>
+              <button className="btn-g" style={{ padding: "3px 6px", fontSize: 8, color: "var(--red)" }} onClick={() => removeWatch(w.id)}>&times;</button>
             </div>
           </div>
         );

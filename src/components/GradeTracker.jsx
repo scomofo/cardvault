@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useToast } from "./Toast";
+import { useData } from "../lib/DataContext";
 import { uid } from "../lib/utils";
 
-export default function GradeTracker({ gradings, setGradings }) {
+export default function GradeTracker() {
+  const { gradings, setGradings } = useData();
   const toast = useToast();
   const [input, setInput] = useState({
     cardName: "", set: "", number: "", company: "PSA",
@@ -17,6 +19,13 @@ export default function GradeTracker({ gradings, setGradings }) {
     }, ...p]);
     setInput({ cardName: "", set: "", number: "", company: "PSA", service: "Economy", cost: "", dateSent: "", preValue: "", status: "sent" });
     toast.success("Submission added");
+  };
+
+  const deleteGrading = (id) => {
+    if (window.confirm("Delete this grading entry?")) {
+      setGradings((p) => p.filter((x) => x.id !== id));
+      toast.info("Grading entry deleted");
+    }
   };
 
   return (
@@ -35,6 +44,10 @@ export default function GradeTracker({ gradings, setGradings }) {
         <button className="btn-a" style={{ marginTop: 6 }} onClick={submit}>+ Submit</button>
       </div>
 
+      {gradings.length === 0 && (
+        <p style={{ color: "var(--dim)", textAlign: "center", padding: 30 }}>No grading submissions tracked</p>
+      )}
+
       {gradings.map((g) => (
         <div key={g.id} className="card" style={{ marginBottom: 6, borderLeft: `3px solid ${g.company === "PSA" ? "var(--red)" : g.company === "BGS" ? "#3b82f6" : "var(--grn)"}` }}>
           <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -51,7 +64,7 @@ export default function GradeTracker({ gradings, setGradings }) {
             <input className="inp" style={{ width: 50, padding: "2px 4px", fontSize: 9 }} placeholder="Grade" value={g.grade || ""} onChange={(e) => setGradings((p) => p.map((x) => (x.id === g.id ? { ...x, grade: e.target.value } : x)))} />
             <input className="inp" style={{ width: 60, padding: "2px 4px", fontSize: 9 }} placeholder="Cert #" value={g.certNumber || ""} onChange={(e) => setGradings((p) => p.map((x) => (x.id === g.id ? { ...x, certNumber: e.target.value } : x)))} />
             <div style={{ flex: 1 }} />
-            <button className="btn-g" style={{ padding: "2px 5px", fontSize: 8, color: "var(--red)" }} onClick={() => setGradings((p) => p.filter((x) => x.id !== g.id))}>&times;</button>
+            <button className="btn-g" style={{ padding: "2px 5px", fontSize: 8, color: "var(--red)" }} onClick={() => deleteGrading(g.id)}>&times;</button>
           </div>
         </div>
       ))}

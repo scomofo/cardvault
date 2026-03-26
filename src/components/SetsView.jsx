@@ -1,7 +1,9 @@
 import { useMemo } from "react";
+import { useData } from "../lib/DataContext";
 import { fmtShort } from "../lib/utils";
 
-export default function SetsView({ catalog }) {
+export default function SetsView() {
+  const { catalog } = useData();
   const setCompletion = useMemo(() => {
     const sets = {};
     catalog.forEach((c) => {
@@ -14,6 +16,11 @@ export default function SetsView({ catalog }) {
     });
     return Object.values(sets).sort((a, b) => b.cards.length - a.cards.length);
   }, [catalog]);
+
+  const maxCards = useMemo(
+    () => setCompletion.reduce((m, s) => Math.max(m, s.cards.length), 0),
+    [setCompletion]
+  );
 
   return (
     <div className="fade">
@@ -30,9 +37,11 @@ export default function SetsView({ catalog }) {
             </div>
             <span className="gold" style={{ fontWeight: 800 }}>{fmtShort(s.cards.reduce((t, c) => t + (parseFloat(c.priceEstimate?.mid) || 0), 0))}</span>
           </div>
-          <div style={{ marginTop: 6, height: 4, background: "var(--brd)", borderRadius: 4 }}>
-            <div style={{ height: "100%", width: `${Math.min(100, s.cards.length * 2)}%`, background: "linear-gradient(90deg,var(--acc),var(--acc2))", borderRadius: 4 }} />
-          </div>
+          {maxCards > 0 && (
+            <div style={{ marginTop: 6, height: 4, background: "var(--brd)", borderRadius: 4 }}>
+              <div style={{ height: "100%", width: `${Math.round((s.cards.length / maxCards) * 100)}%`, background: "linear-gradient(90deg,var(--acc),var(--acc2))", borderRadius: 4 }} />
+            </div>
+          )}
         </div>
       ))}
     </div>

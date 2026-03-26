@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useId } from "react";
 import { fmtShort } from "../lib/utils";
 
 export default function PriceChart({ data, height = 150 }) {
   const [hov, setHov] = useState(null);
+  const gradientId = useId();
 
   if (!data || data.length < 2) return null;
 
@@ -23,10 +24,11 @@ export default function PriceChart({ data, height = 150 }) {
   const trend = prices[prices.length - 1] - prices[0];
   const tPct = prices[0] > 0 ? ((trend / prices[0]) * 100).toFixed(1) : "0";
 
-  const clampHov = (e) => {
+  const getIdxFromEvent = (e) => {
     const r = e.currentTarget.getBoundingClientRect();
-    const idx = Math.round(((e.clientX - r.left) / r.width) * (prices.length - 1));
-    setHov(Math.max(0, Math.min(idx, prices.length - 1)));
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const idx = Math.round(((clientX - r.left) / r.width) * (prices.length - 1));
+    return Math.max(0, Math.min(idx, prices.length - 1));
   };
 
   return (
@@ -39,12 +41,14 @@ export default function PriceChart({ data, height = 150 }) {
       </div>
       <svg
         viewBox={`0 0 ${w} ${h2}`}
-        style={{ width: "100%", height, display: "block", borderRadius: 10, background: "linear-gradient(180deg,var(--s2),var(--s1))" }}
-        onMouseMove={clampHov}
+        style={{ width: "100%", height, display: "block", borderRadius: 10, background: "linear-gradient(180deg,var(--s2),var(--s1))", touchAction: "none" }}
+        onMouseMove={(e) => setHov(getIdxFromEvent(e))}
         onMouseLeave={() => setHov(null)}
+        onTouchMove={(e) => setHov(getIdxFromEvent(e))}
+        onTouchEnd={() => setHov(null)}
       >
         <defs>
-          <linearGradient id="cf" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--acc)" stopOpacity=".2" />
             <stop offset="100%" stopColor="var(--acc)" stopOpacity=".01" />
           </linearGradient>
@@ -52,7 +56,7 @@ export default function PriceChart({ data, height = 150 }) {
         {[0, .25, .5, .75, 1].map((v, i) => (
           <line key={i} x1={p} x2={w - p} y1={h2 - p - v * (h2 - p * 2)} y2={h2 - p - v * (h2 - p * 2)} stroke="var(--brd)" strokeWidth=".25" strokeDasharray="1,2" />
         ))}
-        <polygon points={area} fill="url(#cf)" />
+        <polygon points={area} fill={`url(#${gradientId})`} />
         <polyline points={line} fill="none" stroke="var(--acc)" strokeWidth="1.3" strokeLinejoin="round" strokeLinecap="round" />
         {hov != null && (
           <>

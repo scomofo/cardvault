@@ -1,4 +1,5 @@
 import { condOf, escapeHtml, fmtShort } from "./utils";
+import { calculateGrade, gradeToTerm, generateConditionReport } from "./grading";
 
 export function genInsurancePDF(cards, owner = "") {
   const active = cards.filter((c) => c.name && c.status !== "sold");
@@ -43,15 +44,54 @@ export function genCSV(catalog) {
   return header + "\n" + rows.join("\n");
 }
 
-export function genEbayCSV(catalog) {
-  const header = "Action,Title,Price,Category,Duration,Format";
+// eBay File Exchange bulk upload format (from Card Docs)
+export function genEbayCSV(catalog, shipFrom = "") {
+  const header = 'Action(SiteID=US|Country=CA|Currency=CAD),Category,Title,Description,ConditionID,Format,StartPrice,Quantity,Duration,Location,ShippingService-1:Option,ShippingService-1:Cost,DispatchTimeMax,ReturnsAcceptedOption,C:Player,C:Season,C:Set,C:Parallel/Variety,C:Graded';
+
   const rows = catalog
     .filter((c) => c.name && c.status !== "sold")
     .map((c) => {
       const co = condOf(c.condition);
-      const title = [c.name, c.set, c.number && "#" + c.number, co.s].filter(Boolean).join(" ").slice(0, 80);
-      return `Add,"${title.replace(/"/g, '""')}",${c.priceEstimate?.mid || "0.99"},261328,GTC,FixedPrice`;
+      // Build optimized 80-char title: Year Set Player #Number [Condition]
+      const title = [c.year, c.set, c.name, c.number && "#" + c.number, c.parallel, `[${co.s}]`]
+        .filter(Boolean).join(" ").slice(0, 80);
+
+      // Generate condition description from AI grade data or fallback
+      let description = "";
+      if (c.gradeScores) {
+        description = generateConditionReport(c.gradeScores);
+      } else {
+        description = `Condition: ${co.l}. Ships securely in penny sleeve and toploader from Canada.`;
+      }
+
+      const price = c.priceEstimate?.mid || "0.99";
+      const player = c.type === "sports" ? c.name.split(" ").slice(-2).join(" ") : c.name;
+      const isGraded = c.gradeCompany ? "Yes" : "No";
+      const parallel = c.parallel || c.rarity || "";
+
+      return [
+        "Add",          // Action
+        "212",          // Category (Trading Cards - Sport)
+        `"${title.replace(/"/g, '""')}"`,
+        `"${description.replace(/"/g, '""')}"`,
+        "3000",         // ConditionID (Used - standard for cards)
+        "FixedPrice",   // Format
+        price,          // StartPrice
+        "1",            // Quantity
+        "GTC",          // Duration (Good Til Cancelled)
+        `"${(shipFrom || "Alberta, Canada").replace(/"/g, '""')}"`,
+        "CA_StandardInternationalFlat", // ShippingService
+        "4.99",         // ShippingCost
+        "3",            // DispatchTimeMax (business days)
+        "ReturnsAccepted",
+        `"${player.replace(/"/g, '""')}"`,   // C:Player
+        `"${c.year || ""}"`,                   // C:Season
+        `"${(c.set || "").replace(/"/g, '""')}"`,  // C:Set
+        `"${parallel.replace(/"/g, '""')}"`,   // C:Parallel/Variety
+        isGraded,                               // C:Graded
+      ].join(",");
     });
+
   return header + "\n" + rows.join("\n");
 }
 
