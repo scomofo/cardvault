@@ -8,11 +8,12 @@ import { genCSV, genEbayCSV, genInsurancePDF } from "../lib/exports";
 import { calculateGrade, gradeToTerm, generateConditionReport } from "../lib/grading";
 import PriceChart from "./PriceChart";
 import { aiGradePredict } from "../lib/ai";
-import { IconBack, IconTrash, IconCheck, IconSearch, IconDownload, IconCopy, IconChevron, IconShield, Spinner, Skeleton } from "./Icons";
+import { IconBack, IconTrash, IconCheck, IconSearch, IconDownload, IconCopy, IconChevron, IconShield, IconPlus, Spinner, Skeleton } from "./Icons";
+import { PLATFORM_FEES } from "./SalesFlow";
 
 export default function CatalogView() {
   const toast = useToast();
-  const { catalog, setCatalog, sales, setSales, userName, shipFrom } = useData();
+  const { catalog, setCatalog, sales, setSales, listings, setListings, userName, shipFrom } = useData();
   const [view, setView] = useState("list");
   const [detailId, setDetailId] = useState(null);
   const [detailFrontImg, setDetailFrontImg] = useState(null);
@@ -26,6 +27,10 @@ export default function CatalogView() {
   const [salePlatform, setSalePlatform] = useState("ebay");
   const [saleFees, setSaleFees] = useState("");
   const [saleShipping, setSaleShipping] = useState("");
+  const [showQuickList, setShowQuickList] = useState(false);
+  const [quickListPlatform, setQuickListPlatform] = useState("ebay");
+  const [quickListPrice, setQuickListPrice] = useState("");
+  const [quickListFormat, setQuickListFormat] = useState("fixed");
   const [thumbs, setThumbs] = useState({});
   const thumbAttempted = useRef(new Set());
 
@@ -102,6 +107,25 @@ export default function CatalogView() {
     setSalePrice(""); setSaleFees(""); setSaleShipping("");
   };
 
+  const quickList = (id) => {
+    if (!quickListPrice) { toast.error("Enter a price"); return; }
+    const c = catalog.find((x) => x.id === id);
+    if (!c) return;
+    const listing = {
+      id: uid(), cardId: id, cardName: c.name, set: c.set, number: c.number,
+      platform: quickListPlatform, format: quickListFormat,
+      startPrice: parseFloat(quickListPrice),
+      buyNowPrice: null, auctionEndDate: null,
+      shipping: 4.99, currentBid: null,
+      status: "active", notes: "", createdAt: new Date().toISOString(),
+    };
+    setListings((p) => [listing, ...p]);
+    setCatalog((p) => p.map((x) => x.id === id ? { ...x, status: "listed", listedOn: [...(x.listedOn || []), quickListPlatform] } : x));
+    setShowQuickList(false);
+    setQuickListPrice("");
+    toast.success(`Listed ${c.name} on ${quickListPlatform} for ${fmtShort(quickListPrice)}`);
+  };
+
   const doDelete = async () => {
     if (!window.confirm("Delete this card?")) return;
     if (detail.frontImgId) await deleteImage(detail.frontImgId).catch(() => {});
@@ -163,7 +187,14 @@ export default function CatalogView() {
         {detail.priceHistory?.length > 1 && <div className="card mb-10"><PriceChart data={detail.priceHistory} /></div>}
 
         <div className="card mb-10">
-          <div className="lbl">Listed On</div>
+          <div className="flex justify-between items-center">
+            <div className="lbl" style={{ margin: 0 }}>Listed On</div>
+            {detail.status !== "sold" && (
+              <button className="btn btn-primary btn-sm" onClick={() => { setShowQuickList(!showQuickList); setQuickListPrice(detail.priceEstimate?.mid ? String(detail.priceEstimate.mid) : ""); }}>
+                <IconPlus size={12} /> Quick List
+              </button>
+            )}
+          </div>
           <div className="chip-row mt-6">
             {PLATFORMS.map((p) => (
               <button key={p.v} onClick={() => toggleListed(detail.id, p.v)}
@@ -172,6 +203,36 @@ export default function CatalogView() {
               </button>
             ))}
           </div>
+
+          {/* Quick List form */}
+          {showQuickList && detail.status !== "sold" && (
+            <div className="fade mt-10" style={{ padding: 12, background: "var(--acc-bg)", borderRadius: "var(--radius)", border: "1px solid var(--acc-brd)" }}>
+              <div className="form-grid mt-4">
+                <label className="fld">
+                  <span className="text-xxs text-dim">Platform</span>
+                  <select className="inp" value={quickListPlatform} onChange={(e) => setQuickListPlatform(e.target.value)}>
+                    {PLATFORMS.map((p) => <option key={p.v} value={p.v}>{p.l}</option>)}
+                  </select>
+                </label>
+                <label className="fld">
+                  <span className="text-xxs text-dim">Price (CAD)</span>
+                  <input className="inp fw-700" type="number" step="0.01" value={quickListPrice} onChange={(e) => setQuickListPrice(e.target.value)} autoFocus />
+                </label>
+              </div>
+              {quickListPrice && (
+                <div className="text-xxs text-dim mt-6">
+                  Fees: {fmtShort(parseFloat(quickListPrice) * (PLATFORM_FEES[quickListPlatform] || 0))} ({((PLATFORM_FEES[quickListPlatform] || 0) * 100).toFixed(1)}%)
+                  {" "}&middot; Net: {fmtShort(parseFloat(quickListPrice) - parseFloat(quickListPrice) * (PLATFORM_FEES[quickListPlatform] || 0) - 4.99 - (parseFloat(detail.costBasis) || 0))}
+                </div>
+              )}
+              <div className="flex gap-8 mt-8">
+                <button className="btn btn-primary btn-sm flex-1" onClick={() => quickList(detail.id)}>
+                  <IconCheck size={12} /> Create Listing
+                </button>
+                <button className="btn btn-ghost btn-sm" onClick={() => setShowQuickList(false)}>Cancel</button>
+              </div>
+            </div>
+          )}
         </div>
 
         {detail.frontImgId && (

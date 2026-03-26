@@ -14,7 +14,7 @@ import { analyzeCentering, checkCvHealth } from "../lib/cvApi";
 
 export default function ScanView({ onNavigate }) {
   const toast = useToast();
-  const { setCatalog } = useData();
+  const { setCatalog, setListings } = useData();
   const [step, setStep] = useState(0);
   const [frontImg, setFrontImg] = useState(null);
   const [backImg, setBackImg] = useState(null);
@@ -391,9 +391,27 @@ export default function ScanView({ onNavigate }) {
 
           <div className="flex gap-8">
             <button className="btn btn-primary btn-lg flex-1" onClick={copyListing}><IconCopy size={14} /> Copy</button>
-            <button className="btn btn-outline btn-lg flex-1" disabled={saving} onClick={() => saveCard()}>Save</button>
+            <button className="btn btn-outline btn-lg flex-1" disabled={saving} onClick={async () => {
+              const entry = await saveCard();
+              if (entry && listing.price) {
+                const listingRecord = {
+                  id: uid(), cardId: entry.id, cardName: card.name, set: card.set, number: card.number,
+                  platform: listing.platform, format: "fixed",
+                  startPrice: parseFloat(listing.price),
+                  buyNowPrice: null, auctionEndDate: null,
+                  shipping: parseFloat(listing.shipping) || 0,
+                  currentBid: null, status: "active", notes: "",
+                  createdAt: new Date().toISOString(),
+                };
+                setListings((p) => [listingRecord, ...p]);
+                setCatalog((p) => p.map((c) => c.id === entry.id ? { ...c, status: "listed", listedOn: [listing.platform] } : c));
+                toast.success(`Listed on ${listing.platform} for ${fmtShort(listing.price)}`);
+              }
+              reset();
+            }}>Save + List</button>
           </div>
-          <button className="btn btn-ghost btn-lg btn-full mt-8" onClick={reset}>+ New Card</button>
+          <button className="btn btn-ghost btn-lg btn-full mt-8" disabled={saving} onClick={async () => { await saveCard(); reset(); }}>Save Only</button>
+          <button className="btn btn-ghost btn-sm btn-full mt-6" style={{ color: "var(--dim)" }} onClick={reset}>+ New Card</button>
         </section>
       )}
     </>

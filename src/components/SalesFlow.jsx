@@ -14,6 +14,8 @@ const PLATFORM_FEES = {
   collx: 0.10, poshmark: 0.20, comc: 0.10, alt: 0.10, goldin: 0.15, shopify: 0.029,
 };
 
+export { PLATFORM_FEES };
+
 export default function SalesFlow() {
   const toast = useToast();
   const { catalog, setCatalog, sales, setSales, listings, setListings, purchases, setPurchases, shipFrom } = useData();
@@ -23,6 +25,15 @@ export default function SalesFlow() {
   const [notifEnabled, setNotifEnabled] = useState(canNotify());
 
   const [showEbayExport, setShowEbayExport] = useState(false);
+
+  // Inline sale confirmation (replaces window.prompt)
+  const [sellingId, setSellingId] = useState(null);
+  const [sellPrice, setSellPrice] = useState("");
+  const [sellTracking, setSellTracking] = useState("");
+
+  // Reprice state
+  const [repricingId, setRepricingId] = useState(null);
+  const [repriceVal, setRepriceVal] = useState("");
 
   const [newListing, setNewListing] = useState({
     cardId: "", platform: "ebay", format: "fixed", startPrice: "", buyNowPrice: "",
@@ -68,7 +79,7 @@ export default function SalesFlow() {
     toast.success(`Listed: ${card.name}`);
   };
 
-  const completeSale = (listingId, salePrice) => {
+  const completeSale = (listingId, salePrice, trackingNumber) => {
     const listing = listings.find((l) => l.id === listingId);
     if (!listing) return;
     const price = parseFloat(salePrice) || listing.startPrice;
@@ -81,13 +92,35 @@ export default function SalesFlow() {
       id: uid(), cardId: listing.cardId, cardName: listing.cardName, set: listing.set,
       salePrice: price, costBasis, platform: listing.platform, fees,
       shippingCost: listing.shipping, netProfit, date: new Date().toISOString(), listingId: listing.id,
+      ...(trackingNumber ? { trackingNumber } : {}),
     };
     setSales((p) => [sale, ...p]);
-    setListings((p) => p.map((l) => l.id === listingId ? { ...l, status: "sold", soldPrice: price, soldDate: new Date().toISOString() } : l));
+    setListings((p) => p.map((l) => l.id === listingId ? { ...l, status: "sold", soldPrice: price, soldDate: new Date().toISOString(), trackingNumber: trackingNumber || null } : l));
     setCatalog((p) => p.map((c) => c.id === listing.cardId ? { ...c, status: "sold", soldPrice: price, soldPlatform: listing.platform } : c));
     cancelNotificationTimer(listingId);
+    setSellingId(null);
+    setSellPrice("");
+    setSellTracking("");
     sendNotification("Card sold!", `${listing.cardName} sold for ${fmtShort(price)} on ${listing.platform}. Net: ${fmtShort(netProfit)}`);
-    toast.success(`Sold: ${listing.cardName} for ${fmtShort(price)}`);
+    toast.success(`Sold: ${listing.cardName} for ${fmtShort(price)} (net ${fmtShort(netProfit)})`);
+  };
+
+  const repriceListing = (listingId) => {
+    const newPrice = parseFloat(repriceVal);
+    if (!newPrice || isNaN(newPrice)) { toast.error("Enter a valid price"); return; }
+    setListings((p) => p.map((l) => {
+      if (l.id !== listingId) return l;
+      const history = l.priceChanges || [];
+      return {
+        ...l,
+        startPrice: newPrice,
+        currentBid: l.format === "auction" ? l.currentBid : null,
+        priceChanges: [...history, { from: l.startPrice, to: newPrice, date: new Date().toISOString() }],
+      };
+    }));
+    setRepricingId(null);
+    setRepriceVal("");
+    toast.success(`Repriced to ${fmtShort(newPrice)}`);
   };
 
   const endListing = (listingId) => {
@@ -252,8 +285,13 @@ export default function SalesFlow() {
           {activeListings.map((l) => {
             const tl = l.format === "auction" ? timeLeft(l.auctionEndDate) : null;
             const isUrgent = tl && !tl.includes("d") && !tl.includes("Ended") && parseInt(tl) < 60;
+            const isSelling = sellingId === l.id;
+            const isRepricing = repricingId === l.id;
+            const feeRate = PLATFORM_FEES[l.platform] || 0;
+            const previewNet = sellPrice ? (parseFloat(sellPrice) - (parseFloat(catalog.find((c) => c.id === l.cardId)?.costBasis) || 0) - Math.round(parseFloat(sellPrice) * feeRate * 100) / 100 - (l.shipping || 0)) : null;
+
             return (
-              <div key={l.id} className="card mb-8" style={{ borderColor: isUrgent ? "var(--red-brd)" : tl === "Ended" ? "var(--acc-brd)" : undefined }}>
+              <div key={l.id} className="card mb-8" style={{ borderColor: isSelling ? "var(--grn-brd)" : isUrgent ? "var(--red-brd)" : tl === "Ended" ? "var(--acc-brd)" : undefined }}>
                 <div className="flex justify-between" style={{ alignItems: "start" }}>
                   <div>
                     <strong className="text-sm">{l.cardName}</strong>
@@ -264,6 +302,7 @@ export default function SalesFlow() {
                     <div className="text-xxs text-dim">{PLATFORMS.find((p) => p.v === l.platform)?.l || l.platform}</div>
                   </div>
                 </div>
+
                 <div className="flex gap-6 items-center mt-8">
                   <span className={`badge ${l.format === "auction" ? "badge-acc" : "badge-grn"}`}>
                     {l.format === "auction" ? "Auction" : "BIN"}
@@ -273,13 +312,70 @@ export default function SalesFlow() {
                       {tl === "Ended" ? "Auction ended" : `Ends in ${tl}`}
                     </span>
                   )}
+                  {l.priceChanges?.length > 0 && (
+                    <span className="text-xxs text-dim">{l.priceChanges.length} reprice{l.priceChanges.length > 1 ? "s" : ""}</span>
+                  )}
                   <div className="flex-1" />
-                  <button className="btn btn-primary btn-sm" onClick={() => {
-                    const price = prompt("Sale price (CAD):", l.currentBid || l.startPrice);
-                    if (price && !isNaN(parseFloat(price))) completeSale(l.id, price);
-                  }}><IconCheck size={12} /> Sold</button>
-                  <button className="btn btn-ghost btn-sm" style={{ color: "var(--red)" }} onClick={() => endListing(l.id)}><IconX size={12} /></button>
+                  {!isSelling && !isRepricing && (
+                    <>
+                      <button className="btn btn-primary btn-sm" onClick={() => { setSellingId(l.id); setSellPrice(String(l.currentBid || l.startPrice)); setRepricingId(null); }}>
+                        <IconCheck size={12} /> Sold
+                      </button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => { setRepricingId(l.id); setRepriceVal(String(l.startPrice)); setSellingId(null); }}>
+                        Reprice
+                      </button>
+                      <button className="btn btn-ghost btn-sm" style={{ color: "var(--red)" }} onClick={() => endListing(l.id)}><IconX size={12} /></button>
+                    </>
+                  )}
                 </div>
+
+                {/* Inline sale confirmation */}
+                {isSelling && (
+                  <div className="fade mt-10" style={{ padding: 12, background: "var(--grn-bg)", borderRadius: "var(--radius)", border: "1px solid var(--grn-brd)" }}>
+                    <div className="lbl" style={{ color: "var(--grn)" }}>Confirm Sale</div>
+                    <div className="form-grid mt-6">
+                      <label className="fld">
+                        <span className="text-xxs text-dim">Sale Price (CAD)</span>
+                        <input className="inp fw-800" type="number" step="0.01" value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} autoFocus style={{ fontSize: 18 }} />
+                      </label>
+                      <label className="fld">
+                        <span className="text-xxs text-dim">Tracking # (optional)</span>
+                        <input className="inp" placeholder="CP123456789CA" value={sellTracking} onChange={(e) => setSellTracking(e.target.value)} />
+                      </label>
+                    </div>
+                    {previewNet != null && (
+                      <div className="flex justify-between items-center mt-8 text-xs">
+                        <span className="text-dim">
+                          Fees: {fmtShort(parseFloat(sellPrice) * feeRate)} ({(feeRate * 100).toFixed(1)}%)
+                          {" "}&middot; Ship: {fmtShort(l.shipping || 0)}
+                        </span>
+                        <span className="fw-800" style={{ fontSize: 15, color: previewNet >= 0 ? "var(--grn)" : "var(--red)" }}>
+                          Net: {previewNet >= 0 ? "+" : ""}{fmtShort(previewNet)}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex gap-8 mt-8">
+                      <button className="btn btn-success btn-sm flex-1" onClick={() => completeSale(l.id, sellPrice, sellTracking)}>
+                        <IconCheck size={12} /> Confirm Sale
+                      </button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => { setSellingId(null); setSellPrice(""); setSellTracking(""); }}>Cancel</button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Inline reprice */}
+                {isRepricing && (
+                  <div className="fade mt-10" style={{ padding: 12, background: "var(--acc-bg)", borderRadius: "var(--radius)", border: "1px solid var(--acc-brd)" }}>
+                    <div className="lbl">Reprice</div>
+                    <div className="flex gap-8 items-center mt-6">
+                      <span className="text-xxs text-dim" style={{ textDecoration: "line-through" }}>{fmtShort(l.startPrice)}</span>
+                      <span className="text-xs">&rarr;</span>
+                      <input className="inp fw-700" type="number" step="0.01" value={repriceVal} onChange={(e) => setRepriceVal(e.target.value)} autoFocus style={{ maxWidth: 120 }} />
+                      <button className="btn btn-primary btn-sm" onClick={() => repriceListing(l.id)}>Update</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => { setRepricingId(null); setRepriceVal(""); }}>Cancel</button>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
