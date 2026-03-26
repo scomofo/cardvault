@@ -267,7 +267,7 @@ export default function SalesFlow() {
                   <div className="flex-1" />
                   <button className="btn btn-primary btn-sm" onClick={() => {
                     const price = prompt("Sale price (CAD):", l.currentBid || l.startPrice);
-                    if (price) completeSale(l.id, price);
+                    if (price && !isNaN(parseFloat(price))) completeSale(l.id, price);
                   }}><IconCheck size={12} /> Sold</button>
                   <button className="btn btn-ghost btn-sm" style={{ color: "var(--red)" }} onClick={() => endListing(l.id)}><IconX size={12} /></button>
                 </div>

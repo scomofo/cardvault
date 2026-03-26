@@ -1,12 +1,12 @@
 export const CONDITIONS = [
-  { v: "gem_mint", l: "Gem Mint 10", s: "GM", c: "#30a46c" },
-  { v: "mint", l: "Mint 9", s: "M", c: "#3dd68c" },
-  { v: "near_mint", l: "Near Mint 8", s: "NM", c: "#5ccfb5" },
-  { v: "excellent", l: "Excellent 7", s: "EX", c: "#52a8ff" },
-  { v: "very_good", l: "Very Good 6", s: "VG", c: "#9b8afb" },
-  { v: "good", l: "Good 5", s: "G", c: "#f0c040" },
-  { v: "fair", l: "Fair 4", s: "F", c: "#ed8936" },
-  { v: "poor", l: "Poor", s: "P", c: "#e5484d" },
+  { v: "gem_mint", l: "Gem Mint 10", s: "GM", c: "#c9a96e" },
+  { v: "mint", l: "Mint 9", s: "M", c: "#5a9e6f" },
+  { v: "near_mint", l: "Near Mint 8", s: "NM", c: "#5a9e8f" },
+  { v: "excellent", l: "Excellent 7", s: "EX", c: "#6b8cae" },
+  { v: "very_good", l: "Very Good 6", s: "VG", c: "#9b7fb8" },
+  { v: "good", l: "Good 5", s: "G", c: "#c89040" },
+  { v: "fair", l: "Fair 4", s: "F", c: "#b87048" },
+  { v: "poor", l: "Poor", s: "P", c: "#c7453b" },
 ];
 
 export const TYPES = [

@@ -15,6 +15,15 @@ export default function GradingSlider({ onSave, onCancel, initialGrades }) {
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef(null);
 
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+        recognitionRef.current = null;
+      }
+    };
+  }, []);
+
   const calculate = useCallback(() => {
     const vals = Object.values(grades);
     const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
@@ -120,7 +129,7 @@ export default function GradingSlider({ onSave, onCancel, initialGrades }) {
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h2 style={{ fontSize: 20, fontWeight: 900, letterSpacing: "-.3px" }}>Grading Lab</h2>
+          <h2 style={{ fontFamily: "var(--font-display)", fontSize: 18, fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase" }}>Grading Lab</h2>
           <div className="lbl" style={{ margin: 0 }}>Sub-Grade Assessment</div>
         </div>
         {hasSpeech && (
@@ -208,8 +217,8 @@ export default function GradingSlider({ onSave, onCancel, initialGrades }) {
           <div>
             <div className="lbl" style={{ margin: 0, letterSpacing: 3, fontSize: 9 }}>Projected Grade</div>
             <div style={{
-              fontSize: 48, fontWeight: 900, color: vault.color, lineHeight: 1.1,
-              fontStyle: "italic", letterSpacing: "-2px",
+              fontFamily: "var(--font-display)", fontSize: 44, fontWeight: 900, color: vault.color, lineHeight: 1.1,
+              letterSpacing: "1px",
             }}>
               {projection % 1 === 0 ? projection : projection.toFixed(1)}
             </div>
@@ -218,9 +227,9 @@ export default function GradingSlider({ onSave, onCancel, initialGrades }) {
           <div style={{ textAlign: "right" }}>
             <div style={{
               display: "inline-flex", alignItems: "center", gap: 6,
-              padding: "5px 14px", borderRadius: 20, fontWeight: 800, fontSize: 12,
+              padding: "5px 14px", borderRadius: 2, fontWeight: 800, fontSize: 11, letterSpacing: "1px",
               background: vault.status === "GREEN" ? "var(--grn)" : vault.status === "YELLOW" ? "var(--orange)" : "var(--red)",
-              color: "#0f1117",
+              color: "var(--bg)",
             }}>
               {vault.status === "GREEN" && <IconCheck size={13} />}
               {vault.status === "YELLOW" && <IconShield size={13} />}

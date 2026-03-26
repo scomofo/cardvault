@@ -41,7 +41,7 @@ export default function PriceChart({ data, height = 150 }) {
       </div>
       <svg
         viewBox={`0 0 ${w} ${h2}`}
-        style={{ width: "100%", height, display: "block", borderRadius: 10, background: "linear-gradient(180deg,var(--s2),var(--s1))", touchAction: "none" }}
+        style={{ width: "100%", height, display: "block", borderRadius: 2, background: "linear-gradient(180deg,var(--s2),var(--s1))", border: "1px solid var(--brd)", touchAction: "none" }}
         onMouseMove={(e) => setHov(getIdxFromEvent(e))}
         onMouseLeave={() => setHov(null)}
         onTouchMove={(e) => setHov(getIdxFromEvent(e))}
@@ -68,7 +68,7 @@ export default function PriceChart({ data, height = 150 }) {
       {hov != null && (
         <div style={{
           position: "absolute", top: 24, left: "50%", transform: "translateX(-50%)",
-          background: "var(--s1)", border: "1px solid var(--brd)", borderRadius: 8,
+          background: "var(--s1)", border: "1px solid var(--brd2)", borderRadius: 2,
           padding: "4px 12px", fontSize: 12, fontWeight: 700, pointerEvents: "none",
           whiteSpace: "nowrap", zIndex: 10, boxShadow: "0 8px 24px #0008",
         }}>

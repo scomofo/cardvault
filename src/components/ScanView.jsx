@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Camera from "./Camera";
 import PriceChart from "./PriceChart";
 import { useToast } from "./Toast";
@@ -7,7 +7,7 @@ import { CONDITIONS, TYPES, PLATFORMS, SHIP_CA, EMPTY_CARD, EMPTY_LISTING } from
 import { condOf, fmtShort, uid } from "../lib/utils";
 import { aiRecognize, aiPrice } from "../lib/ai";
 import { saveImage } from "../lib/storage";
-import { IconSearch, IconZap, IconChevron, IconCopy, IconExternalLink, Spinner } from "./Icons";
+import { IconSearch, IconZap, IconChevron, IconCopy, IconExternalLink, IconShield, Spinner } from "./Icons";
 import GradingSlider from "./GradingSlider";
 
 export default function ScanView({ onNavigate }) {
@@ -27,6 +27,7 @@ export default function ScanView({ onNavigate }) {
   const [listing, setListing] = useState({ ...EMPTY_LISTING });
   const [showGrading, setShowGrading] = useState(false);
   const [gradingData, setGradingData] = useState(null);
+  const [saving, setSaving] = useState(false);
 
   const doSearch = async () => {
     if (!searchQ.trim()) return;
@@ -55,14 +56,20 @@ export default function ScanView({ onNavigate }) {
   };
 
   const saveCard = async () => {
-    const id = uid();
-    let frontImgId = null, backImgId = null;
-    if (frontImg) { frontImgId = `img_${id}_front`; await saveImage(frontImgId, frontImg); }
-    if (backImg) { backImgId = `img_${id}_back`; await saveImage(backImgId, backImg); }
-    const entry = { id, ...card, frontImgId, backImgId, priceEstimate: priceEst, priceHistory, listing: { ...listing }, binder: card.binder || "", status: card.status || "inventory", listedOn: card.listedOn || [], ...(gradingData ? { centering: gradingData.centering, corners: gradingData.corners, edges: gradingData.edges, surface: gradingData.surface, projected_grade: gradingData.projected_grade, vault_status: gradingData.vault_status, condition_report: gradingData.condition_report } : {}), createdAt: new Date().toISOString() };
-    setCatalog((p) => [entry, ...p]);
-    toast.success(`Saved: ${card.name || "Card"}`);
-    return entry;
+    if (saving) return;
+    setSaving(true);
+    try {
+      const id = uid();
+      let frontImgId = null, backImgId = null;
+      if (frontImg) { frontImgId = `img_${id}_front`; await saveImage(frontImgId, frontImg); }
+      if (backImg) { backImgId = `img_${id}_back`; await saveImage(backImgId, backImg); }
+      const entry = { id, ...card, frontImgId, backImgId, priceEstimate: priceEst, priceHistory, listing: { ...listing }, binder: card.binder || "", status: card.status || "inventory", listedOn: card.listedOn || [], ...(gradingData ? { centering: gradingData.centering, corners: gradingData.corners, edges: gradingData.edges, surface: gradingData.surface, projected_grade: gradingData.projected_grade, vault_status: gradingData.vault_status, condition_report: gradingData.condition_report } : {}), createdAt: new Date().toISOString() };
+      setCatalog((p) => [entry, ...p]);
+      toast.success(`Saved: ${card.name || "Card"}`);
+      return entry;
+    } finally {
+      setSaving(false);
+    }
   };
 
   const reset = () => { setStep(0); setFrontImg(null); setBackImg(null); setCard({ ...EMPTY_CARD }); setSearchQ(""); setResults([]); setPriceEst({ low: "", mid: "", high: "" }); setPriceHistory([]); setListing({ ...EMPTY_LISTING }); setStatus(""); setShowGrading(false); setGradingData(null); };
@@ -276,7 +283,7 @@ export default function ScanView({ onNavigate }) {
           )}
 
           <div className="flex gap-8">
-            <button className="btn btn-primary btn-lg flex-1" onClick={async () => { await saveCard(); reset(); }}>Save Card</button>
+            <button className="btn btn-primary btn-lg flex-1" disabled={saving} onClick={async () => { await saveCard(); reset(); }}>Save Card</button>
             <button className="btn btn-outline btn-lg flex-1" onClick={() => {
               const co = condOf(card.condition);
               setListing((p) => ({ ...p, title: [card.name, card.set, card.number && `#${card.number}`, `[${co.s}]`].filter(Boolean).join(" "), description: [card.name, card.set && `Set: ${card.set}`, card.rarity && `Rarity: ${card.rarity}`, `Condition: ${co.l}`, "Ships tracked from Canada"].filter(Boolean).join("\n"), price: priceEst.mid || "" }));
@@ -329,7 +336,7 @@ export default function ScanView({ onNavigate }) {
 
           <div className="flex gap-8">
             <button className="btn btn-primary btn-lg flex-1" onClick={copyListing}><IconCopy size={14} /> Copy</button>
-            <button className="btn btn-outline btn-lg flex-1" onClick={() => saveCard()}>Save</button>
+            <button className="btn btn-outline btn-lg flex-1" disabled={saving} onClick={() => saveCard()}>Save</button>
           </div>
           <button className="btn btn-ghost btn-lg btn-full mt-8" onClick={reset}>+ New Card</button>
         </section>

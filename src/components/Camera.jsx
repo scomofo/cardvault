@@ -72,8 +72,8 @@ export default function Camera({ side, image, onCapture, onRetake, compact }) {
           <video ref={vRef} style={{ width: "100%", maxHeight: mH, borderRadius: "var(--radius)", objectFit: "cover", background: "#000" }} playsInline muted />
           <canvas ref={cRef} style={{ display: "none" }} />
           <div className="flex gap-8 justify-center mt-8">
-            <button onClick={snap} aria-label="Take photo" style={{ width: 48, height: 48, borderRadius: "50%", border: "3px solid var(--acc)", background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-              <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg,var(--acc),var(--acc2))" }} />
+            <button onClick={snap} aria-label="Take photo" style={{ width: 48, height: 48, borderRadius: 2, border: "2px solid var(--acc)", background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transform: "rotate(45deg)" }}>
+              <div style={{ width: 24, height: 24, borderRadius: 0, background: "var(--acc)", transform: "rotate(-45deg)" }} />
             </button>
             <button className="btn btn-ghost btn-sm" onClick={stop}><IconX size={14} /></button>
           </div>

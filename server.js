@@ -76,13 +76,14 @@ function validateBody(req, res, next) {
     max_tokens: Math.min(parseInt(max_tokens) || 800, MAX_TOKENS_CAP),
     messages,
     ...(system && { system }),
+    ...(req.body.tools && { tools: req.body.tools }),
   };
   next();
 }
 
 // --- API Key management ---
 // GET: check if key is configured (never returns the actual key)
-app.get("/api/ai/status", (req, res) => {
+app.get("/api/ai/status", authCheck, (req, res) => {
   res.json({
     configured: !!anthropicKey,
     masked: anthropicKey ? anthropicKey.slice(0, 7) + "..." + anthropicKey.slice(-4) : null,
@@ -90,7 +91,7 @@ app.get("/api/ai/status", (req, res) => {
 });
 
 // POST: set the API key at runtime
-app.post("/api/ai/key", (req, res) => {
+app.post("/api/ai/key", authCheck, (req, res) => {
   const { key } = req.body;
   if (!key || typeof key !== "string" || !key.startsWith("sk-ant-")) {
     return res.status(400).json({ error: "Invalid API key format. Must start with sk-ant-" });

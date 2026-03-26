@@ -27,11 +27,11 @@ export function calculateGrade(scores) {
 
 // Grade translation scale from Card Docs
 const GRADE_SCALE = [
-  { min: 9.5, term: "Gem Mint", desc: "Virtually perfect to the naked eye.", color: "#30a46c", emoji: "gem", action: "Immediate grading candidate" },
-  { min: 9.0, term: "Mint", desc: "One very minor flaw (usually centering or a single white speck).", color: "#3dd68c", emoji: "sparkles", action: "Strong grading candidate" },
-  { min: 8.0, term: "NM-MT", desc: "Near Mint-Mint. Sharp, but has visible minor wear.", color: "#5ccfb5", emoji: "star", action: "Review for raw sale or grading" },
-  { min: 7.0, term: "NM", desc: "Near Mint. Visible whitening or slight surface scuffing.", color: "#52a8ff", emoji: "ok", action: "Sell raw" },
-  { min: 0, term: "EX / VG", desc: "Significant flaws; strictly for raw sales or personal collections.", color: "#e5484d", emoji: "warning", action: "Bulk/value bin" },
+  { min: 9.5, term: "Gem Mint", desc: "Virtually perfect to the naked eye.", color: "#c9a96e", emoji: "gem", action: "Immediate grading candidate" },
+  { min: 9.0, term: "Mint", desc: "One very minor flaw (usually centering or a single white speck).", color: "#5a9e6f", emoji: "sparkles", action: "Strong grading candidate" },
+  { min: 8.0, term: "NM-MT", desc: "Near Mint-Mint. Sharp, but has visible minor wear.", color: "#5a9e8f", emoji: "star", action: "Review for raw sale or grading" },
+  { min: 7.0, term: "NM", desc: "Near Mint. Visible whitening or slight surface scuffing.", color: "#6b8cae", emoji: "ok", action: "Sell raw" },
+  { min: 0, term: "EX / VG", desc: "Significant flaws; strictly for raw sales or personal collections.", color: "#c7453b", emoji: "warning", action: "Bulk/value bin" },
 ];
 
 export function gradeToTerm(score) {
@@ -41,9 +41,9 @@ export function gradeToTerm(score) {
 // Vault Status — Traffic Light sorting system from Grading Integration Spec
 // GREEN = High-value grading candidate, YELLOW = Solid raw sale, RED = Bulk/discount
 export function assignVaultStatus(projectedGrade) {
-  if (projectedGrade >= 9.5) return { status: "GREEN", label: "Grading Candidate", color: "#4ade80" };
-  if (projectedGrade >= 8.5) return { status: "YELLOW", label: "Raw Sale", color: "#fbbf24" };
-  return { status: "RED", label: "Bulk / Budget", color: "#f87171" };
+  if (projectedGrade >= 9.5) return { status: "GREEN", label: "Grading Candidate", color: "#5a9e6f" };
+  if (projectedGrade >= 8.5) return { status: "YELLOW", label: "Raw Sale", color: "#c89040" };
+  return { status: "RED", label: "Bulk / Budget", color: "#c7453b" };
 }
 
 // Full grading assessment combining grade calculation + vault status

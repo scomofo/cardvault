@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { ToastProvider } from "./components/Toast";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { DataProvider, useData } from "./lib/DataContext";
@@ -65,7 +65,7 @@ function AppContent() {
     return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
   }, []);
 
-  const activeCount = catalog.filter((c) => c.status !== "sold").length;
+  const activeCount = useMemo(() => catalog.filter((c) => c.status !== "sold").length, [catalog]);
 
   return (
     <div className="app-shell">
@@ -77,10 +77,10 @@ function AppContent() {
 
       <header className="app-header">
         <h1 className="app-logo">
-          <span className="gold">CardVault</span>
+          <span className="gold">Card</span><span style={{ color: "var(--tx)" }}>Vault</span>
         </h1>
         <div className="flex items-center gap-8">
-          {userName && <span className="text-xs text-dim">{userName}</span>}
+          {userName && <span className="text-xs text-dim" style={{ letterSpacing: ".5px" }}>{userName}</span>}
           <button className="btn btn-outline btn-sm" onClick={() => setView("cards")}>
             {activeCount} cards
           </button>
