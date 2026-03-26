@@ -125,6 +125,96 @@ export async function aiPrice(query) {
   return validatePriceResult(data);
 }
 
+/**
+ * Visual Search: send a card photo to Claude with web search enabled.
+ * Claude identifies the card from the image, then searches for real
+ * sold prices — combining recognition + pricing in one call.
+ */
+export async function aiVisualSearch(imageDataUrl) {
+  const mt = parseMediaType(imageDataUrl);
+  const b64 = imageDataUrl.split(",")[1];
+  const data = await aiCall({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 2000,
+    tools: [{ type: "web_search_20250305", name: "web_search" }],
+    messages: [{
+      role: "user",
+      content: [
+        { type: "image", source: { type: "base64", media_type: mt, data: b64 } },
+        { type: "text", text: `You are a trading card expert. Look at this card photo and:
+1. Identify the card (player/character, set, year, card number)
+2. Search eBay and TCGplayer for recent sold prices of this exact card
+3. Estimate the market value in CAD
+
+Return ONLY JSON:
+{
+  "cardName": "full card name",
+  "name": "player/character name",
+  "set": "set name",
+  "year": "year",
+  "number": "card number",
+  "rarity": "rarity level",
+  "parallel": "parallel/variant if any",
+  "type": "sports|pokemon|mtg|yugioh|one_piece|lorcana|other",
+  "confidence": "high|medium|low",
+  "results": [{"title": "listing title", "price": 0, "source": "eBay Sold", "date": "Mar 2026", "url": "https://..."}],
+  "priceEstimate": {"low": 0, "mid": 0, "high": 0},
+  "priceHistory": [{"month": "Jan 2026", "avgPrice": 0}],
+  "cardInfo": {"set": "", "year": "", "number": "", "rarity": "", "type": "sports"}
+}` },
+      ],
+    }],
+  });
+
+  if (data.error) return null;
+
+  // Merge recognition + price data
+  return {
+    // Recognition fields
+    name: String(data.name || ""),
+    set: String(data.set || data.cardInfo?.set || ""),
+    year: String(data.year || data.cardInfo?.year || ""),
+    number: String(data.number || data.cardInfo?.number || ""),
+    rarity: String(data.rarity || data.cardInfo?.rarity || ""),
+    parallel: String(data.parallel || ""),
+    type: String(data.type || data.cardInfo?.type || "other"),
+    confidence: String(data.confidence || "low"),
+    // Price fields
+    cardName: String(data.cardName || data.name || ""),
+    results: Array.isArray(data.results) ? data.results.map((r) => ({
+      title: String(r.title || ""),
+      price: Number(r.price) || 0,
+      source: String(r.source || ""),
+      date: String(r.date || ""),
+      url: String(r.url || ""),
+    })) : [],
+    priceEstimate: {
+      low: Number(data.priceEstimate?.low) || 0,
+      mid: Number(data.priceEstimate?.mid) || 0,
+      high: Number(data.priceEstimate?.high) || 0,
+    },
+    priceHistory: Array.isArray(data.priceHistory) ? data.priceHistory.map((h) => ({
+      month: String(h.month || ""),
+      avgPrice: Number(h.avgPrice) || 0,
+    })) : [],
+    cardInfo: {
+      set: String(data.cardInfo?.set || data.set || ""),
+      year: String(data.cardInfo?.year || data.year || ""),
+      number: String(data.cardInfo?.number || data.number || ""),
+      rarity: String(data.cardInfo?.rarity || data.rarity || ""),
+      type: String(data.cardInfo?.type || data.type || "sports"),
+    },
+  };
+}
+
+/**
+ * Generate a Google Lens search URL from a base64 image.
+ * This creates a data URL that can be opened to trigger Google's visual search.
+ */
+export function getGoogleLensUrl(searchQuery) {
+  return `https://lens.google.com/search?p=${encodeURIComponent(searchQuery)}`;
+}
+
 export async function aiGradePredict(imageDataUrl) {
   const mt = parseMediaType(imageDataUrl);
   const b64 = imageDataUrl.split(",")[1];

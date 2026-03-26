@@ -5,7 +5,7 @@ import { useToast } from "./Toast";
 import { useData } from "../lib/DataContext";
 import { CONDITIONS, TYPES, PLATFORMS, SHIP_CA, EMPTY_CARD, EMPTY_LISTING } from "../lib/constants";
 import { condOf, fmtShort, uid } from "../lib/utils";
-import { aiRecognize, aiPrice } from "../lib/ai";
+import { aiRecognize, aiPrice, aiVisualSearch } from "../lib/ai";
 import { saveImage } from "../lib/storage";
 import { IconSearch, IconZap, IconChevron, IconCopy, IconExternalLink, IconShield, Spinner } from "./Icons";
 import GradingSlider from "./GradingSlider";
@@ -34,6 +34,7 @@ export default function ScanView({ onNavigate }) {
   const [cvAnalyzing, setCvAnalyzing] = useState(false);
   const [cvResult, setCvResult] = useState(null);
   const [showCvOverlay, setShowCvOverlay] = useState(true);
+  const [visualSearching, setVisualSearching] = useState(false);
 
   // Check CV service on mount
   useEffect(() => {
@@ -52,6 +53,27 @@ export default function ScanView({ onNavigate }) {
       toast.error("Card edges not found \u2014 try a darker background");
     }
     setCvAnalyzing(false);
+  };
+
+  const doVisualSearch = async () => {
+    if (!frontImg) return;
+    setVisualSearching(true); setStatus("Visual search\u2026 identifying + pricing from photo");
+    const r = await aiVisualSearch(frontImg);
+    if (r?.name) {
+      // Fill card details
+      setCard((p) => ({ ...p, name: r.name, set: r.set || p.set, year: r.year || p.year, number: r.number || p.number, rarity: r.rarity || p.rarity, parallel: r.parallel || "", type: r.type || p.type }));
+      setSearchQ([r.name, r.set, r.number && `#${r.number}`].filter(Boolean).join(" "));
+      // Fill price data
+      if (r.results?.length > 0) setResults(r.results);
+      if (r.priceEstimate) setPriceEst(r.priceEstimate);
+      if (r.priceHistory?.length > 0) setPriceHistory(r.priceHistory);
+      setStatus(`\u2713 ${r.name} \u2014 ${r.results?.length || 0} comps found (${r.confidence})`);
+      setStep(1); // Jump to results
+    } else {
+      setStatus("Visual search failed \u2014 try AI Identify or search manually");
+      toast.error("Couldn't identify card from photo");
+    }
+    setVisualSearching(false);
   };
 
   const doSearch = async () => {
@@ -97,7 +119,7 @@ export default function ScanView({ onNavigate }) {
     }
   };
 
-  const reset = () => { setStep(0); setFrontImg(null); setBackImg(null); setCard({ ...EMPTY_CARD }); setSearchQ(""); setResults([]); setPriceEst({ low: "", mid: "", high: "" }); setPriceHistory([]); setListing({ ...EMPTY_LISTING }); setStatus(""); setShowGrading(false); setGradingData(null); setCvResult(null); setCvAnalyzing(false); };
+  const reset = () => { setStep(0); setFrontImg(null); setBackImg(null); setCard({ ...EMPTY_CARD }); setSearchQ(""); setResults([]); setPriceEst({ low: "", mid: "", high: "" }); setPriceHistory([]); setListing({ ...EMPTY_LISTING }); setStatus(""); setShowGrading(false); setGradingData(null); setCvResult(null); setCvAnalyzing(false); setVisualSearching(false); };
 
   const copyListing = async () => {
     try { await navigator.clipboard.writeText(`${listing.title}\n${fmtShort(listing.price)} CAD + ${fmtShort(listing.shipping)} shipping\n\n${listing.description}`); toast.success("Copied"); }
@@ -144,11 +166,23 @@ export default function ScanView({ onNavigate }) {
           </details>
 
           <div className="flex gap-8">
-            <button className="btn btn-primary btn-lg flex-1" disabled={!frontImg} onClick={() => { doRecognize(); setStep(1); }}>
-              <IconZap size={16} /> AI Identify
+            <button className="btn btn-primary btn-lg flex-1" disabled={!frontImg || visualSearching} onClick={doVisualSearch}>
+              {visualSearching ? <Spinner size={16} /> : <IconSearch size={16} />} Visual Search
             </button>
             <button className="btn btn-outline btn-lg" disabled={!frontImg} onClick={() => setStep(1)}>
               Skip <IconChevron size={14} />
+            </button>
+          </div>
+          <div className="flex gap-8 mt-8">
+            <button className="btn btn-ghost btn-sm flex-1" disabled={!frontImg} onClick={() => { doRecognize(); setStep(1); }}>
+              <IconZap size={12} /> ID Only
+            </button>
+            <button className="btn btn-ghost btn-sm flex-1" disabled={!frontImg} onClick={() => {
+              const q = [card.name, card.set, card.number].filter(Boolean).join(" ");
+              if (q) window.open(`https://lens.google.com/search?p=${encodeURIComponent(q)}`, "_blank");
+              else if (frontImg) window.open("https://lens.google.com", "_blank");
+            }}>
+              <IconExternalLink size={12} /> Google Lens
             </button>
           </div>
           {cvOnline && frontImg && (
@@ -218,7 +252,8 @@ export default function ScanView({ onNavigate }) {
             <div className="flex gap-6 flex-wrap mb-8">
               {[{ l: "eBay Sold", h: `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(searchQ)}&LH_Sold=1&LH_Complete=1` },
                 { l: "TCGplayer", h: `https://www.tcgplayer.com/search/all/product?q=${encodeURIComponent(searchQ)}` },
-                { l: "130point", h: `https://130point.com/sales/?search=${encodeURIComponent(searchQ)}` }].map((x) => (
+                { l: "130point", h: `https://130point.com/sales/?search=${encodeURIComponent(searchQ)}` },
+                { l: "Google Lens", h: `https://lens.google.com/search?p=${encodeURIComponent(searchQ)}` }].map((x) => (
                 <a key={x.l} href={x.h} target="_blank" rel="noopener noreferrer" className="link-chip">
                   {x.l} <IconExternalLink size={10} />
                 </a>
