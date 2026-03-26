@@ -45,6 +45,37 @@ function toCamel(row, map) {
   return out;
 }
 
+/** Convert camelCase body fields to snake_case for DB merge. */
+function toSnake(body) {
+  if (!body) return body;
+  const out = { ...body };
+  // Map camelCase → snake_case so they override existing DB values
+  if ("cardSet" in out) { out.card_set = out.cardSet; delete out.cardSet; }
+  if ("cardNumber" in out) { out.card_number = out.cardNumber; delete out.cardNumber; }
+  if ("costBasis" in out) { out.cost_basis = out.costBasis; delete out.costBasis; }
+  if ("listedOn" in out) { out.listed_on = out.listedOn; delete out.listedOn; }
+  if ("frontImgId" in out) { out.front_img_id = out.frontImgId; delete out.frontImgId; }
+  if ("backImgId" in out) { out.back_img_id = out.backImgId; delete out.backImgId; }
+  if ("priceEstimate" in out) { out.price_estimate = out.priceEstimate; delete out.priceEstimate; }
+  if ("priceHistory" in out) { out.price_history = out.priceHistory; delete out.priceHistory; }
+  if ("parallelId" in out) { out.parallel_id = out.parallelId; delete out.parallelId; }
+  // Listing-specific fields
+  if ("cardId" in out) { out.card_id = out.cardId; delete out.cardId; }
+  if ("cardName" in out) { out.card_name = out.cardName; delete out.cardName; }
+  if ("startPrice" in out) { out.start_price = out.startPrice; delete out.startPrice; }
+  if ("buyNowPrice" in out) { out.buy_now_price = out.buyNowPrice; delete out.buyNowPrice; }
+  if ("auctionEndDate" in out) { out.auction_end_date = out.auctionEndDate; delete out.auctionEndDate; }
+  if ("currentBid" in out) { out.current_bid = out.currentBid; delete out.currentBid; }
+  if ("soldPrice" in out) { out.sold_price = out.soldPrice; delete out.soldPrice; }
+  if ("soldDate" in out) { out.sold_date = out.soldDate; delete out.soldDate; }
+  // Sale-specific fields
+  if ("salePrice" in out) { out.sale_price = out.salePrice; delete out.salePrice; }
+  if ("shippingCost" in out) { out.shipping_cost = out.shippingCost; delete out.shippingCost; }
+  if ("netProfit" in out) { out.net_profit = out.netProfit; delete out.netProfit; }
+  if ("listingId" in out) { out.listing_id = out.listingId; delete out.listingId; }
+  return out;
+}
+
 function toCamelArray(rows, map) {
   return (rows || []).map((r) => toCamel(r, map));
 }
@@ -116,7 +147,7 @@ export function registerRoutes(app) {
       const existing = get("SELECT * FROM user_items WHERE id = ?", [req.params.id]);
       if (!existing) return res.status(404).json({ error: "Item not found" });
 
-      const b = { ...existing, ...req.body };
+      const b = { ...existing, ...toSnake(req.body) };
       run(
         `UPDATE user_items SET
           parallel_id=?, name=?, card_set=?, year=?, card_number=?, type=?,
@@ -153,7 +184,7 @@ export function registerRoutes(app) {
 
   app.post("/api/sales", (req, res) => {
     try {
-      const b = req.body;
+      const b = toSnake(req.body);
       if (!b.sale_price) return res.status(400).json({ error: "sale_price required" });
       const id = b.id || uid();
       run(
@@ -189,7 +220,7 @@ export function registerRoutes(app) {
 
   app.post("/api/listings", (req, res) => {
     try {
-      const b = req.body;
+      const b = toSnake(req.body);
       if (!b.platform) return res.status(400).json({ error: "platform required" });
       const id = b.id || uid();
       run(
@@ -215,7 +246,7 @@ export function registerRoutes(app) {
     try {
       const existing = get("SELECT * FROM listings WHERE id = ?", [req.params.id]);
       if (!existing) return res.status(404).json({ error: "Listing not found" });
-      const b = { ...existing, ...req.body };
+      const b = { ...existing, ...toSnake(req.body) };
       run(
         `UPDATE listings SET card_id=?, card_name=?, card_set=?, card_number=?,
          platform=?, format=?, start_price=?, buy_now_price=?, auction_end_date=?,
