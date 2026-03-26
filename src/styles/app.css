@@ -63,6 +63,7 @@
   /* Deco-specific */
   --font-display: 'Cinzel', 'Georgia', serif;
   --font-body: 'Nunito Sans', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'Courier Prime', 'Courier New', monospace;
   --deco-line: rgba(201,169,110,.15);
 }
 
@@ -134,11 +135,35 @@ input, select, textarea, button {
   0% { border-color: transparent; }
   100% { border-color: var(--brd2); }
 }
+@keyframes vaultOpen {
+  0% { opacity: 0; transform: scaleY(0.92) translateY(8px); filter: brightness(0.7); }
+  60% { opacity: 1; filter: brightness(1.05); }
+  100% { opacity: 1; transform: scaleY(1) translateY(0); filter: brightness(1); }
+}
+@keyframes stampIn {
+  0% { opacity: 0; transform: scale(1.8) rotate(-8deg); }
+  50% { opacity: 1; transform: scale(0.95) rotate(1deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+@keyframes lineReveal {
+  0% { width: 0; }
+  100% { width: 40px; }
+}
+@keyframes countUp {
+  0% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes cornerGrow {
+  0% { width: 0; height: 0; opacity: 0; }
+  100% { width: 32px; height: 32px; opacity: .4; }
+}
 
 .fade { animation: fadeUp .4s var(--ease-out) both; }
 .fade-in { animation: fadeIn .3s ease both; }
 .slide-up { animation: slideUp .45s var(--ease-out) both; }
 .scale-in { animation: scaleIn .35s var(--ease-out) both; }
+.vault-open { animation: vaultOpen .5s var(--ease-out) both; }
+.stamp { animation: stampIn .4s var(--ease-out) both; }
 
 /* ===== LAYOUT ===== */
 .app-shell {
@@ -153,23 +178,46 @@ input, select, textarea, button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 0 16px;
+  padding: 18px 0 14px;
   position: sticky;
   top: 0;
   z-index: 50;
-  background: rgba(11,11,15,.92);
+  background: rgba(11,11,15,.94);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--deco-line);
+}
+/* Decorative header underline — art deco double rule */
+.app-header::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 20%;
+  right: 20%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(201,169,110,.08), rgba(201,169,110,.12), rgba(201,169,110,.08), transparent);
 }
 
 .app-logo {
   font-family: var(--font-display);
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 700;
-  letter-spacing: 3px;
+  letter-spacing: 4px;
   text-transform: uppercase;
   display: flex;
   align-items: center;
   gap: 10px;
+  position: relative;
+}
+/* Vault monogram — decorative diamond before logo */
+.app-logo::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  background: var(--acc);
+  transform: rotate(45deg);
+  opacity: .6;
+  flex-shrink: 0;
 }
 
 /* ===== TYPOGRAPHY ===== */
@@ -186,12 +234,13 @@ input, select, textarea, button {
   font-family: var(--font-display);
   font-size: 20px;
   font-weight: 700;
-  letter-spacing: 2px;
+  letter-spacing: 3px;
   text-transform: uppercase;
   margin-bottom: 18px;
   color: var(--tx);
   position: relative;
-  padding-bottom: 12px;
+  padding-bottom: 14px;
+  animation: fadeUp .5s var(--ease-out) both;
 }
 .page-title::after {
   content: '';
@@ -201,6 +250,20 @@ input, select, textarea, button {
   width: 40px;
   height: 2px;
   background: var(--gradient-acc);
+  animation: lineReveal .6s var(--ease-out) .2s both;
+}
+/* Decorative end-mark diamond */
+.page-title::before {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 42px;
+  width: 6px;
+  height: 6px;
+  background: var(--acc);
+  transform: rotate(45deg);
+  opacity: .5;
+  animation: fadeIn .4s .5s both;
 }
 
 .section-title {
@@ -262,7 +325,7 @@ input, select, textarea, button {
   position: relative;
   overflow: hidden;
 }
-/* Art Deco corner accents */
+/* Art Deco corner accents — animated */
 .card-hero::before {
   content: '';
   position: absolute;
@@ -272,6 +335,7 @@ input, select, textarea, button {
   border-left: 2px solid var(--acc);
   opacity: .4;
   pointer-events: none;
+  animation: cornerGrow .5s var(--ease-out) .1s both;
 }
 .card-hero::after {
   content: '';
@@ -282,6 +346,7 @@ input, select, textarea, button {
   border-right: 2px solid var(--acc);
   opacity: .4;
   pointer-events: none;
+  animation: cornerGrow .5s var(--ease-out) .2s both;
 }
 
 .card-interactive {
@@ -297,7 +362,14 @@ input, select, textarea, button {
   border-color: var(--acc-brd);
   background: var(--s2);
   transform: translateX(4px);
-  box-shadow: -2px 0 0 var(--acc);
+  box-shadow: -3px 0 0 var(--acc), var(--shadow-sm);
+}
+.card-interactive:hover::after {
+  content: '';
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: 2px;
+  background: linear-gradient(180deg, transparent, rgba(201,169,110,.15), transparent);
 }
 .card-interactive:active {
   transform: translateX(2px);
@@ -414,6 +486,21 @@ a:hover { text-decoration: underline; }
   color: var(--bg);
   font-weight: 800;
   box-shadow: 0 2px 8px rgba(201,169,110,.2);
+  position: relative;
+  overflow: hidden;
+}
+/* Gold shimmer sweep on primary buttons */
+.btn-primary::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.15), transparent);
+  transition: left .5s ease;
+}
+.btn-primary:hover::after {
+  left: 150%;
 }
 .btn-primary:hover {
   background: var(--acc2);
@@ -491,6 +578,7 @@ a:hover { text-decoration: underline; }
   font-weight: 700;
   line-height: 1.2;
   letter-spacing: .5px;
+  animation: countUp .4s var(--ease-out) both;
 }
 .stat-sub {
   font-size: 11px;
@@ -537,24 +625,50 @@ a:hover { text-decoration: underline; }
 .empty-state {
   text-align: center;
   padding: 48px 24px;
+  position: relative;
+}
+/* Deco diamond watermark behind empty state */
+.empty-state::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100px;
+  height: 100px;
+  border: 1px solid rgba(201,169,110,.06);
+  transform: translate(-50%, -50%) rotate(45deg);
+  pointer-events: none;
+}
+.empty-state::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 70px;
+  height: 70px;
+  border: 1px solid rgba(201,169,110,.04);
+  transform: translate(-50%, -50%) rotate(45deg);
+  pointer-events: none;
 }
 .empty-state .empty-icon {
-  font-size: 48px;
-  margin-bottom: 12px;
-  opacity: .4;
+  font-size: 42px;
+  margin-bottom: 14px;
+  opacity: .3;
+  filter: grayscale(.4);
 }
 .empty-state .empty-title {
   font-family: var(--font-display);
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
-  color: var(--tx);
-  margin-bottom: 6px;
-  letter-spacing: 1px;
+  color: var(--tx2);
+  margin-bottom: 8px;
+  letter-spacing: 2px;
   text-transform: uppercase;
 }
 .empty-state .empty-desc {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--dim);
+  letter-spacing: .3px;
 }
 
 /* ===== STEPPER ===== */
@@ -582,6 +696,18 @@ a:hover { text-decoration: underline; }
   background: var(--acc);
   color: var(--bg);
   font-weight: 800;
+  box-shadow: 0 2px 12px rgba(201,169,110,.2);
+}
+.stepper-step.current::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--gradient-acc);
+  background-size: 200% 100%;
+  animation: gradientShift 3s ease infinite;
 }
 .stepper-step.completed {
   background: var(--acc-bg);
@@ -622,6 +748,19 @@ a:hover { text-decoration: underline; }
 .toast-error { background: var(--s1); color: var(--red); border-color: var(--red-brd); border-left: 3px solid var(--red); }
 .toast-info { background: var(--s1); color: var(--acc); border-color: var(--acc-brd); border-left: 3px solid var(--acc); }
 
+/* Toast deco mark */
+.toast::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 5px;
+  height: 5px;
+  border: 1px solid currentColor;
+  opacity: .2;
+  transform: rotate(45deg);
+}
+
 /* ===== NAVIGATION ===== */
 .nav-bar {
   position: fixed;
@@ -630,16 +769,28 @@ a:hover { text-decoration: underline; }
   right: 0;
   display: flex;
   justify-content: space-around;
-  background: rgba(11,11,15,.95);
+  background: rgba(11,11,15,.96);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border-top: 1px solid var(--deco-line);
   padding: 2px 0 env(safe-area-inset-bottom, 4px);
   z-index: 100;
+}
+/* Deco top border — double gold rule */
+.nav-bar::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(201,169,110,.06), rgba(201,169,110,.1), rgba(201,169,110,.06), transparent);
 }
 .nav-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
   background: none;
   border: none;
   padding: 10px 18px;
@@ -647,13 +798,17 @@ a:hover { text-decoration: underline; }
   color: var(--dim);
   transition: color var(--transition);
 }
+.nav-btn:hover { color: var(--tx2); }
 .nav-btn.active { color: var(--acc); }
 .nav-btn .nav-icon {
   width: 20px;
   height: 20px;
-  transition: transform var(--transition);
+  transition: transform var(--transition), filter var(--transition);
 }
-.nav-btn.active .nav-icon { transform: scale(1.05); }
+.nav-btn.active .nav-icon {
+  transform: scale(1.1);
+  filter: drop-shadow(0 0 4px rgba(201,169,110,.3));
+}
 .nav-btn .nav-label {
   font-family: var(--font-display);
   font-size: 9px;
@@ -664,10 +819,12 @@ a:hover { text-decoration: underline; }
 .nav-indicator {
   position: absolute;
   top: 0;
-  left: 15%;
-  right: 15%;
+  left: 20%;
+  right: 20%;
   height: 2px;
   background: var(--acc);
+  box-shadow: 0 0 8px rgba(201,169,110,.3);
+  animation: fadeIn .2s ease both;
 }
 
 /* ===== OFFLINE BANNER ===== */
@@ -739,6 +896,19 @@ a:hover { text-decoration: underline; }
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--brd2), var(--deco-line), var(--brd2), transparent);
   margin: 16px 0;
+  position: relative;
+}
+/* Deco diamond center mark on dividers */
+.divider::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  background: var(--s1);
+  border: 1px solid var(--brd2);
+  transform: translate(-50%, -50%) rotate(45deg);
 }
 
 /* ===== UTILITY ===== */
@@ -828,4 +998,63 @@ input[type="range"]:focus::-webkit-slider-thumb {
 @media (min-width: 640px) {
   .form-grid { grid-template-columns: 1fr 1fr 1fr; }
   .stat-grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* ===== SELECTION ===== */
+::selection {
+  background: rgba(201,169,110,.25);
+  color: var(--tx);
+}
+
+/* ===== FOCUS VISIBLE ===== */
+:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: 2px;
+}
+button:focus-visible, .chip:focus-visible, .nav-btn:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: 2px;
+}
+
+/* ===== BADGE animation on appear ===== */
+.badge-grn, .badge-acc, .badge-red {
+  animation: stampIn .3s var(--ease-out) both;
+}
+
+/* ===== CARD STAGGER — children of list views ===== */
+.card-interactive:nth-child(1) { animation-delay: 0s; }
+.card-interactive:nth-child(2) { animation-delay: .03s; }
+.card-interactive:nth-child(3) { animation-delay: .06s; }
+.card-interactive:nth-child(4) { animation-delay: .09s; }
+.card-interactive:nth-child(5) { animation-delay: .12s; }
+.card-interactive:nth-child(n+6) { animation-delay: .15s; }
+
+/* ===== GOLD MONO — for prices and IDs ===== */
+.gold-mono {
+  font-family: var(--font-mono);
+  color: var(--acc);
+  font-weight: 700;
+  letter-spacing: .5px;
+}
+
+/* ===== DECO SEPARATOR — between sections ===== */
+.deco-sep {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
+  color: var(--dim);
+  font-family: var(--font-display);
+  font-size: 9px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+.deco-sep::before, .deco-sep::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--brd2));
+}
+.deco-sep::after {
+  background: linear-gradient(90deg, var(--brd2), transparent);
 }
