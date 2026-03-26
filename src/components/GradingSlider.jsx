@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { IconShield, IconCheck, IconZap, Spinner } from "./Icons";
+import { IconShield, IconCheck, IconZap, IconRefresh, Spinner } from "./Icons";
 import { assignVaultStatus, calculateGrade, gradeToTerm, generateConditionReport } from "../lib/grading";
 
 const SUBS = ["centering", "corners", "edges", "surface"];
@@ -11,6 +11,7 @@ export default function GradingSlider({ onSave, onCancel, initialGrades }) {
   });
   const [projection, setProjection] = useState(10);
   const [vault, setVault] = useState(assignVaultStatus(10));
+  const [cappingAttributes, setCappingAttributes] = useState([]);
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef(null);
 
@@ -22,15 +23,26 @@ export default function GradingSlider({ onSave, onCancel, initialGrades }) {
     const rounded = Math.floor(result * 2) / 2;
     setProjection(rounded);
     setVault(assignVaultStatus(rounded));
+
+    // Identify bottleneck attributes
+    const caps = Object.keys(grades).filter((k) => grades[k] === floor && floor < avg);
+    setCappingAttributes(caps);
   }, [grades]);
 
   useEffect(() => { calculate(); }, [calculate]);
 
   const handleSlider = (key, val) => {
+    if (navigator.vibrate) navigator.vibrate(5);
     setGrades((p) => ({ ...p, [key]: parseFloat(val) }));
   };
 
-  // Voice-to-text
+  // Quick presets
+  const applyPreset = (val) => {
+    if (navigator.vibrate) navigator.vibrate(15);
+    setGrades({ centering: val, corners: val, edges: val, surface: val });
+  };
+
+  // Voice-to-text with advanced parsing
   const toggleListening = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return;
@@ -51,18 +63,36 @@ export default function GradingSlider({ onSave, onCancel, initialGrades }) {
     recognition.onend = () => setIsListening(false);
     recognition.onresult = (event) => {
       const text = event.results[0][0].transcript.toLowerCase();
-      const newGrades = { ...grades };
-      let found = false;
-      SUBS.forEach((key) => {
-        const match = text.match(new RegExp(`${key}\\s*(\\d+(\\.\\d+)?)`));
-        if (match) {
-          newGrades[key] = Math.min(10, Math.max(1, parseFloat(match[1])));
-          found = true;
-        }
-      });
-      if (found) setGrades(newGrades);
+      parseVoiceCommand(text);
     };
     recognition.start();
+  };
+
+  const parseVoiceCommand = (text) => {
+    const newGrades = { ...grades };
+    let found = false;
+
+    SUBS.forEach((key) => {
+      // Advanced: handles "centering 9", "corners nine five" (9.5), "edges 8 point 5"
+      const match = text.match(new RegExp(`${key}\\s*(\\d+)?\\s*(point|dot|\\s)?\\s*(\\d+)?`));
+      if (match) {
+        let val = 10;
+        const whole = match[1];
+        const decimal = match[3];
+        if (whole) {
+          val = parseFloat(whole);
+          if (decimal) val += parseFloat(`0.${decimal}`);
+          else if (text.includes(`${key} ${whole} 5`)) val += 0.5;
+        }
+        newGrades[key] = Math.min(10, Math.max(1, val));
+        found = true;
+      }
+    });
+
+    if (found) {
+      if (navigator.vibrate) navigator.vibrate([20, 10, 20]);
+      setGrades(newGrades);
+    }
   };
 
   const handleSave = () => {
@@ -79,16 +109,20 @@ export default function GradingSlider({ onSave, onCancel, initialGrades }) {
 
   const hasSpeech = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
 
-  // Slider track gradient based on value
-  const sliderBg = (val) => {
+  const sliderBg = (val, isCapping) => {
     const pct = ((val - 1) / 9) * 100;
-    return `linear-gradient(90deg, var(--acc-solid) ${pct}%, var(--s3) ${pct}%)`;
+    const color = isCapping ? "var(--red)" : "var(--acc-solid)";
+    return `linear-gradient(90deg, ${color} ${pct}%, var(--s3) ${pct}%)`;
   };
 
   return (
     <div className="card-elevated slide-up">
-      <div className="flex justify-between items-center mb-12">
-        <h2 className="section-title" style={{ marginBottom: 0 }}>Card Assessment</h2>
+      {/* Header */}
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h2 style={{ fontSize: 20, fontWeight: 900, letterSpacing: "-.3px" }}>Grading Lab</h2>
+          <div className="lbl" style={{ margin: 0 }}>Sub-Grade Assessment</div>
+        </div>
         {hasSpeech && (
           <button
             className={`btn btn-sm ${isListening ? "btn-danger" : "btn-ghost"}`}
@@ -100,68 +134,108 @@ export default function GradingSlider({ onSave, onCancel, initialGrades }) {
         )}
       </div>
 
+      {/* Quick Presets */}
+      <div className="flex gap-6 mb-16">
+        <button className="btn btn-primary btn-sm flex-1" onClick={() => applyPreset(10)}>
+          <IconZap size={12} /> GEM 10
+        </button>
+        <button className="btn btn-outline btn-sm flex-1" onClick={() => applyPreset(9)}>
+          MINT 9
+        </button>
+        <button className="btn btn-ghost btn-sm" onClick={() => applyPreset(10)}>
+          <IconRefresh size={12} />
+        </button>
+      </div>
+
       {/* Sub-grade sliders */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
         {SUBS.map((key) => {
           const val = grades[key];
-          const scoreColor = val >= 9.5 ? "var(--grn)" : val >= 8.5 ? "var(--acc-solid)" : val >= 7 ? "var(--orange)" : "var(--red)";
+          const isCapping = cappingAttributes.includes(key);
+          const scoreColor = isCapping ? "var(--red)"
+            : val >= 9.5 ? "var(--grn)" : val >= 8.5 ? "var(--acc-solid)" : val >= 7 ? "var(--orange)" : "var(--red)";
+
           return (
-            <div key={key}>
+            <div key={key} style={{ position: "relative" }}>
               <div className="flex justify-between items-center mb-4">
-                <div>
-                  <span className="text-sm fw-600" style={{ textTransform: "capitalize" }}>{key}</span>
-                  <span className="text-xxs text-dim" style={{ marginLeft: 8 }}>{WEIGHTS_LABEL[key]}</span>
+                <div className="flex items-center gap-6">
+                  <span className="fw-700" style={{
+                    fontSize: 13, textTransform: "uppercase", letterSpacing: "-.3px",
+                    color: isCapping ? "var(--red)" : "var(--tx)",
+                  }}>
+                    {key}
+                  </span>
+                  {isCapping && <span style={{ fontSize: 12 }}>&#9888;&#65039;</span>}
+                  <span className="text-xxs text-dim">{WEIGHTS_LABEL[key]}</span>
                 </div>
-                <span className="fw-800" style={{ fontSize: 18, color: scoreColor }}>{val.toFixed(1)}</span>
+                <span className="fw-800" style={{ fontSize: 20, color: scoreColor }}>
+                  {val % 1 === 0 ? val : val.toFixed(1)}
+                </span>
               </div>
               <input
                 type="range" min="1" max="10" step="0.5" value={val}
                 onChange={(e) => handleSlider(key, e.target.value)}
                 style={{
-                  width: "100%", height: 6, borderRadius: 3, appearance: "none",
-                  background: sliderBg(val), cursor: "pointer", outline: "none",
+                  width: "100%", height: 8, borderRadius: 4, appearance: "none",
+                  background: sliderBg(val, isCapping), cursor: "pointer", outline: "none",
                 }}
               />
               <div className="flex justify-between text-xxs text-dim mt-4">
                 <span>1</span><span>5</span><span>10</span>
               </div>
+              {isCapping && (
+                <div style={{
+                  fontSize: 10, fontWeight: 700, color: "var(--red)", marginTop: 4,
+                  letterSpacing: ".5px", textTransform: "uppercase",
+                }}>
+                  Low score limiting final grade
+                </div>
+              )}
             </div>
           );
         })}
       </div>
 
-      {/* Result card with vault status */}
-      <div className="mt-16" style={{
-        padding: 18, borderRadius: "var(--radius-lg)", border: `2px solid ${vault.color}40`,
-        background: `${vault.color}10`, transition: "all .3s ease",
+      {/* Result panel */}
+      <div style={{
+        marginTop: 28, padding: 20, borderRadius: "var(--radius-lg)",
+        border: `2px solid ${vault.color}35`,
+        background: `${vault.color}08`,
+        boxShadow: `0 0 20px ${vault.color}10`,
+        transition: "all .4s ease",
       }}>
         <div className="flex justify-between items-center">
           <div>
-            <div className="lbl" style={{ margin: 0, letterSpacing: 2 }}>Projected Grade</div>
-            <div style={{ fontSize: 40, fontWeight: 900, color: vault.color, lineHeight: 1.1 }}>
-              {projection.toFixed(1)}
+            <div className="lbl" style={{ margin: 0, letterSpacing: 3, fontSize: 9 }}>Projected Grade</div>
+            <div style={{
+              fontSize: 48, fontWeight: 900, color: vault.color, lineHeight: 1.1,
+              fontStyle: "italic", letterSpacing: "-2px",
+            }}>
+              {projection % 1 === 0 ? projection : projection.toFixed(1)}
             </div>
-            <div className="text-xs text-dim mt-4">
-              {gradeToTerm(projection).term}
-            </div>
+            <div className="text-xs text-dim mt-4">{gradeToTerm(projection).term}</div>
           </div>
           <div style={{ textAlign: "right" }}>
-            <div className="lbl" style={{ margin: 0, letterSpacing: 2 }}>Vault Pile</div>
-            <div className="flex items-center gap-6 mt-4" style={{ justifyContent: "flex-end" }}>
-              {vault.status === "GREEN" && <IconCheck size={20} style={{ color: vault.color }} />}
-              {vault.status === "YELLOW" && <IconShield size={20} style={{ color: vault.color }} />}
-              {vault.status === "RED" && <IconZap size={20} style={{ color: vault.color }} />}
-              <span className="fw-800" style={{ fontSize: 18, color: vault.color }}>{vault.status}</span>
+            <div style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              padding: "5px 14px", borderRadius: 20, fontWeight: 800, fontSize: 12,
+              background: vault.status === "GREEN" ? "var(--grn)" : vault.status === "YELLOW" ? "var(--orange)" : "var(--red)",
+              color: "#0f1117",
+            }}>
+              {vault.status === "GREEN" && <IconCheck size={13} />}
+              {vault.status === "YELLOW" && <IconShield size={13} />}
+              {vault.status === "RED" && <IconZap size={13} />}
+              {vault.status} PILE
             </div>
-            <div className="text-xs" style={{ color: vault.color, marginTop: 4 }}>{vault.label}</div>
+            <div className="text-xxs fw-700 mt-6" style={{ color: vault.color }}>{vault.label}</div>
           </div>
         </div>
       </div>
 
-      {/* Action buttons */}
+      {/* Actions */}
       <div className="flex gap-8 mt-12">
-        <button className="btn btn-primary btn-lg flex-1" onClick={handleSave}>
-          Log to Vault
+        <button className="btn btn-primary btn-lg flex-1 fw-800" style={{ letterSpacing: ".5px" }} onClick={handleSave}>
+          CONFIRM & LOG
         </button>
         {onCancel && (
           <button className="btn btn-ghost btn-lg" onClick={onCancel}>Cancel</button>
@@ -169,11 +243,11 @@ export default function GradingSlider({ onSave, onCancel, initialGrades }) {
       </div>
 
       {isListening && (
-        <div className="text-center mt-8">
-          <div className="flex items-center justify-center gap-6">
-            <Spinner size={14} color="var(--red)" />
-            <span className="text-xs text-red">Listening... try: "Centering 10, Surface 9"</span>
-          </div>
+        <div className="flex items-center justify-center gap-6 mt-10">
+          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--red)", animation: "pulse 1s infinite" }} />
+          <span className="text-xs fw-700 text-red" style={{ letterSpacing: 1, textTransform: "uppercase" }}>
+            Listening for sub-grades...
+          </span>
         </div>
       )}
     </div>
