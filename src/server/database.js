@@ -249,6 +249,40 @@ function runMigrations() {
   addCol("projected_grade", "REAL");
   addCol("vault_status", "TEXT");
   addCol("condition_report", "TEXT");
+
+  // CV pipeline columns
+  addCol("cv_centering_lr", "TEXT");
+  addCol("cv_centering_tb", "TEXT");
+  addCol("cv_centering_score", "REAL");
+  addCol("cv_processed", "INTEGER DEFAULT 0");
+
+  // eBay 2026 condition descriptors
+  addCol("ebay_centering", "TEXT");
+  addCol("ebay_corner_sharpness", "TEXT");
+  addCol("ebay_edge_chipping", "TEXT");
+
+  // CV scans audit log
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS cv_scans (
+      id TEXT PRIMARY KEY,
+      item_id TEXT REFERENCES user_items(id),
+      centering_lr TEXT,
+      centering_tb TEXT,
+      centering_score REAL,
+      detection_confidence REAL,
+      warp_quality REAL,
+      processing_ms INTEGER,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS ebay_exports (
+      id TEXT PRIMARY KEY,
+      filename TEXT NOT NULL,
+      currency TEXT NOT NULL,
+      item_count INTEGER,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
 }
 
 function createIndexes() {

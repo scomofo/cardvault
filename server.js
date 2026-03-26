@@ -126,6 +126,31 @@ app.post("/api/ai", aiLimiter, authCheck, validateBody, async (req, res) => {
   }
 });
 
+// --- CV Service proxy (for production builds without Vite proxy) ---
+app.post("/api/cv/analyze", express.json({ limit: "5mb" }), async (req, res) => {
+  try {
+    const response = await fetch("http://localhost:8000/analyze-json", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req.body),
+    });
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e) {
+    res.status(502).json({ error: "CV service unavailable", details: e.message });
+  }
+});
+
+app.get("/api/cv/health", async (_req, res) => {
+  try {
+    const response = await fetch("http://localhost:8000/health");
+    const data = await response.json();
+    res.json(data);
+  } catch {
+    res.status(503).json({ status: "offline" });
+  }
+});
+
 // Register database REST API routes
 registerRoutes(app);
 

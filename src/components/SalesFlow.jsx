@@ -5,6 +5,7 @@ import { PLATFORMS } from "../lib/constants";
 import { uid, fmtShort } from "../lib/utils";
 import { requestNotificationPermission, canNotify, sendNotification, scheduleAuctionNotification, cancelNotificationTimer } from "../lib/notifications";
 import { IconPlus, IconBell, IconCheck, IconX, Spinner } from "./Icons";
+import EbayExport from "./EbayExport";
 
 const TABS = ["active", "completed", "purchases"];
 
@@ -20,6 +21,8 @@ export default function SalesFlow() {
   const [showCreate, setShowCreate] = useState(false);
   const [showBuy, setShowBuy] = useState(false);
   const [notifEnabled, setNotifEnabled] = useState(canNotify());
+
+  const [showEbayExport, setShowEbayExport] = useState(false);
 
   const [newListing, setNewListing] = useState({
     cardId: "", platform: "ebay", format: "fixed", startPrice: "", buyNowPrice: "",
@@ -171,6 +174,12 @@ export default function SalesFlow() {
         <button className="btn btn-primary flex-1" onClick={() => setShowCreate(!showCreate)}><IconPlus size={14} /> New Listing</button>
         <button className="btn btn-outline flex-1" onClick={() => setShowBuy(!showBuy)}><IconPlus size={14} /> Log Purchase</button>
       </div>
+      <div className="mb-12">
+        <button className="btn btn-ghost btn-full" onClick={() => setShowEbayExport(!showEbayExport)}>
+          {showEbayExport ? "Hide" : "Export to eBay CSV"}
+        </button>
+      </div>
+      {showEbayExport && <EbayExport />}
 
       {showCreate && (
         <div className="card-elevated fade mb-12">

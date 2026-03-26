@@ -5,10 +5,15 @@ import { assignVaultStatus, calculateGrade, gradeToTerm, generateConditionReport
 const SUBS = ["centering", "corners", "edges", "surface"];
 const WEIGHTS_LABEL = { centering: "20%", corners: "30%", edges: "20%", surface: "30%" };
 
-export default function GradingSlider({ onSave, onCancel, initialGrades }) {
-  const [grades, setGrades] = useState(initialGrades || {
-    centering: 10, corners: 10, edges: 10, surface: 10,
+export default function GradingSlider({ onSave, onCancel, initialGrades, cvCentering }) {
+  const [grades, setGrades] = useState(() => {
+    const base = initialGrades || { centering: 10, corners: 10, edges: 10, surface: 10 };
+    if (cvCentering?.score && !initialGrades) {
+      base.centering = cvCentering.score;
+    }
+    return base;
   });
+  const [cvApplied, setCvApplied] = useState(!!cvCentering?.score && !initialGrades);
   const [projection, setProjection] = useState(10);
   const [vault, setVault] = useState(assignVaultStatus(10));
   const [cappingAttributes, setCappingAttributes] = useState([]);
@@ -176,6 +181,9 @@ export default function GradingSlider({ onSave, onCancel, initialGrades }) {
                   </span>
                   {isCapping && <span style={{ fontSize: 12 }}>&#9888;&#65039;</span>}
                   <span className="text-xxs text-dim">{WEIGHTS_LABEL[key]}</span>
+                  {key === "centering" && cvApplied && (
+                    <span style={{ fontSize: 9, fontWeight: 800, color: "#5a9e6f", background: "#5a9e6f20", padding: "1px 5px", borderRadius: 2, letterSpacing: ".5px" }}>CV</span>
+                  )}
                 </div>
                 <span className="fw-800" style={{ fontSize: 20, color: scoreColor }}>
                   {val % 1 === 0 ? val : val.toFixed(1)}

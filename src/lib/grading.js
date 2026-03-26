@@ -56,6 +56,39 @@ export function fullGradingAssessment(scores) {
   return { ...grade, term: term.term, termColor: term.color, action: term.action, vault, report };
 }
 
+// Convert CV centering ratios (e.g. "48/52") to a 1-10 score
+export function centeringFromRatios(lr, tb) {
+  try {
+    const leftPct = parseInt(lr.split("/")[0]);
+    const topPct = parseInt(tb.split("/")[0]);
+    const hDev = Math.abs(leftPct - 50);
+    const vDev = Math.abs(topPct - 50);
+    const worst = Math.max(hDev, vDev);
+    if (worst <= 2) return 10.0;
+    if (worst <= 5) return 9.5;
+    if (worst <= 8) return 9.0;
+    if (worst <= 10) return 8.5;
+    if (worst <= 13) return 8.0;
+    if (worst <= 15) return 7.0;
+    if (worst <= 20) return 5.0;
+    return Math.max(1.0, 5.0 - (worst - 20) * 0.2);
+  } catch {
+    return 10.0;
+  }
+}
+
+// Map sub-grades to eBay 2026 mandatory condition descriptors
+export function toEbayDescriptors(scores) {
+  const c = Number(scores.centering) || 10;
+  const co = Number(scores.corners) || 10;
+  const e = Number(scores.edges) || 10;
+  return {
+    centering: c >= 9.5 ? "Gem Mint Centering" : c >= 9 ? "Well Centered" : c >= 7 ? "Slightly Off Center" : "Off Center",
+    cornerSharpness: co >= 9.5 ? "Sharp" : co >= 8.5 ? "Slightly Rounded" : "Rounded",
+    edgeChipping: e >= 9.5 ? "None" : e >= 8.5 ? "Minor" : "Moderate",
+  };
+}
+
 // Generate eBay-ready condition description from sub-grades
 export function generateConditionReport(scores) {
   const { centering, corners, edges, surface } = scores;

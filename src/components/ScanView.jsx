@@ -9,6 +9,8 @@ import { aiRecognize, aiPrice } from "../lib/ai";
 import { saveImage } from "../lib/storage";
 import { IconSearch, IconZap, IconChevron, IconCopy, IconExternalLink, IconShield, Spinner } from "./Icons";
 import GradingSlider from "./GradingSlider";
+import CenteringOverlay from "./CenteringOverlay";
+import { analyzeCentering, checkCvHealth } from "../lib/cvApi";
 
 export default function ScanView({ onNavigate }) {
   const toast = useToast();
@@ -28,6 +30,29 @@ export default function ScanView({ onNavigate }) {
   const [showGrading, setShowGrading] = useState(false);
   const [gradingData, setGradingData] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [cvOnline, setCvOnline] = useState(false);
+  const [cvAnalyzing, setCvAnalyzing] = useState(false);
+  const [cvResult, setCvResult] = useState(null);
+  const [showCvOverlay, setShowCvOverlay] = useState(true);
+
+  // Check CV service on mount
+  useEffect(() => {
+    checkCvHealth().then(setCvOnline);
+  }, []);
+
+  const doCvAnalyze = async () => {
+    if (!frontImg) return;
+    setCvAnalyzing(true); setStatus("CV analyzing\u2026");
+    const result = await analyzeCentering(frontImg);
+    if (result?.card_detected) {
+      setCvResult(result);
+      setStatus(`CV: ${result.centering.lr} L/R, ${result.centering.tb} T/B (${result.processing_ms}ms)`);
+    } else {
+      setStatus(result?.error || "CV: Card not detected");
+      toast.error("Card edges not found \u2014 try a darker background");
+    }
+    setCvAnalyzing(false);
+  };
 
   const doSearch = async () => {
     if (!searchQ.trim()) return;
@@ -63,7 +88,7 @@ export default function ScanView({ onNavigate }) {
       let frontImgId = null, backImgId = null;
       if (frontImg) { frontImgId = `img_${id}_front`; await saveImage(frontImgId, frontImg); }
       if (backImg) { backImgId = `img_${id}_back`; await saveImage(backImgId, backImg); }
-      const entry = { id, ...card, frontImgId, backImgId, priceEstimate: priceEst, priceHistory, listing: { ...listing }, binder: card.binder || "", status: card.status || "inventory", listedOn: card.listedOn || [], ...(gradingData ? { centering: gradingData.centering, corners: gradingData.corners, edges: gradingData.edges, surface: gradingData.surface, projected_grade: gradingData.projected_grade, vault_status: gradingData.vault_status, condition_report: gradingData.condition_report } : {}), createdAt: new Date().toISOString() };
+      const entry = { id, ...card, frontImgId, backImgId, priceEstimate: priceEst, priceHistory, listing: { ...listing }, binder: card.binder || "", status: card.status || "inventory", listedOn: card.listedOn || [], ...(gradingData ? { centering: gradingData.centering, corners: gradingData.corners, edges: gradingData.edges, surface: gradingData.surface, projected_grade: gradingData.projected_grade, vault_status: gradingData.vault_status, condition_report: gradingData.condition_report } : {}), ...(cvResult?.centering ? { cv_centering_lr: cvResult.centering.lr, cv_centering_tb: cvResult.centering.tb, cv_centering_score: cvResult.centering.score, cv_processed: 1 } : {}), createdAt: new Date().toISOString() };
       setCatalog((p) => [entry, ...p]);
       toast.success(`Saved: ${card.name || "Card"}`);
       return entry;
@@ -72,7 +97,7 @@ export default function ScanView({ onNavigate }) {
     }
   };
 
-  const reset = () => { setStep(0); setFrontImg(null); setBackImg(null); setCard({ ...EMPTY_CARD }); setSearchQ(""); setResults([]); setPriceEst({ low: "", mid: "", high: "" }); setPriceHistory([]); setListing({ ...EMPTY_LISTING }); setStatus(""); setShowGrading(false); setGradingData(null); };
+  const reset = () => { setStep(0); setFrontImg(null); setBackImg(null); setCard({ ...EMPTY_CARD }); setSearchQ(""); setResults([]); setPriceEst({ low: "", mid: "", high: "" }); setPriceHistory([]); setListing({ ...EMPTY_LISTING }); setStatus(""); setShowGrading(false); setGradingData(null); setCvResult(null); setCvAnalyzing(false); };
 
   const copyListing = async () => {
     try { await navigator.clipboard.writeText(`${listing.title}\n${fmtShort(listing.price)} CAD + ${fmtShort(listing.shipping)} shipping\n\n${listing.description}`); toast.success("Copied"); }
@@ -126,6 +151,21 @@ export default function ScanView({ onNavigate }) {
               Skip <IconChevron size={14} />
             </button>
           </div>
+          {cvOnline && frontImg && (
+            <button
+              className="btn btn-outline btn-full mt-8"
+              disabled={cvAnalyzing}
+              onClick={doCvAnalyze}
+            >
+              {cvAnalyzing ? <Spinner size={14} /> : <IconShield size={14} />}
+              {" "}CV Centering Scan
+            </button>
+          )}
+          {!cvOnline && (
+            <div className="text-xxs text-dim mt-6" style={{ textAlign: "center" }}>
+              CV service offline — start with: <code style={{ fontSize: 10 }}>cd cv-service && uvicorn main:app --port 8000</code>
+            </div>
+          )}
         </section>
       )}
 
@@ -143,8 +183,22 @@ export default function ScanView({ onNavigate }) {
 
             {frontImg && (
               <div className="flex gap-8 justify-center mb-10">
-                <img src={frontImg} alt="Front" className="img-preview" style={{ height: 70 }} />
-                {backImg && <img src={backImg} alt="Back" className="img-preview" style={{ height: 70 }} />}
+                <div style={{ position: "relative", display: "inline-block" }}>
+                  <img src={cvResult?.warped_image || frontImg} alt="Front" className="img-preview" style={{ height: 100 }} />
+                  {cvResult && showCvOverlay && <CenteringOverlay centering={cvResult.centering} />}
+                </div>
+                {backImg && <img src={backImg} alt="Back" className="img-preview" style={{ height: 100 }} />}
+              </div>
+            )}
+            {cvResult && (
+              <div className="flex gap-6 items-center justify-center mb-8">
+                <span className={`badge ${cvResult.centering.is_gem ? "badge-grn" : "badge-acc"}`}>
+                  L/R: {cvResult.centering.lr} | T/B: {cvResult.centering.tb}
+                </span>
+                <span className="text-xxs text-dim">{cvResult.processing_ms}ms</span>
+                <button className="btn btn-ghost btn-sm" onClick={() => setShowCvOverlay(!showCvOverlay)}>
+                  {showCvOverlay ? "Hide" : "Show"} Overlay
+                </button>
               </div>
             )}
 
@@ -261,6 +315,7 @@ export default function ScanView({ onNavigate }) {
             <div className="mb-12">
               <GradingSlider
                 initialGrades={gradingData || undefined}
+                cvCentering={cvResult?.centering}
                 onSave={(data) => { setGradingData(data); setShowGrading(false); }}
                 onCancel={() => setShowGrading(false)}
               />

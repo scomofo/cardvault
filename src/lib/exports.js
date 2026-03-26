@@ -1,5 +1,5 @@
 import { condOf, escapeHtml, fmtShort } from "./utils";
-import { calculateGrade, gradeToTerm, generateConditionReport } from "./grading";
+import { calculateGrade, gradeToTerm, generateConditionReport, toEbayDescriptors } from "./grading";
 
 export function genInsurancePDF(cards, owner = "") {
   const active = cards.filter((c) => c.name && c.status !== "sold");
@@ -45,8 +45,10 @@ export function genCSV(catalog) {
 }
 
 // eBay File Exchange bulk upload format (from Card Docs)
-export function genEbayCSV(catalog, shipFrom = "") {
-  const header = 'Action(SiteID=US|Country=CA|Currency=CAD),Category,Title,Description,ConditionID,Format,StartPrice,Quantity,Duration,Location,ShippingService-1:Option,ShippingService-1:Cost,DispatchTimeMax,ReturnsAcceptedOption,C:Player,C:Season,C:Set,C:Parallel/Variety,C:Graded';
+export function genEbayCSV(catalog, shipFrom = "", currency = "CAD") {
+  const site = currency === "CAD" ? "Country=CA|Currency=CAD" : "Country=US|Currency=USD";
+  const category = currency === "CAD" ? "213" : "212";
+  const header = `Action(SiteID=US|${site}),Category,Title,Description,ConditionID,Format,StartPrice,Quantity,Duration,Location,ShippingService-1:Option,ShippingService-1:Cost,DispatchTimeMax,ReturnsAcceptedOption,C:Player,C:Season,C:Set,C:Parallel/Variety,C:Graded,C:Centering,C:Corner_Sharpness,C:Edge_Chipping`;
 
   const rows = catalog
     .filter((c) => c.name && c.status !== "sold")
@@ -69,9 +71,19 @@ export function genEbayCSV(catalog, shipFrom = "") {
       const isGraded = c.gradeCompany ? "Yes" : "No";
       const parallel = c.parallel || c.rarity || "";
 
+      // eBay 2026 condition descriptors
+      const descriptors = toEbayDescriptors({
+        centering: c.centering || c.cv_centering_score || 9,
+        corners: c.corners || 9,
+        edges: c.edges || 9,
+      });
+
+      const shipService = currency === "CAD" ? "CA_StandardInternationalFlat" : "USPSFirstClass";
+      const shipCost = currency === "CAD" ? "4.99" : "3.99";
+
       return [
         "Add",          // Action
-        "212",          // Category (Trading Cards - Sport)
+        category,       // Category
         `"${title.replace(/"/g, '""')}"`,
         `"${description.replace(/"/g, '""')}"`,
         "3000",         // ConditionID (Used - standard for cards)
@@ -80,8 +92,8 @@ export function genEbayCSV(catalog, shipFrom = "") {
         "1",            // Quantity
         "GTC",          // Duration (Good Til Cancelled)
         `"${(shipFrom || "Alberta, Canada").replace(/"/g, '""')}"`,
-        "CA_StandardInternationalFlat", // ShippingService
-        "4.99",         // ShippingCost
+        shipService,    // ShippingService
+        shipCost,       // ShippingCost
         "3",            // DispatchTimeMax (business days)
         "ReturnsAccepted",
         `"${player.replace(/"/g, '""')}"`,   // C:Player
@@ -89,6 +101,9 @@ export function genEbayCSV(catalog, shipFrom = "") {
         `"${(c.set || "").replace(/"/g, '""')}"`,  // C:Set
         `"${parallel.replace(/"/g, '""')}"`,   // C:Parallel/Variety
         isGraded,                               // C:Graded
+        descriptors.centering,                  // C:Centering (2026)
+        descriptors.cornerSharpness,            // C:Corner_Sharpness (2026)
+        descriptors.edgeChipping,               // C:Edge_Chipping (2026)
       ].join(",");
     });
 
