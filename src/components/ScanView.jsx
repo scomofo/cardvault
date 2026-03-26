@@ -8,6 +8,7 @@ import { condOf, fmtShort, uid } from "../lib/utils";
 import { aiRecognize, aiPrice } from "../lib/ai";
 import { saveImage } from "../lib/storage";
 import { IconSearch, IconZap, IconChevron, IconCopy, IconExternalLink, Spinner } from "./Icons";
+import GradingSlider from "./GradingSlider";
 
 export default function ScanView({ onNavigate }) {
   const toast = useToast();
@@ -24,6 +25,8 @@ export default function ScanView({ onNavigate }) {
   const [priceEst, setPriceEst] = useState({ low: "", mid: "", high: "" });
   const [priceHistory, setPriceHistory] = useState([]);
   const [listing, setListing] = useState({ ...EMPTY_LISTING });
+  const [showGrading, setShowGrading] = useState(false);
+  const [gradingData, setGradingData] = useState(null);
 
   const doSearch = async () => {
     if (!searchQ.trim()) return;
@@ -56,13 +59,13 @@ export default function ScanView({ onNavigate }) {
     let frontImgId = null, backImgId = null;
     if (frontImg) { frontImgId = `img_${id}_front`; await saveImage(frontImgId, frontImg); }
     if (backImg) { backImgId = `img_${id}_back`; await saveImage(backImgId, backImg); }
-    const entry = { id, ...card, frontImgId, backImgId, priceEstimate: priceEst, priceHistory, listing: { ...listing }, binder: card.binder || "", status: card.status || "inventory", listedOn: card.listedOn || [], createdAt: new Date().toISOString() };
+    const entry = { id, ...card, frontImgId, backImgId, priceEstimate: priceEst, priceHistory, listing: { ...listing }, binder: card.binder || "", status: card.status || "inventory", listedOn: card.listedOn || [], ...(gradingData ? { centering: gradingData.centering, corners: gradingData.corners, edges: gradingData.edges, surface: gradingData.surface, projected_grade: gradingData.projected_grade, vault_status: gradingData.vault_status, condition_report: gradingData.condition_report } : {}), createdAt: new Date().toISOString() };
     setCatalog((p) => [entry, ...p]);
     toast.success(`Saved: ${card.name || "Card"}`);
     return entry;
   };
 
-  const reset = () => { setStep(0); setFrontImg(null); setBackImg(null); setCard({ ...EMPTY_CARD }); setSearchQ(""); setResults([]); setPriceEst({ low: "", mid: "", high: "" }); setPriceHistory([]); setListing({ ...EMPTY_LISTING }); setStatus(""); };
+  const reset = () => { setStep(0); setFrontImg(null); setBackImg(null); setCard({ ...EMPTY_CARD }); setSearchQ(""); setResults([]); setPriceEst({ low: "", mid: "", high: "" }); setPriceHistory([]); setListing({ ...EMPTY_LISTING }); setStatus(""); setShowGrading(false); setGradingData(null); };
 
   const copyListing = async () => {
     try { await navigator.clipboard.writeText(`${listing.title}\n${fmtShort(listing.price)} CAD + ${fmtShort(listing.shipping)} shipping\n\n${listing.description}`); toast.success("Copied"); }
@@ -241,6 +244,36 @@ export default function ScanView({ onNavigate }) {
               <label className="fld"><span className="lbl">Binder</span><input className="inp" value={card.binder} onChange={(e) => setCard((p) => ({ ...p, binder: e.target.value }))} /></label>
             </div>
           </div>
+
+          {/* Quick Grade toggle */}
+          {!showGrading ? (
+            <button className="btn btn-outline btn-full mb-12" onClick={() => setShowGrading(true)}>
+              <IconShield size={14} /> Quick Grade Assessment
+            </button>
+          ) : (
+            <div className="mb-12">
+              <GradingSlider
+                initialGrades={gradingData || undefined}
+                onSave={(data) => { setGradingData(data); setShowGrading(false); }}
+                onCancel={() => setShowGrading(false)}
+              />
+            </div>
+          )}
+
+          {gradingData && !showGrading && (
+            <div className="card mb-12" style={{ borderColor: `${gradingData.vault_status === "GREEN" ? "var(--grn-brd)" : gradingData.vault_status === "YELLOW" ? "var(--acc-brd)" : "var(--red-brd)"}` }}>
+              <div className="flex justify-between items-center">
+                <div>
+                  <span className="lbl" style={{ margin: 0 }}>Grade</span>
+                  <span className="gold fw-800" style={{ fontSize: 22, marginLeft: 8 }}>{gradingData.projected_grade}</span>
+                </div>
+                <span className={`badge ${gradingData.vault_status === "GREEN" ? "badge-grn" : gradingData.vault_status === "YELLOW" ? "badge-acc" : "badge-red"}`}>
+                  {gradingData.vault_status}
+                </span>
+                <button className="btn btn-ghost btn-sm" onClick={() => setShowGrading(true)}>Edit</button>
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-8">
             <button className="btn btn-primary btn-lg flex-1" onClick={async () => { await saveCard(); reset(); }}>Save Card</button>

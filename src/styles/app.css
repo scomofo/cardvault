@@ -701,6 +701,40 @@ a { color: var(--acc); text-decoration: none; }
 ::-webkit-scrollbar-thumb { background: rgba(56,189,248,.15); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(56,189,248,.25); }
 
+/* ===== RANGE SLIDER ===== */
+input[type="range"] { -webkit-appearance: none; appearance: none; }
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--gradient-acc);
+  border: 2px solid var(--bg);
+  box-shadow: 0 0 8px rgba(56,189,248,.3), var(--shadow-sm);
+  cursor: pointer;
+  margin-top: -7px;
+  transition: box-shadow var(--transition), transform var(--transition);
+}
+input[type="range"]::-webkit-slider-thumb:hover {
+  box-shadow: 0 0 14px rgba(56,189,248,.4), var(--shadow);
+  transform: scale(1.15);
+}
+input[type="range"]::-webkit-slider-thumb:active {
+  transform: scale(1.05);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--gradient-acc);
+  border: 2px solid var(--bg);
+  box-shadow: 0 0 8px rgba(56,189,248,.3);
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px; border-radius: 3px;
+}
+input[type="range"]:focus { outline: none; }
+input[type="range"]:focus::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px var(--acc-bg), 0 0 14px rgba(56,189,248,.4);
+}
+
 /* ===== RESPONSIVE ===== */
 @media (max-width: 480px) {
   .app-shell { padding: 0 12px 88px; }
