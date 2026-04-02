@@ -1,8 +1,9 @@
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useToast } from "./Toast";
 import { useData } from "../lib/DataContext";
 import { PLATFORMS } from "../lib/constants";
 import { uid, fmtShort } from "../lib/utils";
+import { actionQueueAPI, marketplacesAPI } from "../lib/api";
 import { requestNotificationPermission, canNotify, sendNotification, scheduleAuctionNotification, cancelNotificationTimer } from "../lib/notifications";
 import { IconPlus, IconBell, IconCheck, IconX, Spinner } from "./Icons";
 import EbayExport from "./EbayExport";
@@ -23,6 +24,8 @@ export default function SalesFlow() {
   const [showCreate, setShowCreate] = useState(false);
   const [showBuy, setShowBuy] = useState(false);
   const [notifEnabled, setNotifEnabled] = useState(canNotify());
+  const [actionQueue, setActionQueue] = useState([]);
+  const [busyListingId, setBusyListingId] = useState(null);
 
   const [showEbayExport, setShowEbayExport] = useState(false);
 
@@ -167,6 +170,58 @@ export default function SalesFlow() {
   const totalActive = useMemo(() => activeListings.reduce((s, l) => s + (l.startPrice || 0), 0), [activeListings]);
   const totalPurchases = useMemo(() => purchases.reduce((s, p) => s + p.totalCost, 0), [purchases]);
 
+  useEffect(() => {
+    actionQueueAPI.list().then(setActionQueue).catch(() => setActionQueue([]));
+  }, [catalog.length, listings.length, sales.length]);
+
+  const publishListing = async (listingId, marketplace = "ebay") => {
+    try {
+      setBusyListingId(listingId);
+      const channel = await marketplacesAPI.publish({ listingId, marketplace });
+      setListings((prev) =>
+        prev.map((listing) =>
+          listing.id === listingId
+            ? {
+                ...listing,
+                publishStatus: channel.status,
+                externalListingId: channel.external_listing_id,
+                lastSyncAt: channel.last_sync_at,
+              }
+            : listing,
+        ),
+      );
+      toast.success(`Published to ${marketplace}`);
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setBusyListingId(null);
+    }
+  };
+
+  const syncListing = async (listingId, marketplace = "ebay") => {
+    try {
+      setBusyListingId(listingId);
+      await marketplacesAPI.sync({ marketplace, listingId });
+      toast.success(`Synced ${marketplace} status`);
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setBusyListingId(null);
+    }
+  };
+
+  const crosspost = async (listingId) => {
+    try {
+      setBusyListingId(listingId);
+      await marketplacesAPI.crosspost({ listingId, marketplaces: ["ebay", "comc", "shopify"] });
+      toast.success("Cross-post plan created");
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setBusyListingId(null);
+    }
+  };
+
   return (
     <div className="fade">
       <div className="flex items-center justify-between mb-12">
@@ -202,6 +257,21 @@ export default function SalesFlow() {
           )}
         </div>
       </div>
+
+      {actionQueue.length > 0 && (
+        <div className="card mb-12">
+          <div className="lbl">Action Queue</div>
+          {actionQueue.slice(0, 4).map((entry) => (
+            <div key={`${entry.subjectType}-${entry.subjectId}`} className="flex justify-between items-center mt-8">
+              <div>
+                <div className="text-xs fw-700">{entry.queue.replace(/_/g, " ")}</div>
+                <div className="text-xxs text-dim">{entry.label}</div>
+              </div>
+              <span className="badge badge-acc">{entry.priorityScore}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="flex gap-8 mb-12">
         <button className="btn btn-primary flex-1" onClick={() => setShowCreate(!showCreate)}><IconPlus size={14} /> New Listing</button>
@@ -312,12 +382,24 @@ export default function SalesFlow() {
                       {tl === "Ended" ? "Auction ended" : `Ends in ${tl}`}
                     </span>
                   )}
+                  {l.publishStatus && (
+                    <span className="badge badge-dim">{l.publishStatus}</span>
+                  )}
                   {l.priceChanges?.length > 0 && (
                     <span className="text-xxs text-dim">{l.priceChanges.length} reprice{l.priceChanges.length > 1 ? "s" : ""}</span>
                   )}
                   <div className="flex-1" />
                   {!isSelling && !isRepricing && (
                     <>
+                      <button className="btn btn-ghost btn-sm" disabled={busyListingId === l.id} onClick={() => publishListing(l.id, l.platform || "ebay")}>
+                        {busyListingId === l.id ? <Spinner size={12} /> : "Publish"}
+                      </button>
+                      <button className="btn btn-ghost btn-sm" disabled={busyListingId === l.id} onClick={() => syncListing(l.id, l.platform || "ebay")}>
+                        Sync
+                      </button>
+                      <button className="btn btn-ghost btn-sm" disabled={busyListingId === l.id} onClick={() => crosspost(l.id)}>
+                        Crosspost
+                      </button>
                       <button className="btn btn-primary btn-sm" onClick={() => { setSellingId(l.id); setSellPrice(String(l.currentBid || l.startPrice)); setRepricingId(null); }}>
                         <IconCheck size={12} /> Sold
                       </button>

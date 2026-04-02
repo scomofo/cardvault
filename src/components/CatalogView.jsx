@@ -4,11 +4,12 @@ import { useData } from "../lib/DataContext";
 import { PLATFORMS } from "../lib/constants";
 import { condOf, fmtShort, uid, download } from "../lib/utils";
 import { loadImage, deleteImage } from "../lib/storage";
+import { decisionsAPI } from "../lib/api";
 import { genCSV, genEbayCSV, genInsurancePDF } from "../lib/exports";
 import { calculateGrade, gradeToTerm, generateConditionReport } from "../lib/grading";
 import PriceChart from "./PriceChart";
 import { aiGradePredict } from "../lib/ai";
-import { IconBack, IconTrash, IconCheck, IconSearch, IconDownload, IconCopy, IconChevron, IconShield, IconPlus, Spinner, Skeleton } from "./Icons";
+import { IconBack, IconTrash, IconCheck, IconSearch, IconDownload, IconCopy, IconChevron, IconShield, IconPlus, IconZap, Spinner, Skeleton } from "./Icons";
 import { PLATFORM_FEES } from "./SalesFlow";
 
 export default function CatalogView() {
@@ -31,6 +32,8 @@ export default function CatalogView() {
   const [quickListPlatform, setQuickListPlatform] = useState("ebay");
   const [quickListPrice, setQuickListPrice] = useState("");
   const [quickListFormat, setQuickListFormat] = useState("fixed");
+  const [decisions, setDecisions] = useState([]);
+  const [decisionLoading, setDecisionLoading] = useState(false);
   const [thumbs, setThumbs] = useState({});
   const thumbAttempted = useRef(new Set());
 
@@ -78,6 +81,31 @@ export default function CatalogView() {
     if (detail.frontImgId) loadImage(detail.frontImgId).then((img) => { if (!cancelled) setDetailFrontImg(img); });
     if (detail.backImgId) loadImage(detail.backImgId).then((img) => { if (!cancelled) setDetailBackImg(img); });
     return () => { cancelled = true; };
+  }, [detail?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!detail?.id) {
+      setDecisions([]);
+      return undefined;
+    }
+
+    setDecisionLoading(true);
+    decisionsAPI
+      .evaluate({ subjectType: "inventory_item", subjectId: detail.id, persist: false })
+      .then((result) => {
+        if (!cancelled) setDecisions(Array.isArray(result) ? result : []);
+      })
+      .catch(() => {
+        if (!cancelled) setDecisions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setDecisionLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [detail?.id]);
 
   const toggleListed = (id, platform) => {
@@ -185,6 +213,48 @@ export default function CatalogView() {
         </div>
 
         {detail.priceHistory?.length > 1 && <div className="card mb-10"><PriceChart data={detail.priceHistory} /></div>}
+
+        <div className="card mb-10">
+          <div className="flex justify-between items-center">
+            <div className="lbl" style={{ margin: 0 }}>Decision Engine</div>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => {
+                setDecisionLoading(true);
+                decisionsAPI.evaluate({ subjectType: "inventory_item", subjectId: detail.id, persist: false })
+                  .then((result) => setDecisions(Array.isArray(result) ? result : []))
+                  .catch(() => toast.error("Decision refresh failed"))
+                  .finally(() => setDecisionLoading(false));
+              }}
+            >
+              <IconZap size={12} /> Refresh
+            </button>
+          </div>
+          {decisionLoading ? (
+            <div className="mt-8"><Skeleton h={52} /></div>
+          ) : decisions.length === 0 ? (
+            <div className="text-xs text-dim mt-8">No recommendations yet.</div>
+          ) : (
+            <div className="mt-8">
+              {decisions.slice(0, 4).map((decision) => (
+                <div key={`${decision.decisionType}-${decision.recommendation}`} className="card mb-6" style={{ padding: 10 }}>
+                  <div className="flex justify-between items-center gap-8">
+                    <strong className="text-xs" style={{ textTransform: "capitalize" }}>
+                      {decision.recommendation.replace(/_/g, " ")}
+                    </strong>
+                    <span className="badge badge-acc">{Math.round((decision.confidence || 0) * 100)}%</span>
+                  </div>
+                  <div className="text-xxs text-dim mt-4">{decision.explanation}</div>
+                  {decision.suggestedAction?.type && (
+                    <div className="text-xxs fw-700 mt-4" style={{ color: "var(--acc)" }}>
+                      Next: {decision.suggestedAction.type.replace(/_/g, " ")}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         <div className="card mb-10">
           <div className="flex justify-between items-center">

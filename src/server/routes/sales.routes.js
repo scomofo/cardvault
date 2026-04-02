@@ -22,19 +22,26 @@ export function registerSalesRoutes(app) {
       const body = toSnake(req.body);
       const id = body.id || uid();
       run(
-        `INSERT INTO sales (id, card_id, card_name, card_set, sale_price,
-         cost_basis, platform, fees, shipping_cost, net_profit, listing_id, date)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO sales (id, card_id, order_id, card_name, card_set, sale_price,
+         cost_basis, platform, buyer_handle, fees, shipping_cost, packaging_cost,
+         grading_cost, tax_collected, payout_amount, net_profit, listing_id, date)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           id,
           body.card_id,
+          body.order_id,
           body.card_name,
           body.card_set,
           body.sale_price,
           body.cost_basis || 0,
           body.platform,
+          body.buyer_handle,
           body.fees || 0,
           body.shipping_cost || 0,
+          body.packaging_cost || 0,
+          body.grading_cost || 0,
+          body.tax_collected || 0,
+          body.payout_amount || 0,
           body.net_profit || 0,
           body.listing_id,
           body.date || new Date().toISOString(),
@@ -42,8 +49,14 @@ export function registerSalesRoutes(app) {
       );
       if (body.card_id) {
         run(
-          "UPDATE user_items SET status = 'sold', updated_at = datetime('now') WHERE id = ?",
-          [body.card_id],
+          `UPDATE user_items
+           SET status = 'sold',
+               sale_status = 'sold',
+               profit_realized = ?,
+               sold_at = ?,
+               updated_at = datetime('now')
+           WHERE id = ?`,
+          [body.net_profit || 0, body.date || new Date().toISOString(), body.card_id],
         );
       }
       res

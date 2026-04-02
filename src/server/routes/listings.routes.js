@@ -1,6 +1,7 @@
 import { all, get, run } from "../database.js";
 import { LISTING_FIELD_MAP } from "../mappers/fieldMaps.js";
 import {
+  json,
   toCamel,
   toCamelArray,
   toSnake,
@@ -30,22 +31,34 @@ export function registerListingRoutes(app) {
       const body = toSnake(req.body);
       const id = body.id || uid();
       run(
-        `INSERT INTO listings (id, card_id, card_name, card_set, card_number,
-         platform, format, start_price, buy_now_price, auction_end_date,
-         shipping, current_bid, status, notes)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO listings (id, card_id, external_listing_id, card_name, card_set, card_number,
+         platform, listing_title, listing_description, category_path, item_specifics, shipping_profile,
+         image_count, automation_state, pricing_strategy, format, start_price, buy_now_price, auction_end_date,
+         shipping, shipping_weight_oz, export_batch_id, current_bid, status, notes)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           id,
           body.card_id,
+          body.external_listing_id,
           body.card_name,
           body.card_set,
           body.card_number,
           body.platform,
+          body.listing_title,
+          body.listing_description,
+          body.category_path,
+          json(body.item_specifics),
+          json(body.shipping_profile),
+          body.image_count || 0,
+          body.automation_state || "draft",
+          body.pricing_strategy || "market",
           body.format || "fixed",
           body.start_price,
           body.buy_now_price,
           body.auction_end_date,
           body.shipping || 0,
+          body.shipping_weight_oz || 0,
+          body.export_batch_id,
           body.current_bid,
           body.status || "active",
           body.notes,
@@ -53,7 +66,11 @@ export function registerListingRoutes(app) {
       );
       if (body.card_id) {
         run(
-          "UPDATE user_items SET status = 'listed', updated_at = datetime('now') WHERE id = ?",
+          `UPDATE user_items
+           SET status = 'listed',
+               listing_status = 'listed',
+               updated_at = datetime('now')
+           WHERE id = ?`,
           [body.card_id],
         );
       }
@@ -73,21 +90,33 @@ export function registerListingRoutes(app) {
       if (!existing) return res.status(404).json({ error: "Listing not found" });
       const body = { ...existing, ...toSnake(req.body) };
       run(
-        `UPDATE listings SET card_id=?, card_name=?, card_set=?, card_number=?,
-         platform=?, format=?, start_price=?, buy_now_price=?, auction_end_date=?,
-         shipping=?, current_bid=?, status=?, sold_price=?, sold_date=?, notes=?
+        `UPDATE listings SET card_id=?, external_listing_id=?, card_name=?, card_set=?, card_number=?,
+         platform=?, listing_title=?, listing_description=?, category_path=?, item_specifics=?, shipping_profile=?,
+         image_count=?, automation_state=?, pricing_strategy=?, format=?, start_price=?, buy_now_price=?, auction_end_date=?,
+         shipping=?, shipping_weight_oz=?, export_batch_id=?, current_bid=?, status=?, sold_price=?, sold_date=?, notes=?
          WHERE id=?`,
         [
           body.card_id,
+          body.external_listing_id,
           body.card_name,
           body.card_set,
           body.card_number,
           body.platform,
+          body.listing_title,
+          body.listing_description,
+          body.category_path,
+          json(body.item_specifics),
+          json(body.shipping_profile),
+          body.image_count,
+          body.automation_state,
+          body.pricing_strategy,
           body.format,
           body.start_price,
           body.buy_now_price,
           body.auction_end_date,
           body.shipping,
+          body.shipping_weight_oz,
+          body.export_batch_id,
           body.current_bid,
           body.status,
           body.sold_price,

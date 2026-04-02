@@ -41,6 +41,11 @@ export const salesAPI = {
   create: (data) => request("/sales", { method: "POST", body: data }),
 };
 
+export const ordersAPI = {
+  list: () => request("/orders"),
+  create: (data) => request("/orders", { method: "POST", body: data }),
+};
+
 // Listings
 export const listingsAPI = {
   list: (params) => request(`/listings${toQuery(params)}`),
@@ -48,6 +53,55 @@ export const listingsAPI = {
   update: (id, data) =>
     request(`/listings/${id}`, { method: "PUT", body: data }),
   delete: (id) => request(`/listings/${id}`, { method: "DELETE" }),
+};
+
+export const decisionsAPI = {
+  list: (params) => request(`/decisions${toQuery(params)}`),
+  evaluate: (data) => request("/decisions/evaluate", { method: "POST", body: data }),
+  feedback: (id, data) => request(`/decisions/${id}/feedback`, { method: "POST", body: data }),
+};
+
+export const actionQueueAPI = {
+  list: () => request("/action-queue"),
+};
+
+export const dashboardAPI = {
+  get: () => request("/dashboard"),
+};
+
+export const identificationAPI = {
+  identify: (data) => request("/identification/identify", { method: "POST", body: data }),
+  confirm: (data) => request("/identification/confirm", { method: "POST", body: data }),
+  correct: (data) => request("/identification/correct", { method: "POST", body: data }),
+  updateSimilarity: (itemId) => request(`/identification/similarity/${itemId}`, { method: "POST" }),
+  similarity: (itemId) => request(`/identification/similarity/${itemId}`),
+  dataset: () => request("/identification/dataset"),
+  mineHardCases: () => request("/identification/hard-cases", { method: "POST" }),
+};
+
+export const automationAPI = {
+  identifyAndPrice: (itemId, data) =>
+    request(`/automation/identify-price/${itemId}`, { method: "POST", body: data }),
+  generateListings: (data) =>
+    request("/automation/listings/generate", { method: "POST", body: data }),
+  agingRepricing: (data) =>
+    request("/automation/aging-repricing", { method: "POST", body: data }),
+  automateShipment: (orderId, data) =>
+    request(`/automation/shipping/${orderId}`, { method: "POST", body: data }),
+  actionQueue: () => request("/automation/action-queue"),
+};
+
+export const marketplacesAPI = {
+  list: () => request("/marketplaces"),
+  connections: () => request("/marketplace-connections"),
+  connect: (data) => request("/marketplace-connections", { method: "POST", body: data }),
+  publish: (data) => request("/marketplaces/publish", { method: "POST", body: data }),
+  revise: (data) => request("/marketplaces/revise", { method: "POST", body: data }),
+  end: (data) => request("/marketplaces/end", { method: "POST", body: data }),
+  crosspost: (data) => request("/marketplaces/crosspost", { method: "POST", body: data }),
+  sync: (data) => request("/marketplaces/sync", { method: "POST", body: data }),
+  channels: (listingId) => request(`/marketplaces/listings/${listingId}/channels`),
+  export: (data) => request("/marketplaces/export", { method: "POST", body: data }),
 };
 
 // Trades

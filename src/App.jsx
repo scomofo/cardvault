@@ -2,8 +2,9 @@ import { useState, useEffect, useMemo } from "react";
 import { ToastProvider } from "./components/Toast";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { DataProvider, useData } from "./lib/DataContext";
-import { IconCamera, IconCards, IconDollar, IconTools, IconSettings } from "./components/Icons";
+import { IconCamera, IconCards, IconDollar, IconTools, IconSettings, IconBarChart } from "./components/Icons";
 import GlobalSearch from "./components/GlobalSearch";
+import DashboardView from "./components/DashboardView";
 import ScanView from "./components/ScanView";
 import BatchView from "./components/BatchView";
 import CatalogView from "./components/CatalogView";
@@ -16,6 +17,7 @@ import Settings from "./components/Settings";
 import "./styles/app.css";
 
 const NAV = [
+  { v: "dashboard", l: "Dash", Icon: IconBarChart },
   { v: "scan", l: "Scan", Icon: IconCamera },
   { v: "cards", l: "Cards", Icon: IconCards },
   { v: "sales", l: "Sales", Icon: IconDollar },
@@ -54,7 +56,7 @@ function ToolsView() {
 }
 
 function AppContent() {
-  const [view, setView] = useState("scan");
+  const [view, setView] = useState("dashboard");
   const [online, setOnline] = useState(navigator.onLine);
   const { catalog, userName } = useData();
 
@@ -90,6 +92,7 @@ function AppContent() {
       </header>
 
       <main>
+        {view === "dashboard" && <DashboardView />}
         {view === "scan" && <ScanView onNavigate={setView} />}
         {view === "cards" && <CatalogView />}
         {view === "sales" && <SalesFlow />}

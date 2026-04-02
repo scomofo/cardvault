@@ -22,12 +22,41 @@ export function validateItemPayload(req, res, next) {
   const error = validateFields([
     () => validateStringLike(body.id, "id"),
     () => validateStringLike(body.name, "name"),
+    () => validateStringLike(body.playerName ?? body.player_name, "playerName"),
+    () => validateStringLike(body.manufacturer, "manufacturer"),
+    () => validateStringLike(body.sport, "sport"),
+    () => validateStringLike(body.team, "team"),
     () => validateStringLike(body.set, "set"),
     () => validateStringLike(body.card_set, "card_set"),
     () => validateStringLike(body.number, "number"),
     () => validateStringLike(body.card_number, "card_number"),
+    () =>
+      validateStringLike(
+        body.storageLocation ?? body.storage_location,
+        "storageLocation",
+      ),
     () => validateNumberLike(body.costBasis, "costBasis"),
     () => validateNumberLike(body.cost_basis, "cost_basis"),
+    () => validateNumberLike(body.marketPrice ?? body.market_price, "marketPrice"),
+    () =>
+      validateNumberLike(
+        body.suggestedListingPrice ?? body.suggested_listing_price,
+        "suggestedListingPrice",
+      ),
+    () =>
+      validateNumberLike(
+        body.minAcceptablePrice ?? body.min_acceptable_price,
+        "minAcceptablePrice",
+      ),
+    () => validateNumberLike(body.lastCompPrice ?? body.last_comp_price, "lastCompPrice"),
+    () =>
+      validateNumberLike(
+        body.averageCompPrice ?? body.average_comp_price,
+        "averageCompPrice",
+      ),
+    () => validateNumberLike(body.psa9Price ?? body.psa9_price, "psa9Price"),
+    () => validateNumberLike(body.psa10Price ?? body.psa10_price, "psa10Price"),
+    () => validateNumberLike(body.profitRealized ?? body.profit_realized, "profitRealized"),
     () => validateArray(body.listedOn, "listedOn"),
     () => validateArray(body.listed_on, "listed_on"),
     () => validateArray(body.priceHistory, "priceHistory"),
@@ -53,6 +82,26 @@ export function validateSalePayload(req, res, next) {
           body.shippingCost ?? body.shipping_cost,
           "shippingCost",
         ),
+      () =>
+        validateNumberLike(
+          body.packagingCost ?? body.packaging_cost,
+          "packagingCost",
+        ),
+      () =>
+        validateNumberLike(
+          body.gradingCost ?? body.grading_cost,
+          "gradingCost",
+        ),
+      () =>
+        validateNumberLike(
+          body.taxCollected ?? body.tax_collected,
+          "taxCollected",
+        ),
+      () =>
+        validateNumberLike(
+          body.payoutAmount ?? body.payout_amount,
+          "payoutAmount",
+        ),
       () => validateNumberLike(body.netProfit ?? body.net_profit, "netProfit"),
     ]) || (salePrice == null || salePrice === "" ? "sale_price required" : null);
 
@@ -76,6 +125,11 @@ export function validateListingPayload(req, res, next) {
           "buyNowPrice",
         ),
       () => validateNumberLike(body.shipping, "shipping"),
+      () =>
+        validateNumberLike(
+          body.shippingWeightOz ?? body.shipping_weight_oz,
+          "shippingWeightOz",
+        ),
       () =>
         validateNumberLike(body.currentBid ?? body.current_bid, "currentBid"),
       () => validateNumberLike(body.soldPrice ?? body.sold_price, "soldPrice"),
