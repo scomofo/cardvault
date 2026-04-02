@@ -1,0 +1,120 @@
+import {
+  sendValidationError,
+  validateArray,
+  validateNumberLike,
+  validateRequestShape,
+  validateStringLike,
+} from "./common.js";
+
+function validateFields(validators) {
+  for (const validator of validators) {
+    const error = validator();
+    if (error) return error;
+  }
+  return null;
+}
+
+export function validateItemPayload(req, res, next) {
+  const body = req.body;
+  const rootError = validateRequestShape(body);
+  if (rootError) return sendValidationError(res, rootError);
+
+  const error = validateFields([
+    () => validateStringLike(body.id, "id"),
+    () => validateStringLike(body.name, "name"),
+    () => validateStringLike(body.set, "set"),
+    () => validateStringLike(body.card_set, "card_set"),
+    () => validateStringLike(body.number, "number"),
+    () => validateStringLike(body.card_number, "card_number"),
+    () => validateNumberLike(body.costBasis, "costBasis"),
+    () => validateNumberLike(body.cost_basis, "cost_basis"),
+    () => validateArray(body.listedOn, "listedOn"),
+    () => validateArray(body.listed_on, "listed_on"),
+    () => validateArray(body.priceHistory, "priceHistory"),
+    () => validateArray(body.price_history, "price_history"),
+  ]);
+
+  if (error) return sendValidationError(res, error);
+  next();
+}
+
+export function validateSalePayload(req, res, next) {
+  const body = req.body;
+  const rootError = validateRequestShape(body);
+  if (rootError) return sendValidationError(res, rootError);
+
+  const salePrice = body.salePrice ?? body.sale_price;
+  const error =
+    validateFields([
+      () => validateNumberLike(salePrice, "salePrice"),
+      () => validateNumberLike(body.costBasis ?? body.cost_basis, "costBasis"),
+      () =>
+        validateNumberLike(
+          body.shippingCost ?? body.shipping_cost,
+          "shippingCost",
+        ),
+      () => validateNumberLike(body.netProfit ?? body.net_profit, "netProfit"),
+    ]) || (salePrice == null || salePrice === "" ? "sale_price required" : null);
+
+  if (error) return sendValidationError(res, error);
+  next();
+}
+
+export function validateListingPayload(req, res, next) {
+  const body = req.body;
+  const rootError = validateRequestShape(body);
+  if (rootError) return sendValidationError(res, rootError);
+
+  const error =
+    validateFields([
+      () => validateStringLike(body.id, "id"),
+      () =>
+        validateNumberLike(body.startPrice ?? body.start_price, "startPrice"),
+      () =>
+        validateNumberLike(
+          body.buyNowPrice ?? body.buy_now_price,
+          "buyNowPrice",
+        ),
+      () => validateNumberLike(body.shipping, "shipping"),
+      () =>
+        validateNumberLike(body.currentBid ?? body.current_bid, "currentBid"),
+      () => validateNumberLike(body.soldPrice ?? body.sold_price, "soldPrice"),
+    ]) || (!body.platform ? "platform required" : null);
+
+  if (error) return sendValidationError(res, error);
+  next();
+}
+
+export function validateSettingsPayload(req, res, next) {
+  const error = validateRequestShape(req.body);
+  if (error) return sendValidationError(res, error);
+  next();
+}
+
+export function validateMigrationPayload(req, res, next) {
+  const body = req.body;
+  const rootError = validateRequestShape(body);
+  if (rootError) return sendValidationError(res, rootError);
+
+  const collections = [
+    "catalog",
+    "items",
+    "sales",
+    "listings",
+    "trades",
+    "watchlist",
+    "gradings",
+    "purchases",
+  ];
+
+  for (const key of collections) {
+    const error = validateArray(body[key], key);
+    if (error) return sendValidationError(res, error);
+  }
+
+  if (body.settings != null && typeof body.settings !== "object") {
+    return sendValidationError(res, "settings must be an object");
+  }
+
+  next();
+}

@@ -4,12 +4,12 @@ import rateLimit from "express-rate-limit";
 import { config } from "dotenv";
 import { initDB } from "./src/server/database.js";
 import { seedReferenceData } from "./src/server/seed.js";
-import { registerRoutes } from "./src/server/routes.js";
+import { registerRoutes } from "./src/server/routes/index.js";
 
 config();
 
 const app = express();
-const PORT = 3001;
+const PORT = Number(process.env.PORT || 3001);
 import { get as dbGet, run as dbRun } from "./src/server/database.js";
 
 let anthropicKey = process.env.ANTHROPIC_API_KEY || "";

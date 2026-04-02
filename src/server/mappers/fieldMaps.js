@@ -1,0 +1,48 @@
+export const ITEM_FIELD_MAP = {
+  card_set: "set",
+  card_number: "number",
+  cost_basis: "costBasis",
+  listed_on: "listedOn",
+  front_img_id: "frontImgId",
+  back_img_id: "backImgId",
+  price_estimate: "priceEstimate",
+  price_history: "priceHistory",
+  parallel_id: "parallelId",
+  created_at: "createdAt",
+  updated_at: "updatedAt",
+  projected_grade: "projected_grade",
+  vault_status: "vault_status",
+  condition_report: "condition_report",
+  cv_centering_lr: "cv_centering_lr",
+  cv_centering_tb: "cv_centering_tb",
+  cv_centering_score: "cv_centering_score",
+  cv_processed: "cv_processed",
+  ebay_centering: "ebay_centering",
+  ebay_corner_sharpness: "ebay_corner_sharpness",
+  ebay_edge_chipping: "ebay_edge_chipping",
+};
+
+export const SALE_FIELD_MAP = {
+  card_id: "cardId",
+  card_name: "cardName",
+  card_set: "cardSet",
+  sale_price: "salePrice",
+  cost_basis: "costBasis",
+  shipping_cost: "shippingCost",
+  net_profit: "netProfit",
+  listing_id: "listingId",
+};
+
+export const LISTING_FIELD_MAP = {
+  card_id: "cardId",
+  card_name: "cardName",
+  card_set: "cardSet",
+  card_number: "cardNumber",
+  start_price: "startPrice",
+  buy_now_price: "buyNowPrice",
+  auction_end_date: "auctionEndDate",
+  current_bid: "currentBid",
+  sold_price: "soldPrice",
+  sold_date: "soldDate",
+  created_at: "createdAt",
+};

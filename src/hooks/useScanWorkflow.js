@@ -1,0 +1,368 @@
+import { useEffect, useState } from "react";
+import { useToast } from "../components/Toast";
+import { useData } from "../lib/DataContext";
+import { EMPTY_CARD, EMPTY_LISTING } from "../lib/constants";
+import { aiPrice, aiRecognize, aiVisualSearch } from "../lib/ai";
+import { analyzeCentering, checkCvHealth } from "../lib/cvApi";
+import { saveImage } from "../lib/storage";
+import { condOf, fmtShort, uid } from "../lib/utils";
+
+function buildSavedCard({
+  id,
+  card,
+  frontImgId,
+  backImgId,
+  gradingData,
+  cvResult,
+  priceEst,
+  priceHistory,
+}) {
+  return {
+    id,
+    ...card,
+    costBasis: parseFloat(card.costBasis) || 0,
+    frontImgId,
+    backImgId,
+    priceEstimate: priceEst,
+    priceHistory,
+    binder: card.binder || "",
+    status: card.status || "inventory",
+    listedOn: card.listedOn || [],
+    ...(gradingData
+      ? {
+          centering: gradingData.centering,
+          corners: gradingData.corners,
+          edges: gradingData.edges,
+          surface: gradingData.surface,
+          projected_grade: gradingData.projected_grade,
+          vault_status: gradingData.vault_status,
+          condition_report: gradingData.condition_report,
+        }
+      : {}),
+    ...(cvResult?.centering
+      ? {
+          cv_centering_lr: cvResult.centering.lr,
+          cv_centering_tb: cvResult.centering.tb,
+          cv_centering_score: cvResult.centering.score,
+          cv_processed: 1,
+        }
+      : {}),
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function buildListingRecord({ card, entry, listing }) {
+  return {
+    id: uid(),
+    cardId: entry.id,
+    cardName: card.name,
+    set: card.set,
+    number: card.number,
+    platform: listing.platform,
+    format: "fixed",
+    startPrice: parseFloat(listing.price),
+    buyNowPrice: null,
+    auctionEndDate: null,
+    shipping: parseFloat(listing.shipping) || 0,
+    currentBid: null,
+    status: "active",
+    notes: "",
+    createdAt: new Date().toISOString(),
+  };
+}
+
+export function useScanWorkflow() {
+  const toast = useToast();
+  const { setCatalog, setListings } = useData();
+
+  const [step, setStep] = useState(0);
+  const [frontImg, setFrontImg] = useState(null);
+  const [backImg, setBackImg] = useState(null);
+  const [card, setCard] = useState({ ...EMPTY_CARD });
+  const [searchQ, setSearchQ] = useState("");
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [recognizing, setRecognizing] = useState(false);
+  const [status, setStatus] = useState("");
+  const [priceEst, setPriceEst] = useState({ low: "", mid: "", high: "" });
+  const [priceHistory, setPriceHistory] = useState([]);
+  const [listing, setListing] = useState({ ...EMPTY_LISTING });
+  const [showGrading, setShowGrading] = useState(false);
+  const [gradingData, setGradingData] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [cvOnline, setCvOnline] = useState(false);
+  const [cvAnalyzing, setCvAnalyzing] = useState(false);
+  const [cvResult, setCvResult] = useState(null);
+  const [showCvOverlay, setShowCvOverlay] = useState(true);
+  const [visualSearching, setVisualSearching] = useState(false);
+
+  useEffect(() => {
+    checkCvHealth().then(setCvOnline);
+  }, []);
+
+  async function doCvAnalyze() {
+    if (!frontImg) return;
+    setCvAnalyzing(true);
+    setStatus("CV analyzing…");
+    const result = await analyzeCentering(frontImg);
+    if (result?.card_detected) {
+      setCvResult(result);
+      setStatus(
+        `CV: ${result.centering.lr} L/R, ${result.centering.tb} T/B (${result.processing_ms}ms)`,
+      );
+    } else {
+      setStatus(result?.error || "CV: Card not detected");
+      toast.error("Card edges not found - try a darker background");
+    }
+    setCvAnalyzing(false);
+  }
+
+  async function doVisualSearch() {
+    if (!frontImg) return;
+    setVisualSearching(true);
+    setStatus("Visual search… identifying + pricing from photo");
+    const response = await aiVisualSearch(frontImg);
+    if (response?.name) {
+      setCard((previous) => ({
+        ...previous,
+        name: response.name,
+        set: response.set || previous.set,
+        year: response.year || previous.year,
+        number: response.number || previous.number,
+        rarity: response.rarity || previous.rarity,
+        parallel: response.parallel || "",
+        type: response.type || previous.type,
+      }));
+      setSearchQ(
+        [response.name, response.set, response.number && `#${response.number}`]
+          .filter(Boolean)
+          .join(" "),
+      );
+      if (response.results?.length > 0) setResults(response.results);
+      if (response.priceEstimate) setPriceEst(response.priceEstimate);
+      if (response.priceHistory?.length > 0) {
+        setPriceHistory(response.priceHistory);
+      }
+      setStatus(
+        `✓ ${response.name} - ${response.results?.length || 0} comps found (${response.confidence})`,
+      );
+      setStep(1);
+    } else {
+      setStatus("Visual search failed - try AI Identify or search manually");
+      toast.error("Couldn't identify card from photo");
+    }
+    setVisualSearching(false);
+  }
+
+  async function doSearch() {
+    if (!searchQ.trim()) return;
+    setSearching(true);
+    setResults([]);
+    setStatus("Searching…");
+    const data = await aiPrice(searchQ);
+    if (data) {
+      setResults(data.results || []);
+      setPriceEst(data.priceEstimate || {});
+      setPriceHistory(data.priceHistory || []);
+      if (data.cardInfo) {
+        setCard((previous) => ({
+          ...previous,
+          name: previous.name || data.cardName || "",
+          set: previous.set || data.cardInfo.set || "",
+          year: previous.year || data.cardInfo.year || "",
+          number: previous.number || data.cardInfo.number || "",
+          rarity: previous.rarity || data.cardInfo.rarity || "",
+          type: data.cardInfo.type || previous.type,
+        }));
+      }
+      setStatus(`${(data.results || []).length} results`);
+    } else {
+      setStatus("Search failed");
+      toast.error("Price search failed");
+    }
+    setSearching(false);
+  }
+
+  async function doRecognize() {
+    if (!frontImg) return;
+    setRecognizing(true);
+    setStatus("Identifying…");
+    const response = await aiRecognize(frontImg);
+    if (response?.name) {
+      setCard((previous) => ({
+        ...previous,
+        name: response.name,
+        set: response.set || previous.set,
+        year: response.year || previous.year,
+        number: response.number || previous.number,
+        rarity: response.rarity || previous.rarity,
+        parallel: response.parallel || "",
+        type: response.type || previous.type,
+      }));
+      setSearchQ(
+        [response.name, response.set, response.number && `#${response.number}`]
+          .filter(Boolean)
+          .join(" "),
+      );
+      setStatus(`✓ ${response.name} (${response.confidence})`);
+    } else {
+      setStatus("Couldn't ID - enter manually");
+      toast.error("Card recognition failed");
+    }
+    setRecognizing(false);
+  }
+
+  async function saveCard() {
+    if (saving) return null;
+    setSaving(true);
+    try {
+      const id = uid();
+      let frontImgId = null;
+      let backImgId = null;
+
+      if (frontImg) {
+        frontImgId = `img_${id}_front`;
+        await saveImage(frontImgId, frontImg);
+      }
+
+      if (backImg) {
+        backImgId = `img_${id}_back`;
+        await saveImage(backImgId, backImg);
+      }
+
+      const entry = buildSavedCard({
+        id,
+        card,
+        frontImgId,
+        backImgId,
+        gradingData,
+        cvResult,
+        priceEst,
+        priceHistory,
+      });
+
+      setCatalog((previous) => [entry, ...previous]);
+      toast.success(`Saved: ${card.name || "Card"}`);
+      return entry;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function reset() {
+    setStep(0);
+    setFrontImg(null);
+    setBackImg(null);
+    setCard({ ...EMPTY_CARD });
+    setSearchQ("");
+    setResults([]);
+    setPriceEst({ low: "", mid: "", high: "" });
+    setPriceHistory([]);
+    setListing({ ...EMPTY_LISTING });
+    setStatus("");
+    setShowGrading(false);
+    setGradingData(null);
+    setCvResult(null);
+    setCvAnalyzing(false);
+    setVisualSearching(false);
+  }
+
+  async function copyListing() {
+    try {
+      await navigator.clipboard.writeText(
+        `${listing.title}\n${fmtShort(listing.price)} CAD + ${fmtShort(listing.shipping)} shipping\n\n${listing.description}`,
+      );
+      toast.success("Copied");
+    } catch {
+      toast.error("Copy failed");
+    }
+  }
+
+  function prepareListing() {
+    const condition = condOf(card.condition);
+    setListing((previous) => ({
+      ...previous,
+      title: [
+        card.name,
+        card.set,
+        card.number && `#${card.number}`,
+        `[${condition.s}]`,
+      ]
+        .filter(Boolean)
+        .join(" "),
+      description: [
+        card.name,
+        card.set && `Set: ${card.set}`,
+        card.rarity && `Rarity: ${card.rarity}`,
+        `Condition: ${condition.l}`,
+        "Ships tracked from Canada",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      price: priceEst.mid || "",
+    }));
+    setStep(3);
+  }
+
+  async function saveAndList() {
+    const entry = await saveCard();
+    if (entry && listing.price) {
+      const listingRecord = buildListingRecord({ card, entry, listing });
+      setListings((previous) => [listingRecord, ...previous]);
+      setCatalog((previous) =>
+        previous.map((item) =>
+          item.id === entry.id
+            ? { ...item, status: "listed", listedOn: [listing.platform] }
+            : item,
+        ),
+      );
+      toast.success(`Listed on ${listing.platform} for ${fmtShort(listing.price)}`);
+    }
+    reset();
+  }
+
+  return {
+    actions: {
+      copyListing,
+      doCvAnalyze,
+      doRecognize,
+      doSearch,
+      doVisualSearch,
+      prepareListing,
+      reset,
+      saveAndList,
+      saveCard,
+      setBackImg,
+      setCard,
+      setFrontImg,
+      setGradingData,
+      setListing,
+      setSearchQ,
+      setShowCvOverlay,
+      setShowGrading,
+      setStep,
+    },
+    state: {
+      backImg,
+      card,
+      cvAnalyzing,
+      cvOnline,
+      cvResult,
+      frontImg,
+      gradingData,
+      listing,
+      priceEst,
+      priceHistory,
+      recognizing,
+      results,
+      saving,
+      searchQ,
+      searching,
+      showCvOverlay,
+      showGrading,
+      status,
+      step,
+      visualSearching,
+    },
+  };
+}

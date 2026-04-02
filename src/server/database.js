@@ -2,12 +2,24 @@ import Database from "better-sqlite3";
 import { mkdirSync } from "fs";
 import { dirname, resolve } from "path";
 
-const DB_PATH = resolve("./data/cardvault.db");
 let db = null;
+let dbPath = null;
+
+function getDbPath() {
+  if (!dbPath) {
+    dbPath = resolve(process.env.CARDVAULT_DB_PATH || "./data/cardvault.db");
+  }
+  return dbPath;
+}
 
 export function initDB() {
-  mkdirSync(dirname(DB_PATH), { recursive: true });
-  db = new Database(DB_PATH);
+  if (db) {
+    db.close();
+  }
+
+  const resolvedDbPath = getDbPath();
+  mkdirSync(dirname(resolvedDbPath), { recursive: true });
+  db = new Database(resolvedDbPath);
 
   // Performance pragmas
   db.pragma("journal_mode = WAL");
