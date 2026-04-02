@@ -8,7 +8,8 @@
     "server": "node server.js",
     "start": "concurrently \"npm run server\" \"npm run dev\"",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test"
   },
   "dependencies": {
     "better-sqlite3": "^12.8.0",
