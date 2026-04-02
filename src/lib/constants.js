@@ -16,7 +16,7 @@ export const TYPES = [
   { v: "yugioh", l: "Yu-Gi-Oh!", i: "\ud83d\udc41\ufe0f" },
   { v: "one_piece", l: "One Piece", i: "\ud83c\udff4\u200d\u2620\ufe0f" },
   { v: "lorcana", l: "Lorcana", i: "\u2728" },
-  { v: "other", l: "Other", i: "\ud83c\udccf" },
+  { v: "other", l: "Other", i: "\ud83c\udff7\ufe0f" },
 ];
 
 export const PLATFORMS = [
