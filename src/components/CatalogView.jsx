@@ -23,6 +23,7 @@ export default function CatalogView() {
 
   const detail = useMemo(() => detailId ? catalog.find((c) => c.id === detailId) || null : null, [detailId, catalog]);
 
+  const binders = useMemo(() => {
     const s = new Set(["All"]);
     catalog.forEach((c) => { if (c.binder) s.add(c.binder); });
     return [...s];
@@ -48,7 +49,7 @@ export default function CatalogView() {
   const totalVal = useMemo(() => catalog.filter((c) => c.status !== "sold").reduce((s, c) => s + (parseFloat(c.priceEstimate?.mid) || 0), 0), [catalog]);
   const totalCost = useMemo(() => catalog.reduce((s, c) => s + (parseFloat(c.costBasis) || 0), 0), [catalog]);
 
-
+  useEffect(() => {
     filtered.forEach((c) => {
       if (c.frontImgId && !thumbs[c.frontImgId] && !thumbAttempted.current.has(c.frontImgId)) {
         thumbAttempted.current.add(c.frontImgId);
@@ -57,7 +58,7 @@ export default function CatalogView() {
     });
   }, [filtered]);
 
-
+  useEffect(() => {
     if (!detail) return;
     setDetailFrontImg(null); setDetailBackImg(null);
     let cancelled = false;

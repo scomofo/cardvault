@@ -30,50 +30,6 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
   const [autoGrading, setAutoGrading] = useState(null);
   const [autoDuplicates, setAutoDuplicates] = useState(null);
 
-  const detail = useMemo(() => detailId ? catalog.find((c) => c.id === detailId) || null : null, [detailId, catalog]);
-
-  const binders = useMemo(() => {
-    const s = new Set(["All"]);
-    catalog.forEach((c) => { if (c.binder) s.add(c.binder); });
-    return [...s];
-  }, [catalog]);
-
-  const filtered = useMemo(() => {
-    let a = binderF === "All" ? [...catalog] : catalog.filter((c) => c.binder === binderF);
-    if (catSearch.trim()) {
-      const q = catSearch.toLowerCase();
-      a = a.filter((c) => (c.name + c.set + c.number + c.rarity).toLowerCase().includes(q));
-    }
-    const sf = {
-      date_desc: (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
-      date_asc: (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
-      value_desc: (a, b) => (parseFloat(b.priceEstimate?.mid) || 0) - (parseFloat(a.priceEstimate?.mid) || 0),
-      value_asc: (a, b) => (parseFloat(a.priceEstimate?.mid) || 0) - (parseFloat(b.priceEstimate?.mid) || 0),
-      name_asc: (a, b) => (a.name || "").localeCompare(b.name || ""),
-    };
-    a.sort(sf[sortBy] || sf.date_desc);
-    return a;
-  }, [catalog, binderF, sortBy, catSearch]);
-
-  const totalVal = useMemo(() => catalog.filter((c) => c.status !== "sold").reduce((s, c) => s + (parseFloat(c.priceEstimate?.mid) || 0), 0), [catalog]);
-  const totalCost = useMemo(() => catalog.reduce((s, c) => s + (parseFloat(c.costBasis) || 0), 0), [catalog]);
-
-  useEffect(() => {
-    filtered.forEach((c) => {
-        loadImage(c.frontImgId).then((img) => { if (img) setThumbs((p) => ({ ...p, [c.frontImgId]: img })); });
-      }
-    });
-  }, [filtered]);
-
-  useEffect(() => {
-    if (!detail) return;
-    setDetailFrontImg(null); setDetailBackImg(null);
-    let cancelled = false;
-    if (detail.frontImgId) loadImage(detail.frontImgId).then((img) => { if (!cancelled) setDetailFrontImg(img); });
-    if (detail.backImgId) loadImage(detail.backImgId).then((img) => { if (!cancelled) setDetailBackImg(img); });
-    return () => { cancelled = true; };
-  }, [detail?.id]);
-
   useEffect(() => {
     let cancelled = false;
     if (!detail?.id) {
@@ -478,6 +434,5 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
 
         <button className="btn btn-danger btn-sm" onClick={() => onBack(detail.id)}><IconTrash size={14} /> Delete Card</button>
       </div>
-    );
   );
 }

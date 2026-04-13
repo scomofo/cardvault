@@ -52,10 +52,10 @@ export default function ActiveListingCard({ listing: l, catalog, busyListingId, 
                       <button className="btn btn-ghost btn-sm" disabled={busyListingId === l.id} onClick={() => onCrosspost(l.id)}>
                         Crosspost
                       </button>
-                      <button className="btn btn-primary btn-sm" onClick={() => onStartSell(l.id)}}>
+                      <button className="btn btn-primary btn-sm" onClick={() => onStartSell(l.id)}>
                         <IconCheck size={12} /> Sold
                       </button>
-                      <button className="btn btn-ghost btn-sm" onClick={() => onStartReprice(l.id)}}>
+                      <button className="btn btn-ghost btn-sm" onClick={() => onStartReprice(l.id)}>
                         Reprice
                       </button>
                       <button className="btn btn-ghost btn-sm" style={{ color: "var(--red)" }} onClick={() => onEndListing(l.id)}><IconX size={12} /></button>
@@ -93,7 +93,7 @@ export default function ActiveListingCard({ listing: l, catalog, busyListingId, 
                       <button className="btn btn-success btn-sm flex-1" onClick={() => onSell(l.id, sellPrice, sellTracking)}>
                         <IconCheck size={12} /> Confirm Sale
                       </button>
-                      <button className="btn btn-ghost btn-sm" onClick={onCancelSell}}>Cancel</button>
+                      <button className="btn btn-ghost btn-sm" onClick={onCancelSell}>Cancel</button>
                     </div>
                   </div>
                 )}
@@ -108,11 +108,10 @@ export default function ActiveListingCard({ listing: l, catalog, busyListingId, 
                       <input className="inp fw-700" type="number" step="0.01" value={repriceVal} onChange={(e) => setRepriceVal(e.target.value)} autoFocus style={{ maxWidth: 120 }} />
                       <button className="btn btn-primary btn-sm" onClick={() => onReprice(l.id)}>Update</button>
                       <ProfitWarning price={parseFloat(repriceVal)} costBasis={parseFloat(catalog.find((c) => c.id === l.cardId)?.costBasis) || 0} feeRate={feeRate} shipping={l.shipping || 0} />
-                      <button className="btn btn-ghost btn-sm" onClick={onCancelReprice}}>Cancel</button>
+                      <button className="btn btn-ghost btn-sm" onClick={onCancelReprice}>Cancel</button>
                     </div>
                   </div>
                 )}
               </div>
-            );
   );
 }
