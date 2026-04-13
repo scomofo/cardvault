@@ -26,6 +26,12 @@ function buildTracking(service) {
   return `${prefix}${Date.now().toString().slice(-10)}`;
 }
 
+/**
+ * Automate shipment creation for a fulfilled order.
+ * @param {string} orderId
+ * @param {object} [options]
+ * @returns {object}
+ */
 export function automateShipment(orderId, options = {}) {
   const order = get(`SELECT * FROM orders WHERE id = ?`, [orderId]);
   if (!order) throw new Error("Order not found");

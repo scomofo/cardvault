@@ -1,3 +1,8 @@
+/**
+ * Build a marketplace listing title from item data.
+ * @param {object} item
+ * @returns {string}
+ */
 export function buildListingTitle(item) {
   const parts = [
     item.year,

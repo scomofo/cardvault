@@ -1,3 +1,9 @@
+/**
+ * Route an identification result to manual review if needed.
+ * @param {object} result
+ * @param {object} item
+ * @returns {{ recommendation: string, needsReview: boolean }}
+ */
 export function routeReview(result, item) {
   if (result.recommendation === "auto_accept_match") return { queue: "accepted", severity: "low" };
   if (result.recommendation === "requires_back_scan") return { queue: "back_scan", severity: "medium" };

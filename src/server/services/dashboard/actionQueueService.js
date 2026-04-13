@@ -4,6 +4,10 @@ function score({ base = 0, marketPrice = 0, ageDays = 0, urgency = 0, blockedCas
   return Math.round(base + marketPrice + ageDays + urgency + blockedCash + risk + marketMovement + profitOpportunity);
 }
 
+/**
+ * Build a prioritized action queue from orders, listings, pricing, and grading state.
+ * @returns {{ queue: string, subjectType: string, subjectId: string, reason: string, priorityScore: number }[]}
+ */
 export function getActionQueue() {
   const queue = [];
 

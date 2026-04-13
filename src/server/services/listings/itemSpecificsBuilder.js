@@ -1,3 +1,8 @@
+/**
+ * Build marketplace item specifics from item data.
+ * @param {object} item
+ * @returns {object}
+ */
 export function buildItemSpecifics(item) {
   return {
     Year: item.year || "",

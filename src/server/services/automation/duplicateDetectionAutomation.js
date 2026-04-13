@@ -9,6 +9,11 @@ function buildGroupKey(item) {
   ].join("|");
 }
 
+/**
+ * Detect duplicate items in inventory.
+ * @param {{ itemId?: string|null }} [options]
+ * @returns {object[]}
+ */
 export function detectDuplicateInventory({ itemId = null } = {}) {
   const items = itemId
     ? all(`SELECT * FROM user_items WHERE id = ? OR id IN (

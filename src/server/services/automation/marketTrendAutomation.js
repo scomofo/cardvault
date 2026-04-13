@@ -17,6 +17,10 @@ function alertForTrend(item, trend, sampleSize) {
   return null;
 }
 
+/**
+ * Analyze price snapshots to detect market trends and generate alerts.
+ * @returns {object[]}
+ */
 export function runMarketTrendAutomation() {
   const snapshots = all(
     `SELECT ps.*, ui.id AS item_id, ui.name, ui.player_name, ui.card_set
@@ -26,6 +30,7 @@ export function runMarketTrendAutomation() {
        SELECT id FROM price_snapshots latest
        WHERE latest.item_id = ps.item_id
        ORDER BY observed_at DESC, created_at DESC
+       LIMIT 1
      )`,
   );
 

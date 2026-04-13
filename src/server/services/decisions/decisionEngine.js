@@ -78,6 +78,13 @@ function buildContext(subjectType, subjectId) {
   throw new Error(`Unsupported subject_type ${subjectType}`);
 }
 
+/**
+ * Evaluate all registered decision types for a given subject.
+ * @param {string} subjectType - e.g. "inventory_item"
+ * @param {string} subjectId - The subject record ID
+ * @param {{ persist?: boolean }} [options]
+ * @returns {object[]} Array of decision results
+ */
 export function evaluateSubject(subjectType, subjectId, { persist = true } = {}) {
   const context = buildContext(subjectType, subjectId);
   const decisions = [];
@@ -93,6 +100,10 @@ export function evaluateSubject(subjectType, subjectId, { persist = true } = {})
   return persist ? saveDecisions(decisions) : decisions;
 }
 
+/**
+ * Build a prioritized action queue from all inventory items.
+ * @returns {{ queue: string, subjectType: string, subjectId: string, priorityScore: number, label: string }[]}
+ */
 export function buildActionQueue() {
   const actions = [];
 

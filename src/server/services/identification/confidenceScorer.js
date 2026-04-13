@@ -1,3 +1,10 @@
+/**
+ * Score overall identification confidence.
+ * @param {object[]} rankedCandidates
+ * @param {object} clues
+ * @param {object} item
+ * @returns {{ confidence: number, recommendation: string, finalCatalogCardId: string|null }}
+ */
 export function scoreConfidence(rankedCandidates, clues, item) {
   const top = rankedCandidates[0];
   const second = rankedCandidates[1];

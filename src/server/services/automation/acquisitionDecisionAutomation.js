@@ -1,5 +1,10 @@
 import { get } from "../../database.js";
 
+/**
+ * Evaluate whether a potential card acquisition is worth buying.
+ * @param {object} [input]
+ * @returns {{ recommendation: string, confidence: number, explanation: string }}
+ */
 export function runAcquisitionDecisionAutomation(input = {}) {
   const askingPrice = Number(input.askingPrice || input.asking_price || 0);
   const estimatedExitValue = Number(input.estimatedExitValue || input.estimated_exit_value || 0);

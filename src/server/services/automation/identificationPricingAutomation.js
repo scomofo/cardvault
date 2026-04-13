@@ -15,6 +15,12 @@ function getDuplicateCount(item) {
   return row?.count || 0;
 }
 
+/**
+ * Run full identification and pricing pipeline for an item.
+ * @param {string} itemId
+ * @param {{ pricingStrategy?: string }} [options]
+ * @returns {Promise<{ identification: object, pricing: object }>}
+ */
 export async function automateIdentificationAndPricing(itemId, { pricingStrategy = "market" } = {}) {
   const item = get(`SELECT * FROM user_items WHERE id = ?`, [itemId]);
   if (!item) throw new Error("Item not found");

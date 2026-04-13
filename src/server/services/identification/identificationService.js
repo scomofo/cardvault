@@ -48,6 +48,11 @@ function seedCatalogCards() {
   }
 }
 
+/**
+ * Identify a card using OCR text, candidate matching, and confidence scoring.
+ * @param {{ itemId: string, batchItemId?: string, ocrText?: string }} params
+ * @returns {{ result: object, candidateCount: number, confidence: number }}
+ */
 export function identifyCard({ itemId, batchItemId = null, ocrText = null } = {}) {
   seedCatalogCards();
 

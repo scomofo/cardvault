@@ -12,6 +12,11 @@ function toCsv(rows) {
   ].join("\n");
 }
 
+/**
+ * Export listings as CSV for a specific marketplace.
+ * @param {{ marketplace: string, listingIds?: string[], exportType?: string }} options
+ * @returns {{ exportId: string, csvContent: string, listingCount: number }}
+ */
 export function exportListingsForMarketplace({ marketplace, listingIds = [], exportType = "csv" }) {
   const adapter = getMarketplaceAdapter(marketplace);
   const listings = listingIds.length

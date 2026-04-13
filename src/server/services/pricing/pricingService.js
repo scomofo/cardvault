@@ -104,10 +104,20 @@ export async function refreshPricingForItem(itemId) {
   return getPricingForItem(itemId);
 }
 
+/**
+ * Look up pricing by catalog card reference.
+ * @param {object} lookup
+ * @returns {Promise<object>}
+ */
 export async function lookupPricingByCatalogCard(lookup) {
   return fetchSportsCardsProPrice(lookup);
 }
 
+/**
+ * Get historical price snapshots for an item.
+ * @param {string} itemId
+ * @returns {object[]}
+ */
 export function getPricingHistory(itemId) {
   return all(
     `SELECT * FROM price_snapshots WHERE item_id = ? ORDER BY observed_at DESC, created_at DESC`,
@@ -115,6 +125,11 @@ export function getPricingHistory(itemId) {
   );
 }
 
+/**
+ * Get the most recent price snapshot for an item.
+ * @param {string} itemId
+ * @returns {object|null}
+ */
 export function getLatestPricing(itemId) {
   return get(
     `SELECT * FROM price_snapshots WHERE item_id = ? ORDER BY observed_at DESC, created_at DESC LIMIT 1`,
@@ -122,6 +137,11 @@ export function getLatestPricing(itemId) {
   );
 }
 
+/**
+ * Get pricing recommendations for an item.
+ * @param {string} itemId
+ * @returns {object[]}
+ */
 export function getPricingRecommendations(itemId) {
   return all(
     `SELECT * FROM pricing_recommendations WHERE item_id = ? ORDER BY created_at DESC`,
@@ -129,6 +149,11 @@ export function getPricingRecommendations(itemId) {
   );
 }
 
+/**
+ * Get current pricing data for an item including history and recommendations.
+ * @param {string} itemId
+ * @returns {{ latest: object|null, history: object[], recommendations: object[] }}
+ */
 export function getPricingForItem(itemId) {
   const latest = getLatestPricing(itemId);
   return {

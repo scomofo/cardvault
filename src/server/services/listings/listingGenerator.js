@@ -30,6 +30,11 @@ function determinePrice(item, strategy) {
   );
 }
 
+/**
+ * Generate listing drafts for items with titles, descriptions, and item specifics.
+ * @param {{ itemIds?: string[], platform?: string, pricingStrategy?: string, format?: string }} options
+ * @returns {object[]} Array of generated listing records
+ */
 export function generateListingDrafts({
   itemIds,
   platform = "ebay",

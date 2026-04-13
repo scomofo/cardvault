@@ -1,6 +1,11 @@
 import { all } from "../../database.js";
 import { similarity } from "./utils.js";
 
+/**
+ * Generate candidate catalog cards matching parsed clues.
+ * @param {object} clues
+ * @returns {object[]}
+ */
 export function generateCandidates(clues) {
   const catalog = all(`SELECT * FROM catalog_cards ORDER BY source_confidence DESC, id ASC LIMIT 500`);
   const candidates = catalog

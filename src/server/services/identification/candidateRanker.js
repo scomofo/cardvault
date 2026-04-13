@@ -1,3 +1,8 @@
+/**
+ * Rank candidate matches by relevance score.
+ * @param {object[]} candidates
+ * @returns {object[]}
+ */
 export function rankCandidates(candidates) {
   return candidates.map((candidate, index) => ({
     ...candidate,

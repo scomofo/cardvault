@@ -1,6 +1,11 @@
 import { DECISION_TYPES } from "./decisionTypes.js";
 import { action } from "./explanationBuilder.js";
 
+/**
+ * Prioritize items in the workflow queue.
+ * @param {{ item: object, prices: object }} context
+ * @returns {{ decisionType: string, recommendation: string, confidence: number, explanation: string }}
+ */
 export function workflowPriorityDecision(context) {
   const score = context.priorityScore || 0;
   const recommendation =

@@ -1,6 +1,11 @@
 import { DECISION_TYPES } from "./decisionTypes.js";
 import { action } from "./explanationBuilder.js";
 
+/**
+ * Evaluate whether an acquisition is worth pursuing.
+ * @param {{ item: object, prices: object }} context
+ * @returns {{ decisionType: string, recommendation: string, confidence: number, explanation: string }}
+ */
 export function acquisitionDecision(context) {
   if (context.subjectType !== "purchase" || !context.purchase) return null;
 

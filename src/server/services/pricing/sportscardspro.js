@@ -46,6 +46,11 @@ function buildSimulatedSnapshot(item) {
   });
 }
 
+/**
+ * Fetch pricing data from SportsCardsPro API.
+ * @param {object} itemOrLookup
+ * @returns {Promise<object>}
+ */
 export async function fetchSportsCardsProPrice(itemOrLookup) {
   const apiBase = process.env.SPORTSCARDSPRO_API_BASE;
   const apiKey = process.env.SPORTSCARDSPRO_API_KEY;

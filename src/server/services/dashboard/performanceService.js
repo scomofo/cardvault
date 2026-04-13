@@ -1,5 +1,9 @@
 import { all } from "../../database.js";
 
+/**
+ * Generate performance analytics panels for the dashboard.
+ * @returns {object[]}
+ */
 export function getPerformancePanels() {
   return {
     topProfitPlayers: all(

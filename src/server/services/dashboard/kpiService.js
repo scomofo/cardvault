@@ -1,5 +1,9 @@
 import { get } from "../../database.js";
 
+/**
+ * Calculate key performance indicators for the seller dashboard.
+ * @returns {object}
+ */
 export function getKpis() {
   const inventory = get(
     `SELECT

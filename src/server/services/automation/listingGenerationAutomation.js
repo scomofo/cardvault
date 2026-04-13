@@ -13,6 +13,11 @@ function buildShippingProfile(item, destinationCountry = "CA") {
   };
 }
 
+/**
+ * Auto-generate listing drafts for eligible inventory items.
+ * @param {{ itemIds?: string[], platform?: string }} [options]
+ * @returns {object[]}
+ */
 export function automateListingGeneration({
   itemIds,
   platform = "ebay",

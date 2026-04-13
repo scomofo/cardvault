@@ -1,3 +1,8 @@
+/**
+ * Build a marketplace listing description from item data.
+ * @param {object} item
+ * @returns {string}
+ */
 export function buildListingDescription(item) {
   const headline = `${item.player_name || item.name || "Card"}${item.card_set ? ` from ${item.card_set}` : ""}`;
   const details = [

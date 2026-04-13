@@ -40,6 +40,11 @@ function ensureAlert(itemId, alertType, explanation, suggestedAction) {
   return id;
 }
 
+/**
+ * Identify aging listings and generate repricing recommendations.
+ * @param {{ autoApply?: boolean }} [options]
+ * @returns {{ repriced: object[], skipped: object[] }}
+ */
 export function runAgingRepricingAutomation({ autoApply = false } = {}) {
   const items = all(
     `SELECT

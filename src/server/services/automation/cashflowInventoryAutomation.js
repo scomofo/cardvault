@@ -1,5 +1,9 @@
 import { all, get } from "../../database.js";
 
+/**
+ * Analyze inventory for cashflow optimization.
+ * @returns {{ staleItems: object[], recommendations: object[] }}
+ */
 export function runCashflowInventoryAutomation() {
   const metrics = get(
     `SELECT

@@ -1,6 +1,11 @@
 import { DECISION_TYPES } from "./decisionTypes.js";
 import { action, buildExplanation } from "./explanationBuilder.js";
 
+/**
+ * Determine if an item is ready to be listed.
+ * @param {{ item: object, prices: object }} context
+ * @returns {{ decisionType: string, recommendation: string, confidence: number, explanation: string }}
+ */
 export function listingReadinessDecision(context) {
   if (context.subjectType !== "inventory_item") return null;
 

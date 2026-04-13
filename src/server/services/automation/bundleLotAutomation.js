@@ -4,6 +4,10 @@ function bundleKey(item) {
   return item.player_name || item.team || item.card_set || "misc";
 }
 
+/**
+ * Detect items that could be bundled or lotted together.
+ * @returns {object[]}
+ */
 export function runBundleLotAutomation() {
   const candidates = all(
     `SELECT

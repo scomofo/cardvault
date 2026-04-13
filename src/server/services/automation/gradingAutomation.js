@@ -1,5 +1,10 @@
 import { all } from "../../database.js";
 
+/**
+ * Evaluate items for grading candidacy and ROI.
+ * @param {{ itemId?: string|null }} [options]
+ * @returns {object[]}
+ */
 export function runGradingAutomation({ itemId = null } = {}) {
   const items = itemId
     ? all(`SELECT * FROM user_items WHERE id = ?`, [itemId])

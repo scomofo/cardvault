@@ -1,3 +1,8 @@
+/**
+ * Map a listing record to eBay File Exchange CSV row format.
+ * @param {object} listing
+ * @returns {object}
+ */
 export function mapListingToEbayRow(listing) {
   const specifics = typeof listing.item_specifics === "string"
     ? JSON.parse(listing.item_specifics || "{}")

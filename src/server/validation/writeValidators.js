@@ -64,6 +64,7 @@ export function validateItemPayload(req, res, next) {
   ]);
 
   if (error) return sendValidationError(res, error);
+  if (!body.name && !body.card_name) return sendValidationError(res, "name required");
   next();
 }
 
@@ -103,7 +104,8 @@ export function validateSalePayload(req, res, next) {
           "payoutAmount",
         ),
       () => validateNumberLike(body.netProfit ?? body.net_profit, "netProfit"),
-    ]) || (salePrice == null || salePrice === "" ? "sale_price required" : null);
+    ]) || (salePrice == null || salePrice === "" ? "sale_price required" : null)
+    || (!body.cardId && !body.card_id ? "card_id required" : null);
 
   if (error) return sendValidationError(res, error);
   next();
@@ -133,7 +135,8 @@ export function validateListingPayload(req, res, next) {
       () =>
         validateNumberLike(body.currentBid ?? body.current_bid, "currentBid"),
       () => validateNumberLike(body.soldPrice ?? body.sold_price, "soldPrice"),
-    ]) || (!body.platform ? "platform required" : null);
+    ]) || (!body.platform ? "platform required" : null)
+    || (!body.cardId && !body.card_id ? "card_id required" : null);
 
   if (error) return sendValidationError(res, error);
   next();

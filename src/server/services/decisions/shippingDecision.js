@@ -1,6 +1,11 @@
 import { DECISION_TYPES } from "./decisionTypes.js";
 import { action } from "./explanationBuilder.js";
 
+/**
+ * Recommend shipping method and estimate costs.
+ * @param {{ item: object, prices: object }} context
+ * @returns {{ decisionType: string, recommendation: string, confidence: number, explanation: string }}
+ */
 export function shippingDecision(context) {
   if (context.subjectType !== "order" || !context.order) return null;
 

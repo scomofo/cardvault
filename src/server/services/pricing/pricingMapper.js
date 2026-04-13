@@ -3,14 +3,29 @@ function clampCents(value) {
   return Math.max(cents, 0);
 }
 
+/**
+ * Convert dollar amount to cents.
+ * @param {number} value
+ * @returns {number}
+ */
 export function dollarsToCents(value) {
   return clampCents(Number(value || 0) * 100);
 }
 
+/**
+ * Convert cents to dollar amount.
+ * @param {number} value
+ * @returns {number}
+ */
 export function centsToDollars(value) {
   return Number((Number(value || 0) / 100).toFixed(2));
 }
 
+/**
+ * Normalize a raw pricing payload into consistent format.
+ * @param {object} [input]
+ * @returns {object}
+ */
 export function normalizePricingPayload(input = {}) {
   return {
     source: input.source || "sportscardspro",
@@ -28,6 +43,11 @@ export function normalizePricingPayload(input = {}) {
   };
 }
 
+/**
+ * Derive a pricing recommendation from a snapshot.
+ * @param {object} snapshot
+ * @returns {{ strategy: string, price: number, confidence: number }}
+ */
 export function recommendationFromSnapshot(snapshot) {
   const last = snapshot.lastCompPriceCents || snapshot.marketPriceCents || 0;
   const average = snapshot.averagePriceCents || last;

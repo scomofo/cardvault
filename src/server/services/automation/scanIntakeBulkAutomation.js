@@ -2,6 +2,11 @@ import { get, run, all } from "../../database.js";
 import { uid } from "../../routes/shared.js";
 import { automateIdentificationAndPricing } from "./identificationPricingAutomation.js";
 
+/**
+ * Create a new intake batch for bulk card scanning.
+ * @param {{ source?: string, notes?: string }} [options]
+ * @returns {object} The created batch record
+ */
 export function createIntakeBatch({
   name,
   intakeMode = "quick_batch",
@@ -33,6 +38,12 @@ export function createIntakeBatch({
   return get(`SELECT * FROM intake_batches WHERE id = ?`, [batchId]);
 }
 
+/**
+ * Add a scanned item to an intake batch.
+ * @param {string} batchId
+ * @param {{ itemId: string, captureId?: string }} params
+ * @returns {object}
+ */
 export function addItemToBatch(batchId, {
   itemId,
   imageRef = null,
@@ -63,11 +74,18 @@ export function addItemToBatch(batchId, {
   return get(`SELECT * FROM intake_batch_items WHERE id = ?`, [batchItemId]);
 }
 
+/**
+ * Process a single batch item through identification, pricing, and routing.
+ * @param {string} batchItemId
+ * @param {object} [options]
+ * @returns {object} Processing result with identification and routing data
+ */
 export async function processBatchItem(batchItemId, options = {}) {
   const batchItem = get(`SELECT * FROM intake_batch_items WHERE id = ?`, [batchItemId]);
   if (!batchItem) throw new Error("Batch item not found");
 
   const item = get(`SELECT * FROM user_items WHERE id = ?`, [batchItem.inventory_item_id]);
+  if (!item) throw new Error(`User item not found for batch item ${batchItemId}`);
   const automation = await automateIdentificationAndPricing(item.id, options);
   const identifiedCard = automation.identification.finalCatalogCardId
     ? get(`SELECT * FROM catalog_cards WHERE id = ?`, [automation.identification.finalCatalogCardId])
@@ -149,6 +167,12 @@ export async function processBatchItem(batchItemId, options = {}) {
   return automation;
 }
 
+/**
+ * Finalize an intake batch and route items to inventory.
+ * @param {string} batchId
+ * @param {{ route?: string }} [options]
+ * @returns {object}
+ */
 export function finalizeIntakeBatch(batchId, { route = "inventory" } = {}) {
   const batch = get(`SELECT * FROM intake_batches WHERE id = ?`, [batchId]);
   if (!batch) throw new Error("Batch not found");

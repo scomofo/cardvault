@@ -1,6 +1,11 @@
 import { DECISION_TYPES } from "./decisionTypes.js";
 import { action, buildExplanation } from "./explanationBuilder.js";
 
+/**
+ * Evaluate pricing strategy and recommend list price.
+ * @param {{ item: object, prices: object }} context
+ * @returns {{ decisionType: string, recommendation: string, confidence: number, explanation: string }}
+ */
 export function pricingDecision(context) {
   if (context.subjectType !== "inventory_item" || !context.item) return null;
 

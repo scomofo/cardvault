@@ -1,6 +1,11 @@
 import { DECISION_TYPES } from "./decisionTypes.js";
 import { action, buildExplanation } from "./explanationBuilder.js";
 
+/**
+ * Flag exceptional items needing manual attention.
+ * @param {{ item: object, prices: object }} context
+ * @returns {{ decisionType: string, recommendation: string, confidence: number, explanation: string }}
+ */
 export function exceptionDecision(context) {
   const issues = [];
 

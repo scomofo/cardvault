@@ -1,6 +1,11 @@
 import { DECISION_TYPES } from "./decisionTypes.js";
 import { action } from "./explanationBuilder.js";
 
+/**
+ * Assess identification completeness and confidence.
+ * @param {{ item: object, prices: object }} context
+ * @returns {{ decisionType: string, recommendation: string, confidence: number, explanation: string }}
+ */
 export function identificationDecision(context) {
   if (context.subjectType !== "inventory_item" || !context.item) return null;
 

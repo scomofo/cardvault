@@ -1,6 +1,11 @@
 import { get, run } from "../../database.js";
 import { uid } from "../../routes/shared.js";
 
+/**
+ * Extract OCR text from an item.
+ * @param {{ item: object, batchItemId?: string, ocrText?: string }} params
+ * @returns {string}
+ */
 export function extractOcr({ item, batchItemId = null, ocrText = null }) {
   const derivedText =
     ocrText ||
