@@ -1,10 +1,37 @@
 import { all, get, run } from "../../database.js";
 import { uid } from "../../routes/shared.js";
 import { fetchSportsCardsProPrice } from "./sportscardspro.js";
+import { fetchEbayBrowsePrice } from "./ebayBrowsePrice.js";
 import {
   centsToDollars,
   recommendationFromSnapshot,
 } from "./pricingMapper.js";
+
+/**
+ * Pick the default pricing source. Order of preference:
+ *   1. PRICING_SOURCE env var (explicit override)
+ *   2. "sportscardspro" if credentials are configured in env
+ *   3. "ebay-browse" — real active-listing data, free, our fallback
+ *
+ * Historical note: the pipeline used to default to SportsCardsPro even
+ * without credentials, in which case the adapter returned simulated data.
+ * That meant `price_snapshots` accumulated seeded noise. We now skip that
+ * path entirely unless SportsCardsPro is actually configured.
+ */
+function defaultPricingSource() {
+  const override = process.env.PRICING_SOURCE;
+  if (override) return override;
+  if (process.env.SPORTSCARDSPRO_API_KEY && process.env.SPORTSCARDSPRO_API_BASE) {
+    return "sportscardspro";
+  }
+  return "ebay-browse";
+}
+
+async function fetchPricingBySource(source, item) {
+  if (source === "sportscardspro") return fetchSportsCardsProPrice(item);
+  if (source === "ebay-browse") return fetchEbayBrowsePrice(item);
+  throw new Error(`Unknown pricing source: ${source}`);
+}
 
 function insertSnapshot(itemId, snapshot) {
   const snapshotId = uid();
@@ -95,11 +122,17 @@ function insertSnapshot(itemId, snapshot) {
   return { snapshotId, recommendations };
 }
 
-export async function refreshPricingForItem(itemId) {
+export async function refreshPricingForItem(itemId, { source } = {}) {
   const item = get("SELECT * FROM user_items WHERE id = ?", [itemId]);
   if (!item) throw new Error("Item not found");
 
-  const snapshot = await fetchSportsCardsProPrice(item);
+  const resolvedSource = source || defaultPricingSource();
+  const snapshot = await fetchPricingBySource(resolvedSource, item);
+  if (!snapshot) {
+    // Source returned no data (e.g. eBay Browse found zero priced listings).
+    // Return the most recent existing snapshot rather than writing a null row.
+    return getPricingForItem(itemId);
+  }
   insertSnapshot(itemId, snapshot);
   return getPricingForItem(itemId);
 }

@@ -29,6 +29,9 @@ test("automation routes handle identify-price, listing generation, aging reprici
       ...process.env,
       PORT: String(port),
       CARDVAULT_DB_PATH: dbPath,
+      // Force the deterministic simulator so the automation pipeline produces
+      // stable pricing output without needing eBay credentials in CI.
+      PRICING_SOURCE: "sportscardspro",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
