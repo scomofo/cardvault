@@ -13,6 +13,7 @@ import GradeTracker from "./components/GradeTracker";
 import Watchlist from "./components/Watchlist";
 import TradeTracker from "./components/TradeTracker";
 import SalesFlow from "./components/SalesFlow";
+import DealerModeView from "./components/DealerModeView";
 import Settings from "./components/Settings";
 import "./styles/app.css";
 
@@ -27,6 +28,7 @@ const NAV = [
 
 const TOOL_TABS = [
   { v: "batch", l: "Batch" },
+  { v: "dealer", l: "Dealer" },
   { v: "sets", l: "Sets" },
   { v: "grade", l: "Grading" },
   { v: "watch", l: "Watch" },
@@ -47,6 +49,7 @@ function ToolsView() {
         ))}
       </div>
       {tab === "batch" && <BatchView />}
+      {tab === "dealer" && <DealerModeView />}
       {tab === "sets" && <SetsView />}
       {tab === "grade" && <GradeTracker />}
       {tab === "watch" && <Watchlist />}
