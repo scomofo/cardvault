@@ -1,14 +1,16 @@
+import BatchCaptureMode from "./BatchCaptureMode";
+import BatchProcessView from "./BatchProcessView";
 import ScanCaptureStep from "./scan/ScanCaptureStep";
 import ScanDetailsStep from "./scan/ScanDetailsStep";
 import ScanIdentifyStep from "./scan/ScanIdentifyStep";
 import ScanListingStep from "./scan/ScanListingStep";
 import ScanStepper from "./scan/ScanStepper";
+import { PLATFORM_FEES } from "./SalesFlow";
 import { useScanWorkflow } from "../hooks/useScanWorkflow";
 
 export default function ScanView({ onNavigate }) {
   const { actions, state } = useScanWorkflow();
-  const { setCard, setListing, setShowCvOverlay, setShowGrading, setStep } =
-    actions;
+  const { setCard, setListing, setShowCvOverlay, setShowGrading, setStep } = actions;
   const {
     backImg,
     card,
@@ -30,13 +32,51 @@ export default function ScanView({ onNavigate }) {
     status,
     step,
     visualSearching,
+    batchMode,
+    batchQueue,
+    batchProcessing,
+    batchProcessedCount,
   } = state;
 
   const steps = ["Capture", "Identify", "Details", "List"];
 
+  if (batchMode === "capture") {
+    return (
+      <>
+        <h1 className="page-title">Scan Card</h1>
+        <BatchCaptureMode
+          queue={batchQueue}
+          onAddToQueue={actions.addToBatchQueue}
+          onDone={() => { actions.setBatchMode("process"); actions.processBatchQueue(); }}
+          onCancel={() => { actions.setBatchMode(null); }}
+        />
+      </>
+    );
+  }
+
+  if (batchMode === "process") {
+    return (
+      <>
+        <h1 className="page-title">Scan Card</h1>
+        <BatchProcessView
+          queue={batchQueue}
+          processing={batchProcessing}
+          processedCount={batchProcessedCount}
+          onSaveAll={actions.saveBatchCards}
+          onRetry={(id) => { actions.retryBatchItem(id); actions.processBatchQueue(); }}
+          onRemove={actions.removeBatchItem}
+          onCancel={() => { actions.setBatchMode(null); }}
+        />
+      </>
+    );
+  }
+
   return (
     <>
       <h1 className="page-title">Scan Card</h1>
+      <button className="btn btn-outline btn-full mb-12" onClick={() => actions.setBatchMode("capture")}>
+        Batch Capture Mode
+      </button>
       <ScanStepper step={step} steps={steps} onStepChange={setStep} />
 
       {step === 0 && (
@@ -122,6 +162,9 @@ export default function ScanView({ onNavigate }) {
             actions.reset();
           }}
           saving={saving}
+          costBasis={parseFloat(card.costBasis) || 0}
+          feeRate={PLATFORM_FEES[listing.platform] || 0}
+          comps={results}
         />
       )}
     </>

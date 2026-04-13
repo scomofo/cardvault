@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { dashboardAPI } from "../lib/api";
+import { dashboardAPI, automationAPI } from "../lib/api";
 import { fmtShort } from "../lib/utils";
-import { Skeleton } from "./Icons";
+import { Skeleton, Spinner, IconZap } from "./Icons";
 
 function MiniList({ title, rows, formatter = (value) => value }) {
   return (
@@ -24,6 +24,20 @@ function MiniList({ title, rows, formatter = (value) => value }) {
 export default function DashboardView() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [autoRunning, setAutoRunning] = useState({});
+  const [autoResults, setAutoResults] = useState({});
+
+  const runAutomation = async (key, fn) => {
+    setAutoRunning((p) => ({ ...p, [key]: true }));
+    try {
+      const result = await fn();
+      setAutoResults((p) => ({ ...p, [key]: result }));
+    } catch (e) {
+      setAutoResults((p) => ({ ...p, [key]: { error: e.message } }));
+    } finally {
+      setAutoRunning((p) => ({ ...p, [key]: false }));
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -124,6 +138,48 @@ export default function DashboardView() {
       <div className="form-grid">
         <MiniList title="Fastest Selling" rows={performance.fastestSellingInventory} formatter={(value) => `${value}d`} />
         <MiniList title="Highest ROI Acquisitions" rows={performance.highestRoiAcquisitions} formatter={(value) => `${Number(value || 0).toFixed(1)}%`} />
+      </div>
+
+
+      <div className="card mb-12">
+        <div className="flex justify-between items-center">
+          <div className="lbl" style={{ margin: 0 }}>Automation</div>
+          <IconZap size={16} style={{ color: "var(--acc)" }} />
+        </div>
+        <div className="text-xxs text-dim mt-4 mb-8">Run backend automation workflows on your inventory</div>
+        <div className="form-grid">
+          {[
+            { key: "repricing", label: "Aging Repricing", desc: "Reprice stale inventory", fn: () => automationAPI.agingRepricing({}) },
+            { key: "duplicates", label: "Find Duplicates", desc: "Detect duplicate cards", fn: () => automationAPI.duplicates() },
+            { key: "listings", label: "Generate Listings", desc: "Auto-create listing drafts", fn: () => automationAPI.generateListings({}) },
+            { key: "trends", label: "Market Trends", desc: "Analyze price trends", fn: () => automationAPI.marketTrends() },
+            { key: "bundles", label: "Bundle Suggestions", desc: "Group items into lots", fn: () => automationAPI.bundles() },
+            { key: "grading", label: "Grading ROI", desc: "Find grading candidates", fn: () => automationAPI.grading() },
+            { key: "cashflow", label: "Cashflow Analysis", desc: "Inventory turnover & ROI", fn: () => automationAPI.cashflow() },
+          ].map(({ key, label, desc, fn }) => (
+            <button
+              key={key}
+              className="card-interactive"
+              style={{ padding: "10px 14px", textAlign: "left", border: "1px solid var(--brd)", cursor: "pointer" }}
+              onClick={() => runAutomation(key, fn)}
+              disabled={autoRunning[key]}
+            >
+              <div className="flex items-center gap-6">
+                {autoRunning[key] ? <Spinner size={12} /> : <IconZap size={12} />}
+                <span className="text-xs fw-700">{label}</span>
+              </div>
+              <div className="text-xxs text-dim mt-4">{desc}</div>
+              {autoResults[key] && !autoResults[key].error && (
+                <div className="text-xxs mt-4" style={{ color: "var(--grn)" }}>
+                  {autoResults[key].summary || autoResults[key].message || (Array.isArray(autoResults[key]) ? autoResults[key].length + " results" : "Done")}
+                </div>
+              )}
+              {autoResults[key]?.error && (
+                <div className="text-xxs mt-4" style={{ color: "var(--red)" }}>{autoResults[key].error}</div>
+              )}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="form-grid mt-12">

@@ -1,4 +1,6 @@
 import { IconCopy } from "../Icons";
+import ProfitWarning from "../ProfitWarning";
+import SoldComps from "../SoldComps";
 import { PLATFORMS, SHIP_CA } from "../../lib/constants";
 
 export default function ScanListingStep({
@@ -9,6 +11,9 @@ export default function ScanListingStep({
   onSaveAndList,
   onSaveOnly,
   saving,
+  costBasis = 0,
+  feeRate = 0,
+  comps = [],
 }) {
   return (
     <section className="slide-up">
@@ -64,6 +69,8 @@ export default function ScanListingStep({
             />
           </label>
         </div>
+        <SoldComps comps={comps} />
+        <ProfitWarning price={parseFloat(listing.price)} costBasis={costBasis} feeRate={feeRate} shipping={parseFloat(listing.shipping) || 0} />
 
         <label className="fld mb-10">
           <span className="lbl">Description</span>

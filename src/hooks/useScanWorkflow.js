@@ -3,6 +3,7 @@ import { useToast } from "../components/Toast";
 import { useData } from "../lib/DataContext";
 import { EMPTY_CARD, EMPTY_LISTING } from "../lib/constants";
 import { aiPrice, aiRecognize, aiVisualSearch } from "../lib/ai";
+import { identificationAPI, automationAPI } from "../lib/api";
 import { analyzeCentering, checkCvHealth } from "../lib/cvApi";
 import { saveImage } from "../lib/storage";
 import { condOf, fmtShort, uid } from "../lib/utils";
@@ -76,6 +77,10 @@ export function useScanWorkflow() {
   const { setCatalog, setListings } = useData();
 
   const [step, setStep] = useState(0);
+  const [batchMode, setBatchMode] = useState(null); // null | "capture" | "process"
+  const [batchQueue, setBatchQueue] = useState([]);
+  const [batchProcessing, setBatchProcessing] = useState(false);
+  const [batchProcessedCount, setBatchProcessedCount] = useState(0);
   const [frontImg, setFrontImg] = useState(null);
   const [backImg, setBackImg] = useState(null);
   const [card, setCard] = useState({ ...EMPTY_CARD });
@@ -95,6 +100,7 @@ export function useScanWorkflow() {
   const [cvResult, setCvResult] = useState(null);
   const [showCvOverlay, setShowCvOverlay] = useState(true);
   const [visualSearching, setVisualSearching] = useState(false);
+  const [identificationResult, setIdentificationResult] = useState(null);
 
   useEffect(() => {
     checkCvHealth().then(setCvOnline);
@@ -243,6 +249,27 @@ export function useScanWorkflow() {
 
       setCatalog((previous) => [entry, ...previous]);
       toast.success(`Saved: ${card.name || "Card"}`);
+
+      // Run server-side identification + learning after sync (fire-and-forget)
+      setTimeout(async () => {
+        try {
+          const idResult = await identificationAPI.identify({ itemId: id });
+          if (idResult?.result?.id) {
+            setIdentificationResult(idResult.result);
+            // Auto-confirm if high confidence match
+            if (idResult.result.confidence >= 0.8) {
+              await identificationAPI.confirm({
+                itemId: id,
+                identificationResultId: idResult.result.id,
+                acceptedBy: "auto",
+              });
+            }
+          }
+        } catch {
+          // Identification is non-critical — don't block the save flow
+        }
+      }, 800);
+
       return entry;
     } finally {
       setSaving(false);
@@ -265,6 +292,7 @@ export function useScanWorkflow() {
     setCvResult(null);
     setCvAnalyzing(false);
     setVisualSearching(false);
+    setIdentificationResult(null);
   }
 
   async function copyListing() {
@@ -321,6 +349,74 @@ export function useScanWorkflow() {
     reset();
   }
 
+
+  function addToBatchQueue({ front, back }) {
+    setBatchQueue((prev) => [...prev, { id: crypto.randomUUID(), front, back, status: "captured", result: null, error: null }]);
+  }
+
+  async function processBatchQueue() {
+    setBatchProcessing(true);
+    setBatchProcessedCount(0);
+    const currentQueue = [...batchQueue];
+    for (let i = 0; i < currentQueue.length; i++) {
+      const item = currentQueue[i];
+      setBatchQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: "processing" } : q));
+      try {
+        const { aiVisualSearch } = await import("../lib/ai");
+        const response = await aiVisualSearch(item.front);
+        if (response && response.name) {
+          const confidence = response.confidence === "high" ? 0.9 : response.confidence === "medium" ? 0.7 : 0.4;
+          const result = {
+            name: response.name, set: response.set || "", number: response.number || "",
+            year: response.year || "", rarity: response.rarity || "",
+            priceEstimate: response.priceEstimate || { low: 0, mid: 0, high: 0 },
+            priceHistory: response.priceHistory || [],
+            confidence, type: response.type || "sports",
+          };
+          const status = confidence >= 0.7 ? "done" : "review";
+          setBatchQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status, result } : q));
+        } else {
+          setBatchQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: "failed", error: "Could not identify" } : q));
+        }
+      } catch (e) {
+        setBatchQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: "failed", error: e.message } : q));
+      }
+      setBatchProcessedCount(i + 1);
+    }
+    setBatchProcessing(false);
+  }
+
+  async function saveBatchCards() {
+    const saveable = batchQueue.filter((q) => q.status === "done" || q.status === "approved");
+    const entries = [];
+    for (const item of saveable) {
+      const { storeImage } = await import("../lib/storage");
+      const frontImgId = await storeImage(item.front);
+      const backImgId = item.back ? await storeImage(item.back) : null;
+      entries.push({
+        id: crypto.randomUUID(),
+        name: item.result.name, set: item.result.set, number: item.result.number,
+        year: item.result.year, rarity: item.result.rarity, condition: "NM",
+        binder: "", type: item.result.type || "sports", status: "inventory",
+        costBasis: 0, frontImgId, backImgId,
+        priceEstimate: item.result.priceEstimate, priceHistory: item.result.priceHistory,
+        listedOn: [], createdAt: new Date().toISOString(),
+      });
+    }
+    setCatalog((prev) => [...entries, ...prev]);
+    toast.success(entries.length + " cards saved to collection");
+    setBatchQueue([]);
+    setBatchMode(null);
+    setBatchProcessedCount(0);
+  }
+
+  function retryBatchItem(id) {
+    setBatchQueue((prev) => prev.map((q) => q.id === id ? { ...q, status: "captured", result: null, error: null } : q));
+  }
+
+  function removeBatchItem(id) {
+    setBatchQueue((prev) => prev.filter((q) => q.id !== id));
+  }
   return {
     actions: {
       copyListing,
@@ -330,6 +426,12 @@ export function useScanWorkflow() {
       doVisualSearch,
       prepareListing,
       reset,
+      setBatchMode,
+      addToBatchQueue,
+      processBatchQueue,
+      saveBatchCards,
+      retryBatchItem,
+      removeBatchItem,
       saveAndList,
       saveCard,
       setBackImg,
@@ -341,6 +443,18 @@ export function useScanWorkflow() {
       setShowCvOverlay,
       setShowGrading,
       setStep,
+      confirmIdentification: async (itemId, resultId) => {
+        try {
+          await identificationAPI.confirm({ itemId, identificationResultId: resultId, acceptedBy: "user" });
+          toast.success("Identification confirmed for learning");
+        } catch { /* non-critical */ }
+      },
+      correctIdentification: async (resultId, correctedCardId, reason) => {
+        try {
+          await identificationAPI.correct({ identificationResultId: resultId, correctedCatalogCardId: correctedCardId, reason });
+          toast.success("Correction recorded for learning");
+        } catch { /* non-critical */ }
+      },
     },
     state: {
       backImg,
@@ -363,6 +477,11 @@ export function useScanWorkflow() {
       status,
       step,
       visualSearching,
+      identificationResult,
+      batchMode,
+      batchQueue,
+      batchProcessing,
+      batchProcessedCount,
     },
   };
 }

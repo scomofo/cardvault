@@ -2,8 +2,9 @@ import { useMemo, useRef, useState, useEffect } from "react";
 import { useToast } from "./Toast";
 import { useData } from "../lib/DataContext";
 import { fmtShort } from "../lib/utils";
+import { marketplacesAPI } from "../lib/api";
 import { genSalesCSV } from "../lib/exports";
-import { IconDownload, IconUpload, IconTrash, IconBarChart, IconCheck, IconEye, IconZap } from "./Icons";
+import { IconDownload, IconUpload, IconTrash, IconBarChart, IconCheck, IconEye, IconZap, IconPlus, Spinner } from "./Icons";
 
 function ApiKeySection() {
   const toast = useToast();
@@ -87,6 +88,210 @@ function ApiKeySection() {
   );
 }
 
+
+
+function EbayConnectionSection() {
+  const toast = useToast();
+  const [status, setStatus] = useState({ configured: false, connected: false, sandbox: true });
+  const [creds, setCreds] = useState({ appId: "", certId: "", devId: "", sandbox: true });
+  const [showSetup, setShowSetup] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/ebay/status").then((r) => r.json()).then(setStatus).catch(() => {});
+  }, []);
+
+  const saveCreds = async () => {
+    if (!creds.appId || !creds.certId) { toast.error("App ID and Cert ID required"); return; }
+    setSaving(true);
+    try {
+      const r = await fetch("/api/ebay/credentials", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          appId: creds.appId, certId: creds.certId, devId: creds.devId,
+          sandbox: creds.sandbox, redirectUri: "http://localhost:3000/api/ebay/callback",
+        }),
+      });
+      if (r.ok) {
+        setStatus((p) => ({ ...p, configured: true, sandbox: creds.sandbox }));
+        setShowSetup(false);
+        toast.success("eBay credentials saved");
+      } else toast.error("Failed to save credentials");
+    } catch { toast.error("Server not reachable"); }
+    setSaving(false);
+  };
+
+  const authorize = () => { window.location.href = "/api/ebay/auth"; };
+
+  const disconnect = async () => {
+    if (!window.confirm("Disconnect eBay?")) return;
+    await fetch("/api/ebay/disconnect", { method: "POST" }).catch(() => {});
+    setStatus({ configured: true, connected: false, sandbox: status.sandbox });
+    toast.info("eBay disconnected");
+  };
+
+  return (
+    <div className="card mb-12" style={{ borderColor: status.connected ? "var(--grn-brd)" : status.configured ? "var(--acc-brd)" : undefined }}>
+      <div className="flex items-center gap-8 mb-8">
+        <IconBarChart size={16} style={{ color: status.connected ? "var(--grn)" : "var(--acc-solid)" }} />
+        <div className="lbl" style={{ margin: 0 }}>eBay Connection</div>
+        {status.connected && <span className="badge badge-grn"><IconCheck size={10} /> Connected</span>}
+        {status.sandbox && <span className="badge badge-dim">Sandbox</span>}
+      </div>
+
+      {status.connected ? (
+        <div>
+          <div className="text-xs text-dim mb-8">eBay authorized. Listings will publish directly.</div>
+          <div className="flex gap-8">
+            <button className="btn btn-ghost btn-sm" style={{ color: "var(--red)" }} onClick={disconnect}>Disconnect</button>
+          </div>
+        </div>
+      ) : status.configured ? (
+        <div>
+          <div className="text-xs text-dim mb-8">Credentials saved. Authorize to connect.</div>
+          <button className="btn btn-primary btn-sm" onClick={authorize}>Authorize with eBay</button>
+        </div>
+      ) : (
+        <div>
+          <div className="text-xs text-dim mb-8">
+            Connect your eBay developer account to publish listings directly.
+          </div>
+          <button className="btn btn-outline btn-sm" onClick={() => setShowSetup(!showSetup)}>
+            <IconPlus size={12} /> Set Up eBay
+          </button>
+        </div>
+      )}
+
+      {showSetup && (
+        <div className="fade mt-10" style={{ padding: 12, background: "var(--acc-bg)", borderRadius: "var(--radius)", border: "1px solid var(--acc-brd)" }}>
+          <div className="text-xxs text-dim mb-8">Register at developer.ebay.com, create an app, and enter your credentials below.</div>
+          <div className="form-grid mt-4">
+            <label className="fld">
+              <span className="text-xxs text-dim">App ID (Client ID)</span>
+              <input className="inp" value={creds.appId} onChange={(e) => setCreds((p) => ({ ...p, appId: e.target.value }))} placeholder="Your-App-ID" />
+            </label>
+            <label className="fld">
+              <span className="text-xxs text-dim">Cert ID (Client Secret)</span>
+              <input className="inp" type="password" value={creds.certId} onChange={(e) => setCreds((p) => ({ ...p, certId: e.target.value }))} placeholder="Your-Cert-ID" />
+            </label>
+            <label className="fld">
+              <span className="text-xxs text-dim">Dev ID (optional)</span>
+              <input className="inp" value={creds.devId} onChange={(e) => setCreds((p) => ({ ...p, devId: e.target.value }))} placeholder="Your-Dev-ID" />
+            </label>
+          </div>
+          <label className="flex items-center gap-8 mt-8" style={{ cursor: "pointer" }}>
+            <input type="checkbox" checked={creds.sandbox} onChange={(e) => setCreds((p) => ({ ...p, sandbox: e.target.checked }))} />
+            <span className="text-xs">Sandbox mode (test environment)</span>
+          </label>
+          <div className="flex gap-8 mt-8">
+            <button className="btn btn-primary btn-sm" onClick={saveCreds} disabled={saving}>
+              {saving ? <Spinner size={12} /> : <IconCheck size={12} />} Save Credentials
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setShowSetup(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+function MarketplaceConnectionsSection() {
+  const toast = useToast();
+  const [connections, setConnections] = useState([]);
+  const [marketplaces, setMarketplaces] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showAdd, setShowAdd] = useState(false);
+  const [newConn, setNewConn] = useState({ marketplace: "ebay", apiKey: "", shopName: "" });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    Promise.all([
+      marketplacesAPI.list().catch(() => []),
+      marketplacesAPI.connections().catch(() => []),
+    ]).then(([mp, conn]) => {
+      setMarketplaces(Array.isArray(mp) ? mp : []);
+      setConnections(Array.isArray(conn) ? conn : []);
+      setLoading(false);
+    });
+  }, []);
+
+  const saveConnection = async () => {
+    if (!newConn.marketplace) return;
+    setSaving(true);
+    try {
+      const result = await marketplacesAPI.connect(newConn);
+      setConnections((p) => [...p, result]);
+      setShowAdd(false);
+      setNewConn({ marketplace: "ebay", apiKey: "", shopName: "" });
+      toast.success("Marketplace connected");
+    } catch (e) {
+      toast.error(e.message || "Failed to connect");
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div className="card mb-12">
+      <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center gap-8">
+          <IconBarChart size={16} style={{ color: "var(--acc)" }} />
+          <div className="lbl" style={{ margin: 0 }}>Marketplace Connections</div>
+        </div>
+        <button className="btn btn-ghost btn-sm" onClick={() => setShowAdd(!showAdd)}>
+          <IconPlus size={12} /> Add
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="text-xs text-dim">Loading...</div>
+      ) : connections.length === 0 ? (
+        <div className="text-xs text-dim">No marketplace connections. Add one to enable publishing.</div>
+      ) : (
+        connections.map((conn, i) => (
+          <div key={conn.id || i} className="flex justify-between items-center mt-6" style={{ padding: "8px 12px", background: "var(--s3)", borderRadius: "var(--radius)" }}>
+            <div>
+              <span className="text-xs fw-700" style={{ textTransform: "capitalize" }}>{conn.marketplace}</span>
+              {conn.shop_name && <span className="text-xxs text-dim ml-8">{conn.shop_name}</span>}
+            </div>
+            <span className="badge badge-grn"><IconCheck size={10} /> Connected</span>
+          </div>
+        ))
+      )}
+
+      {showAdd && (
+        <div className="fade mt-10" style={{ padding: 12, background: "var(--acc-bg)", borderRadius: "var(--radius)", border: "1px solid var(--acc-brd)" }}>
+          <div className="form-grid mt-4">
+            <label className="fld">
+              <span className="text-xxs text-dim">Marketplace</span>
+              <select className="inp" value={newConn.marketplace} onChange={(e) => setNewConn((p) => ({ ...p, marketplace: e.target.value }))}>
+                {(marketplaces.length > 0 ? marketplaces : ["ebay", "comc", "shopify"]).map((mp) => (
+                  <option key={typeof mp === "string" ? mp : mp.name} value={typeof mp === "string" ? mp : mp.name}>
+                    {(typeof mp === "string" ? mp : mp.name).toUpperCase()}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="fld">
+              <span className="text-xxs text-dim">API Key / Token</span>
+              <input className="inp" type="password" placeholder="API key or token" value={newConn.apiKey} onChange={(e) => setNewConn((p) => ({ ...p, apiKey: e.target.value }))} />
+            </label>
+            <label className="fld">
+              <span className="text-xxs text-dim">Shop Name (Shopify only)</span>
+              <input className="inp" placeholder="my-store" value={newConn.shopName} onChange={(e) => setNewConn((p) => ({ ...p, shopName: e.target.value }))} />
+            </label>
+          </div>
+          <div className="flex gap-8 mt-8">
+            <button className="btn btn-primary btn-sm" onClick={saveConnection} disabled={saving}>
+              {saving ? <Spinner size={12} /> : <IconCheck size={12} />} Connect
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setShowAdd(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Settings() {
   const {
     catalog, setCatalog, sales, setSales, trades, setTrades,
@@ -161,6 +366,9 @@ export default function Settings() {
       <h1 className="page-title">Settings</h1>
 
       <ApiKeySection />
+      <EbayConnectionSection />
+
+      <MarketplaceConnectionsSection />
 
       <div className="card mb-12">
         <div className="lbl">User Profile</div>

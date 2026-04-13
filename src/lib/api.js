@@ -89,6 +89,21 @@ export const automationAPI = {
   automateShipment: (orderId, data) =>
     request(`/automation/shipping/${orderId}`, { method: "POST", body: data }),
   actionQueue: () => request("/automation/action-queue"),
+  duplicates: (params) => request(`/automation/duplicates${toQuery(params)}`),
+  marketTrends: () => request("/automation/market-trends", { method: "POST" }),
+  acquisitionDecision: (data) =>
+    request("/automation/acquisition-decision", { method: "POST", body: data }),
+  bundles: () => request("/automation/bundles"),
+  grading: (params) => request(`/automation/grading${toQuery(params)}`),
+  cashflow: () => request("/automation/cashflow"),
+  createIntakeBatch: (data) =>
+    request("/automation/intake/batches", { method: "POST", body: data }),
+  addItemToBatch: (batchId, data) =>
+    request(`/automation/intake/batches/${batchId}/items`, { method: "POST", body: data }),
+  processBatchItem: (batchItemId, data) =>
+    request(`/automation/intake/batch-items/${batchItemId}/process`, { method: "POST", body: data }),
+  finalizeIntakeBatch: (batchId, data) =>
+    request(`/automation/intake/batches/${batchId}/finalize`, { method: "POST", body: data }),
 };
 
 export const marketplacesAPI = {
