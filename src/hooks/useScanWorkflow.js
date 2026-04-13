@@ -339,6 +339,14 @@ export function useScanWorkflow() {
           const idResult = await identificationAPI.identify({ itemId: id, visualSearchResult });
           if (idResult?.result?.id) {
             setIdentificationResult(idResult.result);
+            const verification = idResult.result.finalCatalogCard?.ebayVerification;
+            if (verification) {
+              if (verification.hits === 0) {
+                toast.error(`eBay verifier: no matches for this card — review before listing`);
+              } else if (verification.hits >= 3) {
+                toast.success(`eBay verifier: ${verification.hits} matches confirm identification`);
+              }
+            }
             // Auto-confirm if high confidence match
             if (idResult.result.confidence >= 0.8) {
               await identificationAPI.confirm({

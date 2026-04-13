@@ -14,6 +14,7 @@ import {
   migrateAPI,
 } from "./api";
 import { loadInitialData } from "./bootstrap/loadInitialData";
+import { backfillFrontImgPhashes } from "./phashBackfill";
 import {
   createCollectionSetter,
   createSyncEngine,
@@ -221,6 +222,13 @@ export function DataProvider({ children }) {
       syncEngineRef.current.clearTimers();
     };
   }, []);
+
+  useEffect(() => {
+    if (loading) return;
+    backfillFrontImgPhashes(catalog, setCatalog);
+    // Run once after initial load; subsequent catalog changes don't retrigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   const value = {
     catalog,
