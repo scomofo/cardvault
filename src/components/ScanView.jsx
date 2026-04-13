@@ -87,9 +87,9 @@ export default function ScanView({ onNavigate }) {
           cvOnline={cvOnline}
           frontImg={frontImg}
           onAnalyzeCv={actions.doCvAnalyze}
-          onBackCapture={actions.setBackImg}
+          onBackCapture={actions.captureBackImg}
           onBackRetake={() => actions.setBackImg(null)}
-          onFrontCapture={actions.setFrontImg}
+          onFrontCapture={actions.captureFrontImg}
           onFrontRetake={() => actions.setFrontImg(null)}
           onNext={() => setStep(1)}
           onRecognize={async () => {

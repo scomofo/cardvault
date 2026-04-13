@@ -7,11 +7,11 @@ import { mineHardCases } from "../services/identificationLearning/hardCaseMiner.
 import { findSimilarExamples, updateSimilarityIndexForItem } from "../services/identificationLearning/similarityIndex.js";
 
 export function registerIdentificationRoutes(app) {
-  app.post("/api/identification/identify", requireJsonBody, (req, res) => {
+  app.post("/api/identification/identify", requireJsonBody, async (req, res) => {
     try {
-      const { itemId, batchItemId, ocrText } = req.body;
+      const { itemId, batchItemId, ocrText, visualSearchResult } = req.body;
       if (!itemId) return res.status(400).json({ error: "itemId required" });
-      res.json(identifyCard({ itemId, batchItemId, ocrText }));
+      res.json(await identifyCard({ itemId, batchItemId, ocrText, visualSearchResult }));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

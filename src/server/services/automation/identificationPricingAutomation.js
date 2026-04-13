@@ -21,11 +21,14 @@ function getDuplicateCount(item) {
  * @param {{ pricingStrategy?: string }} [options]
  * @returns {Promise<{ identification: object, pricing: object }>}
  */
-export async function automateIdentificationAndPricing(itemId, { pricingStrategy = "market" } = {}) {
+export async function automateIdentificationAndPricing(
+  itemId,
+  { pricingStrategy = "market", visualSearchResult = null } = {},
+) {
   const item = get(`SELECT * FROM user_items WHERE id = ?`, [itemId]);
   if (!item) throw new Error("Item not found");
 
-  const identification = identifyCard({ itemId });
+  const identification = await identifyCard({ itemId, visualSearchResult });
   const matchConfidence = Number(identification.result.confidence || 0);
   const duplicateCount = getDuplicateCount(item);
   const topCandidate = identification.result.finalCatalogCard;

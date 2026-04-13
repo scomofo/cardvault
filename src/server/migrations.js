@@ -86,6 +86,10 @@ export function runMigrations(db) {
   addColumnIfMissing("shipments", "status", "TEXT DEFAULT 'pending'");
   addColumnIfMissing("shipments", "provider", "TEXT");
 
+  // Identification feedback payload (serialized clues + candidate snapshot)
+  // used to retrain similarity weights from confirmations and corrections.
+  addColumnIfMissing("identification_feedback", "payload_json", "TEXT");
+
   // CV scans audit log
   db.exec(`
     CREATE TABLE IF NOT EXISTS cv_scans (

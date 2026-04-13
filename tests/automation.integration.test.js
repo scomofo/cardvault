@@ -65,7 +65,19 @@ test("automation routes handle identify-price, listing generation, aging reprici
   const identifyResponse = await fetch(`${baseUrl}/api/automation/identify-price/auto-item`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ pricingStrategy: "market" }),
+    body: JSON.stringify({
+      pricingStrategy: "market",
+      visualSearchResult: {
+        name: "Sidney Crosby",
+        set: "Upper Deck",
+        year: "2024",
+        number: "87",
+        rarity: "base",
+        parallel: "",
+        type: "sports",
+        confidence: "high",
+      },
+    }),
   });
   assert.equal(identifyResponse.status, 200);
   const identifyPayload = await identifyResponse.json();

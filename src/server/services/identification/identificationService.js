@@ -1,61 +1,40 @@
-import { get, run, all } from "../../database.js";
+import { get, run } from "../../database.js";
 import { uid } from "../../routes/shared.js";
 import { extractOcr } from "./ocrExtractor.js";
 import { parseClues } from "./clueParser.js";
 import { generateCandidates } from "./candidateGenerator.js";
+import { generateExternalCandidates } from "./externalCandidateGenerator.js";
 import { rankCandidates } from "./candidateRanker.js";
 import { scoreConfidence } from "./confidenceScorer.js";
 import { routeReview } from "./reviewRouter.js";
-
-function seedCatalogCards() {
-  const existing = get(`SELECT COUNT(*) AS count FROM catalog_cards`);
-  if (existing?.count > 0) return;
-
-  const items = all(
-    `SELECT DISTINCT
-       COALESCE(player_name, name) AS player_name,
-       manufacturer,
-       card_set,
-       year,
-       card_number,
-       parallel,
-       team
-     FROM user_items
-     WHERE COALESCE(player_name, name) IS NOT NULL AND card_set IS NOT NULL`,
-  );
-
-  for (const item of items) {
-    run(
-      `INSERT INTO catalog_cards
-       (player_name, manufacturer_name, set_name, year, card_number, parallel_name, team_name,
-        normalized_player_name, normalized_set_name, normalized_parallel_name, external_reference_key, source_confidence)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [
-        item.player_name,
-        item.manufacturer,
-        item.card_set,
-        item.year,
-        item.card_number,
-        item.parallel,
-        item.team,
-        String(item.player_name || "").toLowerCase(),
-        String(item.card_set || "").toLowerCase(),
-        String(item.parallel || "").toLowerCase(),
-        `${item.year || ""}-${item.card_set || ""}-${item.card_number || ""}`,
-        0.7,
-      ],
-    );
-  }
-}
+import { isEbayVerifierEnabled, verifyCandidateAgainstEbay } from "../metadata/ebayVerifier.js";
 
 /**
- * Identify a card using OCR text, candidate matching, and confidence scoring.
- * @param {{ itemId: string, batchItemId?: string, ocrText?: string }} params
- * @returns {{ result: object, candidateCount: number, confidence: number }}
+ * Identify a card using OCR text, external visual search, and confidence
+ * scoring.
+ *
+ * When the caller supplies `visualSearchResult` (the payload returned by the
+ * client-side aiVisualSearch flow), candidates are built from that external
+ * data rather than matched against the local catalog. The catalog is no
+ * longer seeded from user_items — it is intended to record cards the user
+ * actually owns, which happens when an identification is confirmed.
+ *
+ * The local catalog path is kept as a backward-compatibility fallback for
+ * callers that have not been updated to pass a visual search result yet.
+ *
+ * @param {{
+ *   itemId: string,
+ *   batchItemId?: string|null,
+ *   ocrText?: string|null,
+ *   visualSearchResult?: object|null,
+ * }} params
  */
-export function identifyCard({ itemId, batchItemId = null, ocrText = null } = {}) {
-  seedCatalogCards();
-
+export async function identifyCard({
+  itemId,
+  batchItemId = null,
+  ocrText = null,
+  visualSearchResult = null,
+} = {}) {
   const item = get(`SELECT * FROM user_items WHERE id = ?`, [itemId]);
   if (!item) throw new Error("Item not found");
 
@@ -63,7 +42,19 @@ export function identifyCard({ itemId, batchItemId = null, ocrText = null } = {}
   const clues = parseClues(ocr.ocrText, item);
   run(`UPDATE ocr_results SET parsed_json = ? WHERE id = ?`, [JSON.stringify(clues), ocr.id]);
 
-  const generated = generateCandidates(clues);
+  const generated = visualSearchResult
+    ? generateExternalCandidates(clues, visualSearchResult)
+    : generateCandidates(clues);
+
+  if (visualSearchResult && isEbayVerifierEnabled() && generated[0]) {
+    const verification = await verifyCandidateAgainstEbay(generated[0].card);
+    if (verification) {
+      generated[0].card.ebayVerification = verification;
+      const next = Math.max(0, Math.min(generated[0].score + verification.adjustment, 0.99));
+      generated[0].score = next;
+    }
+  }
+
   const ranked = rankCandidates(generated);
   const confidence = scoreConfidence(ranked, clues, item);
   const review = routeReview(confidence, item);
@@ -77,7 +68,7 @@ export function identifyCard({ itemId, batchItemId = null, ocrText = null } = {}
         uid(),
         item.id,
         batchItemId,
-        candidate.card.id,
+        candidate.card.id || null,
         candidate.rank,
         candidate.score,
         candidate.explanation,

@@ -5,14 +5,30 @@ import { EMPTY_CARD, EMPTY_LISTING } from "../lib/constants";
 import { aiPrice, aiRecognize, aiVisualSearch } from "../lib/ai";
 import { identificationAPI, automationAPI } from "../lib/api";
 import { analyzeCentering, checkCvHealth } from "../lib/cvApi";
+import { computeDHash, hammingDistance } from "../lib/phash";
 import { saveImage } from "../lib/storage";
 import { condOf, fmtShort, uid } from "../lib/utils";
+
+const DUPLICATE_HAMMING_THRESHOLD = 10;
+
+const MIN_CAPTURE_SHORT_EDGE = 600;
+const CV_DETECTION_THRESHOLD = 0.6;
+
+function readImageDimensions(dataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    img.onerror = () => resolve({ width: 0, height: 0 });
+    img.src = dataUrl;
+  });
+}
 
 function buildSavedCard({
   id,
   card,
   frontImgId,
   backImgId,
+  frontImgPhash,
   gradingData,
   cvResult,
   priceEst,
@@ -24,6 +40,7 @@ function buildSavedCard({
     costBasis: parseFloat(card.costBasis) || 0,
     frontImgId,
     backImgId,
+    frontImgPhash: frontImgPhash || null,
     priceEstimate: priceEst,
     priceHistory,
     binder: card.binder || "",
@@ -74,7 +91,7 @@ function buildListingRecord({ card, entry, listing }) {
 
 export function useScanWorkflow() {
   const toast = useToast();
-  const { setCatalog, setListings } = useData();
+  const { catalog, setCatalog, setListings } = useData();
 
   const [step, setStep] = useState(0);
   const [batchMode, setBatchMode] = useState(null); // null | "capture" | "process"
@@ -100,11 +117,64 @@ export function useScanWorkflow() {
   const [cvResult, setCvResult] = useState(null);
   const [showCvOverlay, setShowCvOverlay] = useState(true);
   const [visualSearching, setVisualSearching] = useState(false);
+  const [visualSearchResult, setVisualSearchResult] = useState(null);
   const [identificationResult, setIdentificationResult] = useState(null);
 
   useEffect(() => {
     checkCvHealth().then(setCvOnline);
   }, []);
+
+  async function processCapturedImage(dataUrl, side) {
+    if (!dataUrl) return null;
+    const { width, height } = await readImageDimensions(dataUrl);
+    const shortEdge = Math.min(width, height);
+    if (shortEdge && shortEdge < MIN_CAPTURE_SHORT_EDGE) {
+      toast.error(`${side} photo is low-res (${shortEdge}px) — move closer or use a better camera`);
+    }
+
+    if (!cvOnline) return dataUrl;
+
+    try {
+      const analysis = await analyzeCentering(dataUrl);
+      if (!analysis || !analysis.card_detected) {
+        toast.error(`Couldn't detect card edges in ${side} photo — try a darker background`);
+        return dataUrl;
+      }
+      if (Number(analysis.detection_confidence || 0) < CV_DETECTION_THRESHOLD) {
+        toast.error(`${side} card detection low (${Math.round((analysis.detection_confidence || 0) * 100)}%) — consider retaking`);
+      }
+      if (side === "front" && analysis.centering) {
+        setCvResult(analysis);
+      }
+      if (analysis.warped_image && Number(analysis.warp_quality || 0) >= 0.5) {
+        return analysis.warped_image;
+      }
+      return dataUrl;
+    } catch {
+      return dataUrl;
+    }
+  }
+
+  async function captureFrontImg(dataUrl) {
+    if (!dataUrl) {
+      setFrontImg(null);
+      setCvResult(null);
+      return;
+    }
+    setFrontImg(dataUrl);
+    const processed = await processCapturedImage(dataUrl, "front");
+    if (processed && processed !== dataUrl) setFrontImg(processed);
+  }
+
+  async function captureBackImg(dataUrl) {
+    if (!dataUrl) {
+      setBackImg(null);
+      return;
+    }
+    setBackImg(dataUrl);
+    const processed = await processCapturedImage(dataUrl, "back");
+    if (processed && processed !== dataUrl) setBackImg(processed);
+  }
 
   async function doCvAnalyze() {
     if (!frontImg) return;
@@ -129,6 +199,7 @@ export function useScanWorkflow() {
     setStatus("Visual search… identifying + pricing from photo");
     const response = await aiVisualSearch(frontImg);
     if (response?.name) {
+      setVisualSearchResult(response);
       setCard((previous) => ({
         ...previous,
         name: response.name,
@@ -225,10 +296,21 @@ export function useScanWorkflow() {
       const id = uid();
       let frontImgId = null;
       let backImgId = null;
+      let frontImgPhash = null;
 
       if (frontImg) {
         frontImgId = `img_${id}_front`;
         await saveImage(frontImgId, frontImg);
+        frontImgPhash = await computeDHash(frontImg);
+        if (frontImgPhash) {
+          const duplicate = catalog.find((existing) => {
+            if (!existing?.frontImgPhash) return false;
+            return hammingDistance(existing.frontImgPhash, frontImgPhash) <= DUPLICATE_HAMMING_THRESHOLD;
+          });
+          if (duplicate) {
+            toast.error(`Possible duplicate of ${duplicate.name || "existing card"} — saved anyway, review your collection`);
+          }
+        }
       }
 
       if (backImg) {
@@ -241,6 +323,7 @@ export function useScanWorkflow() {
         card,
         frontImgId,
         backImgId,
+        frontImgPhash,
         gradingData,
         cvResult,
         priceEst,
@@ -253,7 +336,7 @@ export function useScanWorkflow() {
       // Run server-side identification + learning after sync (fire-and-forget)
       setTimeout(async () => {
         try {
-          const idResult = await identificationAPI.identify({ itemId: id });
+          const idResult = await identificationAPI.identify({ itemId: id, visualSearchResult });
           if (idResult?.result?.id) {
             setIdentificationResult(idResult.result);
             // Auto-confirm if high confidence match
@@ -292,6 +375,7 @@ export function useScanWorkflow() {
     setCvResult(null);
     setCvAnalyzing(false);
     setVisualSearching(false);
+    setVisualSearchResult(null);
     setIdentificationResult(null);
   }
 
@@ -434,6 +518,8 @@ export function useScanWorkflow() {
       removeBatchItem,
       saveAndList,
       saveCard,
+      captureFrontImg,
+      captureBackImg,
       setBackImg,
       setCard,
       setFrontImg,

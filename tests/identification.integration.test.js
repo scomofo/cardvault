@@ -70,12 +70,22 @@ test("identification routes support three-phase identification and learning work
     body: JSON.stringify({
       itemId: "ident-known",
       ocrText: "2018 O-Pee-Chee Platinum Wayne Gretzky #50 Red Prism",
+      visualSearchResult: {
+        name: "Wayne Gretzky",
+        set: "Platinum",
+        year: "2018",
+        number: "50",
+        rarity: "base",
+        parallel: "Red Prism",
+        type: "sports",
+        confidence: "high",
+      },
     }),
   });
   assert.equal(identifyResponse.status, 200);
   const identifyPayload = await identifyResponse.json();
   assert.equal(identifyPayload.result.recommendation, "auto_accept_match");
-  assert.ok(identifyPayload.result.finalCatalogCardId);
+  assert.equal(identifyPayload.result.finalCatalogCardId, null);
   assert.ok(Array.isArray(identifyPayload.candidates));
   assert.ok(identifyPayload.candidates.length >= 1);
 
@@ -91,6 +101,8 @@ test("identification routes support three-phase identification and learning work
   assert.equal(confirmResponse.status, 200);
   const confirmedExample = await confirmResponse.json();
   assert.equal(confirmedExample.item_id, "ident-known");
+  assert.ok(confirmedExample.final_catalog_card_id);
+  const confirmedCatalogCardId = confirmedExample.final_catalog_card_id;
 
   const similarityUpdateResponse = await fetch(
     `${baseUrl}/api/identification/similarity/ident-known`,
@@ -140,7 +152,7 @@ test("identification routes support three-phase identification and learning work
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       identificationResultId: unresolvedPayload.result.id,
-      correctedCatalogCardId: identifyPayload.result.finalCatalogCardId,
+      correctedCatalogCardId: confirmedCatalogCardId,
       reason: "Matched by manual set and player verification",
     }),
   });
