@@ -16,23 +16,43 @@ For each item ready to sell, pick the channel that maximizes net proceeds given 
 | `item.storage_location` | `items.storage_location` (free text) |
 | `strategyDecision.recommendation` | from `sellingStrategyDecision` |
 
-## Algorithm (priority order)
+## Algorithm (eligibility filter + max-net selector)
+
+The rule tree builds a set of *eligible* channels based on hard constraints,
+then selects the channel with the highest expected net within that set.
+
+**Hard-constraint filters** (first match wins, produces a forced eligible set):
 
 ```
-if marketPrice > marketplace_consignment_threshold       → consign_high_end
-elif strategy == bundle_with_similar
-     or marketPrice < marketplace_low_value_floor        → keep_local_only
-elif ageDays > marketplace_stale_days_comc               → send_to_comc
-elif listing_status == listed
-     and ageDays > marketplace_stale_days_crosspost      → crosspost
-elif storage_location contains "store"                   → store_inventory_shopify
-elif strategy == auction_recommended                     → sell_on_ebay
-else                                                     → sell_on_ebay (default)
+marketPrice > marketplace_consignment_threshold
+    → eligible = {consignment}
+strategy == bundle_with_similar OR marketPrice < marketplace_low_value_floor
+    → eligible = {local}
+ageDays > marketplace_stale_days_comc
+    → eligible = {comc}
+listing_status == listed AND ageDays > marketplace_stale_days_crosspost
+    → recommendation = crosspost (special action; primary channel stays eBay)
+storage_location contains "store"
+    → eligible = {shopify}
+strategy == auction_recommended
+    → eligible = {ebay}
+```
+
+**Unconstrained case** — no hard constraint fires:
+
+```
+eligible = {ebay, tcgplayer, mercari, shopify}
+selected = argmax(expectedNet) over eligible
 ```
 
 All thresholds live in `services/decisions/decisionSettings.js`. Defaults:
 `marketplace_consignment_threshold=500`, `marketplace_low_value_floor=10`,
 `marketplace_stale_days_comc=120`, `marketplace_stale_days_crosspost=60`.
+
+> Note on TCGplayer / Mercari: both are in the fee table and scored, but
+> their adapter code doesn't exist yet. If they score highest, the decision
+> currently falls through to the eBay recommendation — treat them as
+> disclosure-only until adapters land.
 
 ## Outputs
 
@@ -62,11 +82,12 @@ can see the gap. Current default fee rates used by `computeExpectedNet`:
 | Consignment | 20% | $0 |
 | Local cash | 0% | $0 |
 
-The full `channelNets` map and `bestChannel` pointer are now exposed in
-`inputsUsed`, and the explanation highlights when the rule-picked channel
-differs from the highest-net option. The next step is to upgrade the tree
-itself to select channels by maximizing expected net subject to the existing
-constraints (consignment threshold, age rules).
+`inputsUsed` carries the full scoring context: `eligibleChannels`,
+`selectedChannel`, `expectedNet`, `channelNets` (all fee-table entries),
+`unconstrainedBest` (the global optimum regardless of constraints), and
+`selectionReason` (human-readable explanation of which rule fired). The
+explanation also flags when the selected channel is not the unconstrained
+best, making the opportunity cost of a hard constraint visible to operators.
 
 ## Interactions
 
@@ -77,14 +98,16 @@ constraints (consignment threshold, age rules).
 ## Known limitations
 
 - `storage_location` matching is a substring check on the literal word "store" — fragile.
-- Fee model is advisory only; `expectedNet` is computed and surfaced, but the rule tree doesn't yet select channels by maximizing it.
+- Fee rates are defaults, not negotiated per-account. Override-via-settings is a future feature.
+- TCGplayer and Mercari are scored but have no adapter, so they fall back to the eBay recommendation when selected.
 - `crosspost` has no target channel list — it only fires an action with no marketplace payload.
 - COMC routing at 120 days ignores whether the item has ever been listed. A never-listed 120-day item probably belongs on eBay first.
 - No per-sport or per-era routing (e.g., vintage → PWCC, modern breaks → Fanatics).
 
 ## Future work
 
-1. Define a fee table per marketplace and compute `expected_net = sale_price × (1 - fee_rate) - shipping`.
-2. Replace `storage_location` string match with a structured `storage_type` enum.
-3. Track channel outcomes (sold / unsold / days-to-sell) per category and learn routing from history.
-4. Add marketplace blacklists (e.g., suspended eBay account) as hard filters.
+1. Replace `storage_location` substring match with a structured `storage_type` enum.
+2. Track channel outcomes (sold / unsold / days-to-sell) per category and learn routing from history.
+3. Add marketplace blacklists (e.g., suspended eBay account) as hard filters.
+4. Expose per-account negotiated fee rates via settings so `computeExpectedNet` uses real numbers.
+5. Land TCGplayer / Mercari adapters so scored channels are actually routable.
