@@ -341,10 +341,16 @@ export function useScanWorkflow() {
             setIdentificationResult(idResult.result);
             const verification = idResult.result.finalCatalogCard?.ebayVerification;
             if (verification) {
+              const range = verification.priceRange;
+              const priceBlurb = range
+                ? ` — active ${range.currency || ""} ${range.low}-${range.high} (median ${range.mid}, n=${range.sampleSize})`
+                : "";
               if (verification.hits === 0) {
-                toast.error(`eBay verifier: no matches for this card — review before listing`);
+                toast.error(`eBay verifier: no matches — review before listing`);
               } else if (verification.hits >= 3) {
-                toast.success(`eBay verifier: ${verification.hits} matches confirm identification`);
+                toast.success(`eBay verifier: ${verification.hits} matches${priceBlurb}`);
+              } else if (range) {
+                toast.info(`eBay verifier: ${verification.hits} match${priceBlurb}`);
               }
             }
             // Auto-confirm if high confidence match

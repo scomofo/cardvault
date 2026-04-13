@@ -17,6 +17,25 @@ function buildQuery(card) {
   return parts.join(" ");
 }
 
+function computePriceRange(items) {
+  const prices = items
+    .map((item) => Number(item?.price))
+    .filter((value) => Number.isFinite(value) && value > 0)
+    .sort((a, b) => a - b);
+  if (prices.length === 0) return null;
+  const mid = prices.length % 2 === 0
+    ? (prices[prices.length / 2 - 1] + prices[prices.length / 2]) / 2
+    : prices[Math.floor(prices.length / 2)];
+  const currency = items.find((item) => Number(item?.price) > 0)?.currency || null;
+  return {
+    low: prices[0],
+    mid: Number(mid.toFixed(2)),
+    high: prices[prices.length - 1],
+    sampleSize: prices.length,
+    currency,
+  };
+}
+
 function summarizeResults(results) {
   if (!results || !Array.isArray(results.items)) return null;
   const top = results.items[0] || null;
@@ -26,6 +45,7 @@ function summarizeResults(results) {
     samplePrice: top?.price ?? null,
     sampleCurrency: top?.currency || null,
     sampleUrl: top?.url || null,
+    priceRange: computePriceRange(results.items),
   };
 }
 
@@ -44,7 +64,7 @@ function scoreAdjustment(hits, minHits) {
  *
  * @param {object} card normalized candidate.card shape
  * @param {{ minHits?: number, search?: typeof searchBrowse }} [options]
- * @returns {Promise<null | { hits: number, adjustment: number, query: string, sampleTitle: string|null, samplePrice: number|null, sampleCurrency: string|null, sampleUrl: string|null }>}
+ * @returns {Promise<null | { hits: number, adjustment: number, query: string, sampleTitle: string|null, samplePrice: number|null, sampleCurrency: string|null, sampleUrl: string|null, priceRange: null | { low: number, mid: number, high: number, sampleSize: number, currency: string|null } }>}
  */
 export async function verifyCandidateAgainstEbay(card, { minHits = DEFAULT_MIN_HITS, search = searchBrowse } = {}) {
   const query = buildQuery(card);
@@ -52,7 +72,7 @@ export async function verifyCandidateAgainstEbay(card, { minHits = DEFAULT_MIN_H
 
   let results;
   try {
-    results = await search(query, { limit: 5 });
+    results = await search(query, { limit: 10 });
   } catch {
     return null;
   }
@@ -67,6 +87,7 @@ export async function verifyCandidateAgainstEbay(card, { minHits = DEFAULT_MIN_H
     samplePrice: summary.samplePrice,
     sampleCurrency: summary.sampleCurrency,
     sampleUrl: summary.sampleUrl,
+    priceRange: summary.priceRange,
   };
 }
 

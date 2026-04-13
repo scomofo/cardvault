@@ -30,6 +30,41 @@ test("verifier boosts candidate when hits exceed threshold", async () => {
   assert.match(verification.query, /#50/);
 });
 
+test("verifier computes low/mid/high price range from active listings", async () => {
+  const verification = await verifyCandidateAgainstEbay(sampleCard, {
+    search: mockSearch({
+      total: 5,
+      items: [
+        { title: "a", price: 30, currency: "USD", url: null },
+        { title: "b", price: 45, currency: "USD", url: null },
+        { title: "c", price: 60, currency: "USD", url: null },
+        { title: "d", price: 80, currency: "USD", url: null },
+        { title: "e", price: 110, currency: "USD", url: null },
+      ],
+    }),
+  });
+  assert.ok(verification.priceRange);
+  assert.equal(verification.priceRange.low, 30);
+  assert.equal(verification.priceRange.high, 110);
+  assert.equal(verification.priceRange.mid, 60);
+  assert.equal(verification.priceRange.sampleSize, 5);
+  assert.equal(verification.priceRange.currency, "USD");
+});
+
+test("verifier returns null priceRange when no priced listings exist", async () => {
+  const verification = await verifyCandidateAgainstEbay(sampleCard, {
+    search: mockSearch({
+      total: 2,
+      items: [
+        { title: "a", price: null, currency: null, url: null },
+        { title: "b", price: 0, currency: null, url: null },
+      ],
+    }),
+  });
+  assert.ok(verification);
+  assert.equal(verification.priceRange, null);
+});
+
 test("verifier penalizes candidate when no hits are found", async () => {
   const verification = await verifyCandidateAgainstEbay(sampleCard, {
     search: mockSearch({ total: 0, items: [] }),
