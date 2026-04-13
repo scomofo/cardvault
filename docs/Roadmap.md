@@ -47,7 +47,7 @@ Items in this tier are planned but unscoped. They address the known limitations 
 | Grade risk distribution EV model | **implemented** | `services/decisions/gradeRiskModel.js` — 0.25/0.5/0.25 distribution around projected grade, value interpolated from PSA9/PSA10 comps. |
 | Marketplace fee model for routing | **implemented** | `services/decisions/marketplaceFees.js` — default rates for eBay (13.35%+$0.40), TCGplayer (10.25%), Shopify (2.9%+$0.30), COMC (20%), consignment (20%). `marketplaceDecision` now emits `expectedNet` in inputs/explanation. |
 | Confidence calibration from outcome history | **implemented** | `services/decisions/confidenceCalibration.js` — Laplace-smoothed acceptance rate per decision type, blended by `decisionStore.saveDecisions`. Falls back to the hardcoded prior until ≥5 resolved feedback rows exist. `GET /api/decisions/calibration` reports per-type samples. |
-| Cross-marketplace inventory sync reconciliation | planned | `syncService.js` handles one-way pushes; reconciliation on conflict is out of scope today. |
+| Cross-marketplace inventory sync reconciliation | **partial** | `services/marketplaces/syncReconciler.js` detects `external_id_mismatch`, `status_mismatch`, `price_mismatch`, and `missing_remote` conflicts. Blocking conflicts halt the apply step and log a `reconciliation_conflict` event. Adapter payloads are thin — richer remote data (updated timestamps, remote price history) is still needed for full parity. |
 | Consignment / COMC integrations | planned | `marketplaceDecision` emits `send_to_comc` / `route_to_consignment` actions but the integrations are stubs. |
 
 ## How to propose a change

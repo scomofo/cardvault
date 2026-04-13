@@ -27,7 +27,7 @@ export const ROADMAP = {
     { name: "Grade risk distribution EV model", status: "implemented", module: "services/decisions/gradeRiskModel.js" },
     { name: "Marketplace fee model for routing", status: "implemented", module: "services/decisions/marketplaceFees.js" },
     { name: "Confidence calibration from outcome history", status: "implemented", module: "services/decisions/confidenceCalibration.js" },
-    { name: "Cross-marketplace inventory sync reconciliation", status: "planned" },
+    { name: "Cross-marketplace inventory sync reconciliation", status: "partial", module: "services/marketplaces/syncReconciler.js" },
     { name: "Consignment / COMC integrations", status: "planned" },
   ],
 };

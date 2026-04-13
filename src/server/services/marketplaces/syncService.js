@@ -1,6 +1,7 @@
 import { all, get, run } from "../../database.js";
 import { uid } from "../../routes/shared.js";
 import { getMarketplaceAdapter } from "../../integrations/marketplaces/marketplaceRegistry.js";
+import { reconcileSyncResult } from "./syncReconciler.js";
 
 function insertSyncedSale(listing, channel, synced) {
   if (!listing.sold_price && synced.status !== "sold") return null;
@@ -38,6 +39,12 @@ function insertSyncedSale(listing, channel, synced) {
   return get(`SELECT * FROM sales WHERE id = ?`, [saleId]);
 }
 
+/**
+ * Sync listing status with a marketplace.
+ * @param {string} marketplace
+ * @param {string|null} [listingId]
+ * @returns {Promise<object[]>}
+ */
 export async function syncMarketplaceListings(marketplace, listingId = null) {
   const adapter = getMarketplaceAdapter(marketplace);
   const channels = listingId
@@ -50,6 +57,27 @@ export async function syncMarketplaceListings(marketplace, listingId = null) {
     if (!listing) continue;
 
     const synced = await adapter.sync(listing);
+    const reconciliation = reconcileSyncResult(listing, channel, synced);
+
+    if (reconciliation.conflicts.length > 0) {
+      run(
+        `INSERT INTO listing_channel_events (id, listing_channel_id, event_type, status, payload)
+         VALUES (?,?,?,?,?)`,
+        [
+          uid(),
+          channel.id,
+          "reconciliation_conflict",
+          reconciliation.hasBlockingConflict ? "blocked" : "warning",
+          JSON.stringify({ conflicts: reconciliation.conflicts, remote: synced }),
+        ],
+      );
+    }
+
+    if (!reconciliation.safeToApply) {
+      results.push({ channelId: channel.id, synced, sale: null, reconciliation });
+      continue;
+    }
+
     run(
       `UPDATE listing_channels
        SET status = ?, last_sync_at = ?, publish_error = NULL, updated_at = datetime('now')
@@ -69,7 +97,7 @@ export async function syncMarketplaceListings(marketplace, listingId = null) {
     );
 
     const sale = insertSyncedSale(listing, channel, synced);
-    results.push({ channelId: channel.id, synced, sale });
+    results.push({ channelId: channel.id, synced, sale, reconciliation });
   }
 
   return results;
