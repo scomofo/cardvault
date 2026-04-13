@@ -1,4 +1,5 @@
 import { all, get, run } from "../database.js";
+import { requireJsonBody, validateNumberLike, sendValidationError } from "../validation/common.js";
 import { uid } from "./shared.js";
 
 export function registerOrderRoutes(app) {
@@ -10,10 +11,19 @@ export function registerOrderRoutes(app) {
     }
   });
 
-  app.post("/api/orders", (req, res) => {
+  app.post("/api/orders", requireJsonBody, (req, res) => {
     try {
-      const body = req.body || {};
+      const body = req.body;
       if (!body.platform) return res.status(400).json({ error: "platform required" });
+      const numericChecks = [
+        validateNumberLike(body.salePrice ?? body.sale_price, "sale_price"),
+        validateNumberLike(body.fees, "fees"),
+        validateNumberLike(body.shippingCharge ?? body.shipping_charge, "shipping_charge"),
+        validateNumberLike(body.taxCollected ?? body.tax_collected, "tax_collected"),
+      ];
+      for (const err of numericChecks) {
+        if (err) return sendValidationError(res, err);
+      }
       const id = body.id || uid();
       run(
         `INSERT INTO orders

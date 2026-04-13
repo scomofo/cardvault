@@ -1,4 +1,5 @@
 import { all, get, run } from "../database.js";
+import { requireJsonBody } from "../validation/common.js";
 import { uid } from "./shared.js";
 import { listSupportedMarketplaces } from "../integrations/marketplaces/marketplaceRegistry.js";
 import {
@@ -23,9 +24,9 @@ export function registerMarketplaceRoutes(app) {
     }
   });
 
-  app.post("/api/marketplace-connections", (req, res) => {
+  app.post("/api/marketplace-connections", requireJsonBody, (req, res) => {
     try {
-      const { marketplace, accountLabel, authStatus = "connected", metadata } = req.body || {};
+      const { marketplace, accountLabel, authStatus = "connected", metadata } = req.body;
       if (!marketplace) return res.status(400).json({ error: "marketplace required" });
       const id = uid();
       run(
@@ -40,9 +41,9 @@ export function registerMarketplaceRoutes(app) {
     }
   });
 
-  app.post("/api/marketplaces/publish", async (req, res) => {
+  app.post("/api/marketplaces/publish", requireJsonBody, async (req, res) => {
     try {
-      const { listingId, marketplace, connectionId } = req.body || {};
+      const { listingId, marketplace, connectionId } = req.body;
       if (!listingId || !marketplace) {
         return res.status(400).json({ error: "listingId and marketplace required" });
       }
@@ -52,9 +53,9 @@ export function registerMarketplaceRoutes(app) {
     }
   });
 
-  app.post("/api/marketplaces/revise", async (req, res) => {
+  app.post("/api/marketplaces/revise", requireJsonBody, async (req, res) => {
     try {
-      const { listingId, marketplace, overrides } = req.body || {};
+      const { listingId, marketplace, overrides } = req.body;
       if (!listingId || !marketplace) {
         return res.status(400).json({ error: "listingId and marketplace required" });
       }
@@ -64,9 +65,9 @@ export function registerMarketplaceRoutes(app) {
     }
   });
 
-  app.post("/api/marketplaces/end", async (req, res) => {
+  app.post("/api/marketplaces/end", requireJsonBody, async (req, res) => {
     try {
-      const { listingId, marketplace } = req.body || {};
+      const { listingId, marketplace } = req.body;
       if (!listingId || !marketplace) {
         return res.status(400).json({ error: "listingId and marketplace required" });
       }
@@ -76,18 +77,19 @@ export function registerMarketplaceRoutes(app) {
     }
   });
 
-  app.post("/api/marketplaces/crosspost", async (req, res) => {
+  app.post("/api/marketplaces/crosspost", requireJsonBody, async (req, res) => {
     try {
-      const { listingId, marketplaces } = req.body || {};
+      const { listingId, marketplaces } = req.body;
+      if (!listingId) return res.status(400).json({ error: "listingId required" });
       res.json(await crosspostListing(listingId, marketplaces || []));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.post("/api/marketplaces/sync", async (req, res) => {
+  app.post("/api/marketplaces/sync", requireJsonBody, async (req, res) => {
     try {
-      const { marketplace, listingId } = req.body || {};
+      const { marketplace, listingId } = req.body;
       if (!marketplace) return res.status(400).json({ error: "marketplace required" });
       res.json(await syncMarketplaceListings(marketplace, listingId || null));
     } catch (error) {
@@ -103,9 +105,9 @@ export function registerMarketplaceRoutes(app) {
     }
   });
 
-  app.post("/api/marketplaces/export", (req, res) => {
+  app.post("/api/marketplaces/export", requireJsonBody, (req, res) => {
     try {
-      const { marketplace, listingIds, exportType } = req.body || {};
+      const { marketplace, listingIds, exportType } = req.body;
       if (!marketplace) return res.status(400).json({ error: "marketplace required" });
       res.json(exportListingsForMarketplace({ marketplace, listingIds: listingIds || [], exportType: exportType || "csv" }));
     } catch (error) {

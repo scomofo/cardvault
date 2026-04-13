@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { all, get, run } from "../database.js";
+import { isObject } from "../validation/common.js";
 
 export const uid = () => crypto.randomUUID();
 
@@ -17,6 +18,9 @@ export function registerCRUD(app, table, requiredField, { columns, insert, updat
 
   app.post(`/api/${table}`, (req, res) => {
     try {
+      if (!isObject(req.body)) {
+        return res.status(400).json({ error: "body must be an object" });
+      }
       const body = req.body;
       if (!body[requiredField]) {
         return res.status(400).json({ error: `${requiredField} required` });
@@ -35,8 +39,12 @@ export function registerCRUD(app, table, requiredField, { columns, insert, updat
 
   app.put(`/api/${table}/:id`, (req, res) => {
     try {
+      if (!isObject(req.body)) {
+        return res.status(400).json({ error: "body must be an object" });
+      }
       const existing = get(`SELECT * FROM ${table} WHERE id = ?`, [req.params.id]);
       if (!existing) return res.status(404).json({ error: "Not found" });
+      if (Object.keys(req.body).length === 0) return res.status(400).json({ error: "request body required" });
       const body = { ...existing, ...req.body };
       const setClause = updateColumns.map((column) => `${column}=?`).join(",");
       run(
@@ -71,6 +79,9 @@ export function registerRef(app, table, requiredFields) {
 
   app.post(`/api/ref/${table}`, (req, res) => {
     try {
+      if (!isObject(req.body)) {
+        return res.status(400).json({ error: "body must be an object" });
+      }
       const body = req.body;
       for (const field of requiredFields) {
         if (!body[field]) return res.status(400).json({ error: `${field} required` });

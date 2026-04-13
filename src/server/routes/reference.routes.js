@@ -1,5 +1,6 @@
 import { all, get, run } from "../database.js";
 import { json } from "../mappers/recordMappers.js";
+import { requireJsonBody } from "../validation/common.js";
 import { registerRef } from "./shared.js";
 
 export function registerReferenceRoutes(app) {
@@ -21,7 +22,7 @@ export function registerReferenceRoutes(app) {
     }
   });
 
-  app.post("/api/ref/teams", (req, res) => {
+  app.post("/api/ref/teams", requireJsonBody, (req, res) => {
     try {
       const body = req.body;
       if (!body.name) return res.status(400).json({ error: "name required" });
@@ -54,7 +55,7 @@ export function registerReferenceRoutes(app) {
     }
   });
 
-  app.post("/api/ref/sets", (req, res) => {
+  app.post("/api/ref/sets", requireJsonBody, (req, res) => {
     try {
       const body = req.body;
       if (!body.set_name || !body.year) {
@@ -96,7 +97,7 @@ export function registerReferenceRoutes(app) {
     }
   });
 
-  app.post("/api/ref/players", (req, res) => {
+  app.post("/api/ref/players", requireJsonBody, (req, res) => {
     try {
       const body = req.body;
       if (!body.first_name || !body.last_name) {
@@ -127,9 +128,10 @@ export function registerReferenceRoutes(app) {
     }
   });
 
-  app.post("/api/ref/cards", (req, res) => {
+  app.post("/api/ref/cards", requireJsonBody, (req, res) => {
     try {
       const body = req.body;
+      if (!body.set_id || !body.card_number) return res.status(400).json({ error: "set_id and card_number required" });
       run(
         `INSERT INTO cards (set_id, player_id, card_number, is_base, is_rookie,
          has_autograph, is_memorabilia, is_short_print, error_type, attributes)
@@ -167,7 +169,7 @@ export function registerReferenceRoutes(app) {
     }
   });
 
-  app.post("/api/ref/parallels", (req, res) => {
+  app.post("/api/ref/parallels", requireJsonBody, (req, res) => {
     try {
       const body = req.body;
       if (!body.variation_name) {

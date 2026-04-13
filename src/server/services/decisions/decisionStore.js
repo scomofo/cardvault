@@ -1,10 +1,25 @@
 import { all, get, run } from "../../database.js";
 import { uid } from "../../routes/shared.js";
+import { calibrateConfidence } from "./confidenceCalibration.js";
 
+/**
+ * Persist decision results to the database.
+ * @param {object[]} decisions
+ * @returns {object[]}
+ */
 export function saveDecisions(decisions) {
   const saved = [];
   for (const decision of decisions) {
     const id = uid();
+    const calibration = calibrateConfidence(decision.decisionType, decision.confidence);
+    const inputsWithCalibration = {
+      ...(decision.inputsUsed || {}),
+      calibration: {
+        priorConfidence: calibration.priorConfidence,
+        calibrated: calibration.calibrated,
+        sampleSize: calibration.sampleSize,
+      },
+    };
     run(
       `INSERT INTO decisions
        (id, decision_type, subject_type, subject_id, recommendation, confidence,
@@ -17,11 +32,11 @@ export function saveDecisions(decisions) {
         decision.subjectType,
         String(decision.subjectId),
         decision.recommendation,
-        decision.confidence,
+        calibration.confidence,
         decision.explanation,
         decision.suggestedAction?.type || null,
         decision.suggestedAction ? JSON.stringify(decision.suggestedAction) : null,
-        JSON.stringify(decision.inputsUsed || {}),
+        JSON.stringify(inputsWithCalibration),
         decision.status || "open",
         decision.createdAt || new Date().toISOString(),
         decision.expiresAt || null,
@@ -32,6 +47,11 @@ export function saveDecisions(decisions) {
   return saved;
 }
 
+/**
+ * Query persisted decisions with optional filters.
+ * @param {{ subjectType?: string, subjectId?: string, status?: string }} [params]
+ * @returns {object[]}
+ */
 export function listDecisions(params = {}) {
   const clauses = [];
   const values = [];
@@ -52,6 +72,12 @@ export function listDecisions(params = {}) {
   return all(`SELECT * FROM decisions ${where} ORDER BY created_at DESC`, values);
 }
 
+/**
+ * Record user feedback on a decision.
+ * @param {string} decisionId
+ * @param {object} feedback
+ * @returns {object}
+ */
 export function addDecisionFeedback(decisionId, feedback) {
   run(
     `INSERT INTO decision_feedback

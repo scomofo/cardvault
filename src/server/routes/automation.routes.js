@@ -1,3 +1,4 @@
+import { requireJsonBody } from "../validation/common.js";
 import { automateActionQueue } from "../services/automation/actionQueueAutomation.js";
 import { runAcquisitionDecisionAutomation } from "../services/automation/acquisitionDecisionAutomation.js";
 import { runAgingRepricingAutomation } from "../services/automation/agingRepricingAutomation.js";
@@ -12,33 +13,35 @@ import { addItemToBatch, createIntakeBatch, finalizeIntakeBatch, processBatchIte
 import { automateShipment } from "../services/automation/shippingAutomation.js";
 
 export function registerAutomationRoutes(app) {
-  app.post("/api/automation/identify-price/:itemId", async (req, res) => {
+  app.post("/api/automation/identify-price/:itemId", requireJsonBody, async (req, res) => {
     try {
-      res.json(await automateIdentificationAndPricing(req.params.itemId, req.body || {}));
+      if (!req.params.itemId) return res.status(400).json({ error: "itemId required" });
+      res.json(await automateIdentificationAndPricing(req.params.itemId, req.body));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.post("/api/automation/listings/generate", (req, res) => {
+  app.post("/api/automation/listings/generate", requireJsonBody, (req, res) => {
     try {
-      res.json(automateListingGeneration(req.body || {}));
+      res.json(automateListingGeneration(req.body));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.post("/api/automation/aging-repricing", (req, res) => {
+  app.post("/api/automation/aging-repricing", requireJsonBody, (req, res) => {
     try {
-      res.json(runAgingRepricingAutomation(req.body || {}));
+      res.json(runAgingRepricingAutomation(req.body));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.post("/api/automation/shipping/:orderId", (req, res) => {
+  app.post("/api/automation/shipping/:orderId", requireJsonBody, (req, res) => {
     try {
-      res.json(automateShipment(req.params.orderId, req.body || {}));
+      if (!req.params.orderId) return res.status(400).json({ error: "orderId required" });
+      res.json(automateShipment(req.params.orderId, req.body));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -68,9 +71,9 @@ export function registerAutomationRoutes(app) {
     }
   });
 
-  app.post("/api/automation/acquisition-decision", (req, res) => {
+  app.post("/api/automation/acquisition-decision", requireJsonBody, (req, res) => {
     try {
-      res.json(runAcquisitionDecisionAutomation(req.body || {}));
+      res.json(runAcquisitionDecisionAutomation(req.body));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -100,33 +103,37 @@ export function registerAutomationRoutes(app) {
     }
   });
 
-  app.post("/api/automation/intake/batches", (req, res) => {
+  app.post("/api/automation/intake/batches", requireJsonBody, (req, res) => {
     try {
-      res.status(201).json(createIntakeBatch(req.body || {}));
+      res.status(201).json(createIntakeBatch(req.body));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.post("/api/automation/intake/batches/:batchId/items", (req, res) => {
+  app.post("/api/automation/intake/batches/:batchId/items", requireJsonBody, (req, res) => {
     try {
-      res.status(201).json(addItemToBatch(req.params.batchId, req.body || {}));
+      if (!req.params.batchId) return res.status(400).json({ error: "batchId required" });
+      if (!req.body.itemId) return res.status(400).json({ error: "itemId required" });
+      res.status(201).json(addItemToBatch(req.params.batchId, req.body));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.post("/api/automation/intake/batch-items/:batchItemId/process", async (req, res) => {
+  app.post("/api/automation/intake/batch-items/:batchItemId/process", requireJsonBody, async (req, res) => {
     try {
-      res.json(await processBatchItem(req.params.batchItemId, req.body || {}));
+      if (!req.params.batchItemId) return res.status(400).json({ error: "batchItemId required" });
+      res.json(await processBatchItem(req.params.batchItemId, req.body));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.post("/api/automation/intake/batches/:batchId/finalize", (req, res) => {
+  app.post("/api/automation/intake/batches/:batchId/finalize", requireJsonBody, (req, res) => {
     try {
-      res.json(finalizeIntakeBatch(req.params.batchId, req.body || {}));
+      if (!req.params.batchId) return res.status(400).json({ error: "batchId required" });
+      res.json(finalizeIntakeBatch(req.params.batchId, req.body));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

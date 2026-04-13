@@ -29,3 +29,23 @@ export function validateStringLike(value, field) {
 export function sendValidationError(res, error) {
   return res.status(400).json({ error });
 }
+
+export function requireJsonBody(req, res, next) {
+  const error = validateRequestShape(req.body);
+  if (error) return sendValidationError(res, error);
+  next();
+}
+
+export function requireFields(...fields) {
+  return function (req, res, next) {
+    const shapeError = validateRequestShape(req.body);
+    if (shapeError) return sendValidationError(res, shapeError);
+    for (const field of fields) {
+      const value = req.body[field];
+      if (value == null || value === "") {
+        return sendValidationError(res, `${field} required`);
+      }
+    }
+    next();
+  };
+}

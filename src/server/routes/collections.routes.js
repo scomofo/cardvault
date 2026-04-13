@@ -1,5 +1,6 @@
 import { all, get, run } from "../database.js";
 import { json } from "../mappers/recordMappers.js";
+import { requireJsonBody } from "../validation/common.js";
 import { registerCRUD, uid } from "./shared.js";
 
 export function registerCollectionRoutes(app) {
@@ -89,11 +90,17 @@ export function registerCollectionRoutes(app) {
     }
   });
 
-  app.post("/api/purchases", (req, res) => {
+  app.post("/api/purchases", requireJsonBody, (req, res) => {
     try {
       const body = req.body;
-      if (!body.name || body.price == null) {
+      if (!body.name || body.price == null || isNaN(Number(body.price))) {
         return res.status(400).json({ error: "name and price required" });
+      }
+      if (body.shipping != null && isNaN(Number(body.shipping))) {
+        return res.status(400).json({ error: "shipping must be numeric" });
+      }
+      if (body.total_cost != null && isNaN(Number(body.total_cost))) {
+        return res.status(400).json({ error: "total_cost must be numeric" });
       }
       const id = body.id || uid();
       run(

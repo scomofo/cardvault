@@ -7,6 +7,7 @@ import {
   validateSalePayload,
   validateSettingsPayload,
 } from "../src/server/validation/writeValidators.js";
+import { requireFields, requireJsonBody } from "../src/server/validation/common.js";
 
 function runValidator(validator, body) {
   let statusCode = null;
@@ -60,6 +61,23 @@ test("sale validator rejects missing or invalid sale price", () => {
   const invalid = runValidator(validateSalePayload, { salePrice: "oops" });
   assert.equal(invalid.statusCode, 400);
   assert.match(invalid.payload.error, /salePrice must be a number/);
+});
+
+test("requireJsonBody rejects non-object bodies", () => {
+  assert.equal(runValidator(requireJsonBody, null).statusCode, 400);
+  assert.equal(runValidator(requireJsonBody, "string").statusCode, 400);
+  assert.equal(runValidator(requireJsonBody, []).statusCode, 400);
+  assert.equal(runValidator(requireJsonBody, { ok: true }).nextCalled, true);
+});
+
+test("requireFields enforces object shape and presence", () => {
+  const validator = requireFields("platform", "marketplace");
+  assert.equal(runValidator(validator, null).statusCode, 400);
+  const missing = runValidator(validator, { platform: "ebay" });
+  assert.equal(missing.statusCode, 400);
+  assert.match(missing.payload.error, /marketplace required/);
+  const ok = runValidator(validator, { platform: "ebay", marketplace: "ebay" });
+  assert.equal(ok.nextCalled, true);
 });
 
 test("settings and migration validators accept valid object payloads", () => {
