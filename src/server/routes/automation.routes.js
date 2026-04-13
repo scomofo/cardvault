@@ -7,6 +7,7 @@ import { runCashflowInventoryAutomation } from "../services/automation/cashflowI
 import { detectDuplicateInventory } from "../services/automation/duplicateDetectionAutomation.js";
 import { runGradingAutomation } from "../services/automation/gradingAutomation.js";
 import { automateIdentificationAndPricing } from "../services/automation/identificationPricingAutomation.js";
+import { refreshPricingForAllOwned } from "../services/pricing/batchRefresh.js";
 import { automateListingGeneration } from "../services/automation/listingGenerationAutomation.js";
 import { runMarketTrendAutomation } from "../services/automation/marketTrendAutomation.js";
 import { addItemToBatch, createIntakeBatch, finalizeIntakeBatch, processBatchItem } from "../services/automation/scanIntakeBulkAutomation.js";
@@ -17,6 +18,18 @@ export function registerAutomationRoutes(app) {
     try {
       if (!req.params.itemId) return res.status(400).json({ error: "itemId required" });
       res.json(await automateIdentificationAndPricing(req.params.itemId, req.body));
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/automation/pricing/refresh-all", requireJsonBody, async (req, res) => {
+    try {
+      const body = req.body || {};
+      const limit = Number(body.limit) > 0 ? Number(body.limit) : undefined;
+      const delayMs = Number(body.delayMs) >= 0 ? Number(body.delayMs) : undefined;
+      const source = typeof body.source === "string" ? body.source : undefined;
+      res.json(await refreshPricingForAllOwned({ limit, delayMs, source }));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

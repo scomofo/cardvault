@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, useEffect } from "react";
 import { useToast } from "./Toast";
 import { useData } from "../lib/DataContext";
 import { fmtShort } from "../lib/utils";
-import { marketplacesAPI } from "../lib/api";
+import { automationAPI, marketplacesAPI } from "../lib/api";
 import { genSalesCSV } from "../lib/exports";
 import { IconDownload, IconUpload, IconTrash, IconBarChart, IconCheck, IconEye, IconZap, IconPlus, Spinner } from "./Icons";
 
@@ -304,6 +304,28 @@ export default function Settings() {
   const totalVal = useMemo(() => catalog.filter((c) => c.status !== "sold").reduce((s, c) => s + (parseFloat(c.priceEstimate?.mid) || 0), 0), [catalog]);
   const totalCost = useMemo(() => catalog.reduce((s, c) => s + (parseFloat(c.costBasis) || 0), 0), [catalog]);
   const tradeBalance = useMemo(() => trades.reduce((s, t) => s + (parseFloat(t.receivedValue) || 0) - (parseFloat(t.gaveValue) || 0), 0), [trades]);
+  const [refreshingPricing, setRefreshingPricing] = useState(false);
+  const [lastPricingRefresh, setLastPricingRefresh] = useState(null);
+
+  const refreshAllPricing = async () => {
+    if (refreshingPricing) return;
+    setRefreshingPricing(true);
+    try {
+      const summary = await automationAPI.refreshAllPricing();
+      setLastPricingRefresh(summary);
+      if (summary.failed > 0) {
+        toast.error(`Refreshed ${summary.refreshed}/${summary.total} — ${summary.failed} failed`);
+      } else if (summary.total === 0) {
+        toast.info("No owned cards to refresh");
+      } else {
+        toast.success(`Refreshed pricing for ${summary.refreshed} card${summary.refreshed === 1 ? "" : "s"}`);
+      }
+    } catch (error) {
+      toast.error(`Pricing refresh failed: ${error.message || "unknown error"}`);
+    } finally {
+      setRefreshingPricing(false);
+    }
+  };
 
   const clearAll = () => {
     if (!window.confirm("Delete ALL data? This cannot be undone.")) return;
@@ -432,6 +454,30 @@ export default function Settings() {
             </div>
             <button className="btn btn-primary btn-sm mt-8" onClick={exportSalesCSV}><IconDownload size={12} /> Export CSV</button>
           </>
+        )}
+      </div>
+
+      <div className="card mb-12">
+        <div className="lbl">Pricing Data</div>
+        <div className="text-xxs text-dim mt-6">
+          Re-fetches market prices for every owned card from the configured source
+          (eBay Browse by default). Runs sequentially with a short delay between
+          calls to stay under rate limits. Active-listing data, not sold comps.
+        </div>
+        <button
+          className="btn btn-primary btn-sm mt-8"
+          onClick={refreshAllPricing}
+          disabled={refreshingPricing}
+        >
+          {refreshingPricing ? <Spinner size={12} /> : <IconZap size={12} />} Refresh All Prices
+        </button>
+        {lastPricingRefresh && (
+          <div className="text-xxs text-dim mt-6">
+            Last run: {lastPricingRefresh.refreshed}/{lastPricingRefresh.total} refreshed
+            {lastPricingRefresh.failed > 0 ? ` (${lastPricingRefresh.failed} failed)` : ""}
+            {" — "}
+            {(lastPricingRefresh.durationMs / 1000).toFixed(1)}s
+          </div>
         )}
       </div>
 

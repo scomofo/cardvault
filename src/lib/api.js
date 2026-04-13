@@ -87,6 +87,8 @@ export const automationAPI = {
     request("/automation/listings/generate", { method: "POST", body: data }),
   agingRepricing: (data) =>
     request("/automation/aging-repricing", { method: "POST", body: data }),
+  refreshAllPricing: (data = {}) =>
+    request("/automation/pricing/refresh-all", { method: "POST", body: data }),
   automateShipment: (orderId, data) =>
     request(`/automation/shipping/${orderId}`, { method: "POST", body: data }),
   actionQueue: () => request("/automation/action-queue"),
