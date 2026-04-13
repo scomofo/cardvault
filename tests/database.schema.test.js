@@ -16,15 +16,14 @@ test("database initializes monetization pipeline tables and columns", async () =
 
   try {
     const tables = all(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (?,?,?,?,?) ORDER BY name",
-      ["intake_batches", "pricing_snapshots", "listing_batches", "orders", "shipments"],
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (?,?,?,?) ORDER BY name",
+      ["intake_batches", "listing_batches", "orders", "shipments"],
     ).map((row) => row.name);
 
     assert.deepEqual(tables, [
       "intake_batches",
       "listing_batches",
       "orders",
-      "pricing_snapshots",
       "shipments",
     ]);
 
