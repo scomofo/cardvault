@@ -12,6 +12,7 @@ import { registerOrderRoutes } from "./orders.routes.js";
 import { registerReferenceRoutes } from "./reference.routes.js";
 import { registerSalesRoutes } from "./sales.routes.js";
 import { registerSettingsRoutes } from "./settings.routes.js";
+import { registerEbayRoutes } from "./ebay.routes.js";
 
 export function registerRoutes(app) {
   registerItemRoutes(app);
@@ -28,4 +29,5 @@ export function registerRoutes(app) {
   registerSettingsRoutes(app);
   registerReferenceRoutes(app);
   registerMigrationRoutes(app);
+  registerEbayRoutes(app);
 }
