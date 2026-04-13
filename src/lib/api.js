@@ -59,6 +59,7 @@ export const decisionsAPI = {
   list: (params) => request(`/decisions${toQuery(params)}`),
   evaluate: (data) => request("/decisions/evaluate", { method: "POST", body: data }),
   feedback: (id, data) => request(`/decisions/${id}/feedback`, { method: "POST", body: data }),
+  calibration: () => request("/decisions/calibration"),
 };
 
 export const actionQueueAPI = {

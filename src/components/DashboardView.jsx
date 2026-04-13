@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { dashboardAPI, automationAPI } from "../lib/api";
 import { fmtShort } from "../lib/utils";
 import { Skeleton, Spinner, IconZap } from "./Icons";
+import DecisionFeedbackPanel from "./DecisionFeedbackPanel";
 
 function MiniList({ title, rows, formatter = (value) => value }) {
   return (
@@ -104,6 +105,8 @@ export default function DashboardView() {
           </div>
         </div>
       </div>
+
+      <DecisionFeedbackPanel />
 
       <div className="card mb-12">
         <div className="lbl">Action Queue</div>
