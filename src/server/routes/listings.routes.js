@@ -148,8 +148,29 @@ export function registerListingRoutes(app) {
 
   app.delete("/api/listings/:id", (req, res) => {
     try {
-      const result = run("DELETE FROM listings WHERE id = ?", [req.params.id]);
-      if (result.changes === 0) return res.status(404).json({ error: "Listing not found" });
+      const existing = get("SELECT * FROM listings WHERE id = ?", [req.params.id]);
+      if (!existing) return res.status(404).json({ error: "Listing not found" });
+      run("DELETE FROM listings WHERE id = ?", [req.params.id]);
+      if (existing.card_id) {
+        const remainingListings = get(
+          `SELECT COUNT(*) AS count FROM listings WHERE card_id = ?`,
+          [existing.card_id],
+        )?.count || 0;
+        if (remainingListings === 0) {
+          run(
+            `UPDATE user_items
+             SET status = CASE
+                   WHEN sale_status = 'sold' THEN status
+                   WHEN status = 'listed' THEN 'inventory'
+                   ELSE status
+                 END,
+                 listing_status = 'not_listed',
+                 updated_at = datetime('now')
+             WHERE id = ?`,
+            [existing.card_id],
+          );
+        }
+      }
       res.json({ deleted: true });
     } catch (error) {
       res.status(500).json({ error: error.message });

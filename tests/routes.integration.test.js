@@ -147,6 +147,50 @@ test("server routes handle validation, migration, and listing side effects", asy
   assert.equal(soldItemPayload.saleStatus, "sold");
   assert.equal(soldItemPayload.soldAt, soldAt);
 
+  const secondItemResponse = await fetch(`${baseUrl}/api/items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "delete-route-item",
+      name: "Delete Route Card",
+      set: "Route Set",
+      number: "2",
+      costBasis: 4.5,
+      listedOn: [],
+      priceHistory: [],
+    }),
+  });
+  assert.equal(secondItemResponse.status, 201);
+
+  const secondListingResponse = await fetch(`${baseUrl}/api/listings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "delete-route-listing",
+      cardId: "delete-route-item",
+      cardName: "Delete Route Card",
+      cardSet: "Route Set",
+      cardNumber: "2",
+      platform: "ebay",
+      format: "fixed",
+      startPrice: 14.5,
+      shipping: 1.25,
+    }),
+  });
+  assert.equal(secondListingResponse.status, 201);
+
+  const deleteListingResponse = await fetch(`${baseUrl}/api/listings/delete-route-listing`, {
+    method: "DELETE",
+  });
+  assert.equal(deleteListingResponse.status, 200);
+
+  const revertedItemResponse = await fetch(`${baseUrl}/api/items/delete-route-item`);
+  assert.equal(revertedItemResponse.status, 200);
+  const revertedItemPayload = await revertedItemResponse.json();
+  assert.equal(revertedItemPayload.status, "inventory");
+  assert.equal(revertedItemPayload.listingStatus, "not_listed");
+  assert.equal(revertedItemPayload.saleStatus, "available");
+
   const settingsResponse = await fetch(`${baseUrl}/api/settings`);
   const settingsPayload = await settingsResponse.json();
   assert.equal(settingsPayload.userName, "Route Test");
