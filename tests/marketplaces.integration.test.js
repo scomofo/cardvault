@@ -377,7 +377,7 @@ test("ending one marketplace channel does not mark a still-crossposted listing a
   assert.equal(shopifyChannel.status, "active");
 });
 
-test("marketplace sold sync updates the underlying item sale state", async (t) => {
+test("marketplace sold sync updates the underlying item sale state and creates an order", async (t) => {
   const tempDir = await mkdtemp(join(tmpdir(), "cardvault-marketplaces-sold-"));
   const dbPath = join(tempDir, "cardvault-test.db");
   const port = 4700 + Math.floor(Math.random() * 300);
@@ -466,6 +466,10 @@ test("marketplace sold sync updates the underlying item sale state", async (t) =
     body: JSON.stringify({ marketplace: "ebay", listingId: "sync-sold-listing" }),
   });
   assert.equal(syncResponse.status, 200);
+  const syncPayload = await syncResponse.json();
+  assert.equal(syncPayload.length, 1);
+  assert.ok(syncPayload[0].sale);
+  assert.ok(syncPayload[0].order);
 
   const itemsResponse = await fetch(`${baseUrl}/api/items`);
   assert.equal(itemsResponse.status, 200);
@@ -476,4 +480,14 @@ test("marketplace sold sync updates the underlying item sale state", async (t) =
   assert.equal(item.status, "sold");
   assert.equal(item.saleStatus, "sold");
   assert.equal(item.listingStatus, "ended");
+
+  const ordersResponse = await fetch(`${baseUrl}/api/orders`);
+  assert.equal(ordersResponse.status, 200);
+  const ordersPayload = await ordersResponse.json();
+  const order = ordersPayload.find((entry) => entry.listing_id === "sync-sold-listing");
+
+  assert.ok(order);
+  assert.equal(order.sale_id, syncPayload[0].sale.id);
+  assert.equal(order.fulfillment_status, "pending");
+  assert.equal(order.payment_status, "paid");
 });

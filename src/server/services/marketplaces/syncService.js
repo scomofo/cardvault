@@ -63,6 +63,48 @@ function insertSyncedSale(listing, channel, synced) {
   return get(`SELECT * FROM sales WHERE id = ?`, [saleId]);
 }
 
+function ensureOrderForSyncedSale(listing, sale, synced) {
+  if (synced.status !== "sold" || !sale) return null;
+
+  const existing = get(
+    `SELECT * FROM orders WHERE sale_id = ? OR listing_id = ? ORDER BY created_at DESC LIMIT 1`,
+    [sale.id, listing.id],
+  );
+  if (existing) {
+    if (!sale.order_id || sale.order_id !== existing.id) {
+      run(`UPDATE sales SET order_id = ? WHERE id = ?`, [existing.id, sale.id]);
+    }
+    return existing;
+  }
+
+  const orderId = uid();
+  run(
+    `INSERT INTO orders
+     (id, sale_id, listing_id, item_id, platform, external_order_id, buyer_handle, sale_price, fees, shipping_charge, tax_collected, destination_country, destination_postal_code, payment_status, fulfillment_status, sold_at, created_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))`,
+    [
+      orderId,
+      sale.id,
+      listing.id,
+      listing.card_id || null,
+      sale.platform || synced.marketplace || null,
+      null,
+      sale.buyer_handle || null,
+      sale.sale_price || 0,
+      sale.fees || 0,
+      sale.shipping_cost || 0,
+      sale.tax_collected || 0,
+      "CA",
+      null,
+      "paid",
+      "pending",
+      sale.date || synced.syncedAt,
+    ],
+  );
+  run(`UPDATE sales SET order_id = ? WHERE id = ?`, [orderId, sale.id]);
+  return get(`SELECT * FROM orders WHERE id = ?`, [orderId]);
+}
+
 function markItemSoldFromMarketplaceSync(listing, sale, synced) {
   if (synced.status !== "sold" || !listing.card_id) return;
 
@@ -150,7 +192,7 @@ export async function syncMarketplaceListings(marketplace, listingId = null) {
       continue;
     }
 
-    const sale = runInImmediateTransaction(() => {
+    const result = runInImmediateTransaction(() => {
       run(
         `UPDATE listing_channels
          SET status = ?, last_sync_at = ?, publish_error = NULL, updated_at = datetime('now')
@@ -172,10 +214,11 @@ export async function syncMarketplaceListings(marketplace, listingId = null) {
       refreshListingAggregateState(listing.id, { syncedAt: synced.syncedAt });
 
       const sale = insertSyncedSale(listing, channel, synced);
+      const order = ensureOrderForSyncedSale(listing, sale, synced);
       markItemSoldFromMarketplaceSync(listing, sale, synced);
-      return sale;
+      return { sale, order };
     });
-    results.push({ channelId: channel.id, synced, sale, reconciliation });
+    results.push({ channelId: channel.id, synced, sale: result.sale, order: result.order, reconciliation });
   }
 
   return results;
