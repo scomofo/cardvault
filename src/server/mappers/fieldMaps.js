@@ -32,6 +32,7 @@ export const ITEM_FIELD_MAP = {
   created_at: "createdAt",
   updated_at: "updatedAt",
   grading_candidate: "gradingCandidate",
+  grading_decision: "gradingDecision",
   projected_grade: "projectedGrade",
   vault_status: "vaultStatus",
   condition_report: "conditionReport",

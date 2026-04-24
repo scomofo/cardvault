@@ -181,6 +181,10 @@ export function toSnake(body) {
     output.grading_candidate = output.gradingCandidate;
     delete output.gradingCandidate;
   }
+  if ("gradingDecision" in output) {
+    output.grading_decision = output.gradingDecision;
+    delete output.gradingDecision;
+  }
   if ("cardId" in output) {
     output.card_id = output.cardId;
     delete output.cardId;

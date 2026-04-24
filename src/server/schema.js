@@ -52,6 +52,7 @@ export function createTables(db) {
       surface INTEGER,
       projected_grade REAL,
       grading_candidate INTEGER DEFAULT 0,
+      grading_decision TEXT,
       vault_status TEXT, -- GREEN (grading candidate), YELLOW (raw sale), RED (bulk)
       condition_report TEXT,
       created_at TEXT DEFAULT (datetime('now')),

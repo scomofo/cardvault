@@ -210,6 +210,7 @@ test("server routes handle validation, migration, and listing side effects", asy
           surface: 8,
           projectedGrade: 8.5,
           gradingCandidate: 1,
+          gradingDecision: "grade",
           vaultStatus: "GREEN",
           conditionReport: "Sharp copy",
           cvCenteringLr: "50/50",
@@ -276,6 +277,7 @@ test("server routes handle validation, migration, and listing side effects", asy
       ebayCentering: "55/45",
       ebayCornerSharpness: "very_sharp",
       ebayEdgeChipping: "minor",
+      gradingDecision: "hold",
       listedOn: [],
       priceHistory: [],
     }),
@@ -314,6 +316,7 @@ test("server routes handle validation, migration, and listing side effects", asy
   assert.equal(itemPayload.ebayCentering, "55/45");
   assert.equal(itemPayload.ebayCornerSharpness, "very_sharp");
   assert.equal(itemPayload.ebayEdgeChipping, "minor");
+  assert.equal(itemPayload.gradingDecision, "hold");
 
   const migratedRichItemResponse = await fetch(`${baseUrl}/api/items/migrated-rich-item`);
   assert.equal(migratedRichItemResponse.status, 200);
@@ -335,6 +338,7 @@ test("server routes handle validation, migration, and listing side effects", asy
   assert.equal(migratedRichItemPayload.psa9Price, 45);
   assert.equal(migratedRichItemPayload.psa10Price, 120);
   assert.equal(migratedRichItemPayload.gradingCandidate, 1);
+  assert.equal(migratedRichItemPayload.gradingDecision, "grade");
   assert.equal(migratedRichItemPayload.vaultStatus, "GREEN");
   assert.equal(migratedRichItemPayload.conditionReport, "Sharp copy");
   assert.equal(migratedRichItemPayload.cvCenteringLr, "50/50");

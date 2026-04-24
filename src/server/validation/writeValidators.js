@@ -32,6 +32,11 @@ export function validateItemPayload(req, res, next) {
     () => validateStringLike(body.card_number, "card_number"),
     () =>
       validateStringLike(
+        body.gradingDecision ?? body.grading_decision,
+        "gradingDecision",
+      ),
+    () =>
+      validateStringLike(
         body.storageLocation ?? body.storage_location,
         "storageLocation",
       ),
