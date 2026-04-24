@@ -457,3 +457,125 @@ test("orders API includes shipment tracking after automated shipping", async (t)
   assert.equal(order.shipment_status, shipmentPayload.status);
   assert.equal(order.service_level, shipmentPayload.service_level);
 });
+
+test("shipping automation repairs order state when a shipment already exists", async (t) => {
+  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-automation-repair-"));
+  const dbPath = join(tempDir, "cardvault-test.db");
+  const port = 4350 + Math.floor(Math.random() * 100);
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  const server = spawn(process.execPath, ["server.js"], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      PORT: String(port),
+      CARDVAULT_DB_PATH: dbPath,
+    },
+    stdio: "ignore",
+  });
+
+  t.after(async () => {
+    if (!server.killed) {
+      server.kill("SIGTERM");
+    }
+    await new Promise((resolve) => server.once("exit", resolve));
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  await waitForServer(baseUrl);
+
+  const itemResponse = await fetch(`${baseUrl}/api/items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "repair-item",
+      name: "Auston Matthews",
+      set: "Upper Deck",
+      listedOn: [],
+      priceHistory: [],
+      marketPrice: 70,
+      suggestedListingPrice: 79.99,
+    }),
+  });
+  assert.equal(itemResponse.status, 201);
+
+  const listingResponse = await fetch(`${baseUrl}/api/listings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "repair-listing",
+      cardId: "repair-item",
+      cardName: "Auston Matthews",
+      cardSet: "Upper Deck",
+      platform: "ebay",
+      listingTitle: "Auston Matthews card",
+      listingDescription: "Existing shipment should repair order state",
+      startPrice: 79.99,
+      status: "draft",
+    }),
+  });
+  assert.equal(listingResponse.status, 201);
+
+  const orderResponse = await fetch(`${baseUrl}/api/orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "repair-order",
+      itemId: "repair-item",
+      listingId: "repair-listing",
+      platform: "ebay",
+      salePrice: 79.99,
+      destinationCountry: "CA",
+      paymentStatus: "paid",
+      fulfillmentStatus: "pending",
+    }),
+  });
+  assert.equal(orderResponse.status, 201);
+
+  const db = new Database(dbPath);
+  try {
+    db.prepare(
+      `INSERT INTO shipments
+       (id, order_id, item_id, carrier, service_level, package_type, label_status, tracking_number,
+        shipping_cost, packaging_cost, weight_oz, purchased_at, shipped_at, created_at, label_url, status, provider)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),?,?,?)`,
+    ).run(
+      "repair-shipment",
+      "repair-order",
+      "repair-item",
+      "Canada Post",
+      "Canada Post Tracked Packet",
+      "card_mailer",
+      "created",
+      "TRK1234567890",
+      13.0,
+      0.35,
+      3,
+      new Date().toISOString(),
+      new Date().toISOString(),
+      "labels/repair-shipment.pdf",
+      "shipped",
+      "Canada Post",
+    );
+  } finally {
+    db.close();
+  }
+
+  const shipmentResponse = await fetch(`${baseUrl}/api/automation/shipping/repair-order`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ destinationCountry: "CA", weightOz: 3 }),
+  });
+  assert.equal(shipmentResponse.status, 200);
+  const shipmentPayload = await shipmentResponse.json();
+  assert.equal(shipmentPayload.id, "repair-shipment");
+
+  const ordersResponse = await fetch(`${baseUrl}/api/orders`);
+  assert.equal(ordersResponse.status, 200);
+  const ordersPayload = await ordersResponse.json();
+  const order = ordersPayload.find((entry) => entry.id === "repair-order");
+
+  assert.ok(order);
+  assert.equal(order.fulfillment_status, "shipped");
+  assert.equal(order.tracking_number, "TRK1234567890");
+});

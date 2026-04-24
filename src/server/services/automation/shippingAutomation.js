@@ -26,6 +26,22 @@ function buildTracking(service) {
   return `${prefix}${Date.now().toString().slice(-10)}`;
 }
 
+function syncOrderAndSaleShippingState(order, shipment) {
+  run(
+    `UPDATE orders
+     SET fulfillment_status = 'shipped'
+     WHERE id = ?`,
+    [order.id],
+  );
+
+  run(
+    `UPDATE sales
+     SET shipping_cost = ?, tracking_number = COALESCE(?, tracking_number)
+     WHERE order_id = ? OR id = ?`,
+    [shipment.shipping_cost || 0, shipment.tracking_number || null, order.id, order.sale_id || ""],
+  );
+}
+
 /**
  * Automate shipment creation for a fulfilled order.
  * @param {string} orderId
@@ -41,6 +57,7 @@ export function automateShipment(orderId, options = {}) {
     [orderId],
   );
   if (existingShipment) {
+    syncOrderAndSaleShippingState(order, existingShipment);
     return existingShipment;
   }
 
@@ -82,19 +99,10 @@ export function automateShipment(orderId, options = {}) {
     ],
   );
 
-  run(
-    `UPDATE orders
-     SET fulfillment_status = 'shipped'
-     WHERE id = ?`,
-    [orderId],
-  );
-
-  run(
-    `UPDATE sales
-     SET shipping_cost = ?, tracking_number = COALESCE(?, tracking_number)
-     WHERE order_id = ? OR id = ?`,
-    [service.cost, trackingNumber, orderId, order.sale_id || ""],
-  );
+  syncOrderAndSaleShippingState(order, {
+    shipping_cost: service.cost,
+    tracking_number: trackingNumber,
+  });
 
   if (order.listing_id) {
     const channel = get(
