@@ -114,6 +114,39 @@ test("server routes handle validation, migration, and listing side effects", asy
   const itemPayload = await itemResponse.json();
   assert.equal(itemPayload.status, "listed");
 
+  const soldAt = "2026-04-24T18:30:00.000Z";
+  const updatedListingResponse = await fetch(`${baseUrl}/api/listings/route-listing`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "route-listing",
+      cardId: "route-item",
+      cardName: "Route Card",
+      cardSet: "Route Set",
+      cardNumber: "1",
+      platform: "ebay",
+      format: "fixed",
+      startPrice: 12.5,
+      shipping: 1.25,
+      status: "sold",
+      soldPrice: 12.5,
+      soldDate: soldAt,
+    }),
+  });
+  assert.equal(updatedListingResponse.status, 200);
+  const updatedListingPayload = await updatedListingResponse.json();
+  assert.equal(updatedListingPayload.status, "sold");
+  assert.equal(updatedListingPayload.publishStatus, "sold");
+  assert.equal(updatedListingPayload.soldDate, soldAt);
+
+  const soldItemResponse = await fetch(`${baseUrl}/api/items/route-item`);
+  assert.equal(soldItemResponse.status, 200);
+  const soldItemPayload = await soldItemResponse.json();
+  assert.equal(soldItemPayload.status, "sold");
+  assert.equal(soldItemPayload.listingStatus, "ended");
+  assert.equal(soldItemPayload.saleStatus, "sold");
+  assert.equal(soldItemPayload.soldAt, soldAt);
+
   const settingsResponse = await fetch(`${baseUrl}/api/settings`);
   const settingsPayload = await settingsResponse.json();
   assert.equal(settingsPayload.userName, "Route Test");

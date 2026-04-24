@@ -93,7 +93,7 @@ export function registerListingRoutes(app) {
         `UPDATE listings SET card_id=?, external_listing_id=?, card_name=?, card_set=?, card_number=?,
          platform=?, listing_title=?, listing_description=?, category_path=?, item_specifics=?, shipping_profile=?,
          image_count=?, automation_state=?, pricing_strategy=?, format=?, start_price=?, buy_now_price=?, auction_end_date=?,
-         shipping=?, shipping_weight_oz=?, export_batch_id=?, current_bid=?, status=?, sold_price=?, sold_date=?, notes=?
+         shipping=?, shipping_weight_oz=?, export_batch_id=?, current_bid=?, status=?, publish_status=?, sold_price=?, sold_date=?, notes=?
          WHERE id=?`,
         [
           body.card_id,
@@ -119,12 +119,25 @@ export function registerListingRoutes(app) {
           body.export_batch_id,
           body.current_bid,
           body.status,
+          body.status === "sold" ? "sold" : body.publish_status,
           body.sold_price,
           body.sold_date,
           body.notes,
           req.params.id,
         ],
       );
+      if (body.card_id && body.status === "sold") {
+        run(
+          `UPDATE user_items
+           SET status = 'sold',
+               listing_status = 'ended',
+               sale_status = 'sold',
+               sold_at = COALESCE(?, sold_at),
+               updated_at = datetime('now')
+           WHERE id = ?`,
+          [body.sold_date || new Date().toISOString(), body.card_id],
+        );
+      }
       res.json(
         toCamel(get("SELECT * FROM listings WHERE id = ?", [req.params.id]), LISTING_FIELD_MAP),
       );
