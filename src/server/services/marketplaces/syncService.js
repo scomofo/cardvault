@@ -196,7 +196,8 @@ function insertSyncedSale(listing, channel, synced, metadata) {
 function updateExistingSyncedOrder(orderId, metadata, sale, marketplace) {
   run(
     `UPDATE orders
-     SET platform = COALESCE(?, platform),
+     SET sale_id = COALESCE(?, sale_id),
+         platform = COALESCE(?, platform),
          external_order_id = COALESCE(?, external_order_id),
          buyer_handle = COALESCE(?, buyer_handle),
          sale_price = COALESCE(?, sale_price),
@@ -206,6 +207,7 @@ function updateExistingSyncedOrder(orderId, metadata, sale, marketplace) {
          destination_postal_code = COALESCE(?, destination_postal_code)
     WHERE id = ?`,
     [
+      sale?.id || null,
       marketplace,
       metadata.externalOrderId,
       metadata.buyerHandle || sale?.buyer_handle || null,

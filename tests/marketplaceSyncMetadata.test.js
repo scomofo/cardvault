@@ -419,3 +419,150 @@ test("marketplace sold sync repairs stale sale and order platform metadata", asy
     await rm(tempDir, { recursive: true, force: true });
   }
 });
+
+test("marketplace sold sync relinks an existing order to the reused sale", async () => {
+  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-sync-order-link-"));
+  const dbPath = join(tempDir, "cardvault.db");
+  const previousPath = process.env.CARDVAULT_DB_PATH;
+
+  process.env.CARDVAULT_DB_PATH = dbPath;
+
+  const database = await import("../src/server/database.js");
+  const registry = await import("../src/server/integrations/marketplaces/marketplaceRegistry.js");
+  const syncService = await import(`../src/server/services/marketplaces/syncService.js?ts=${Date.now()}`);
+
+  const db = database.initDB();
+  const adapter = registry.getMarketplaceAdapter("ebay");
+  const originalSync = adapter.sync;
+
+  try {
+    database.run(
+      `INSERT INTO user_items
+       (id, name, card_set, cost_basis, listing_status, sale_status, status)
+       VALUES (?,?,?,?,?,?,?)`,
+      ["sync-link-item", "Teemu Selanne", "Upper Deck", 20, "listed", "available", "listed"],
+    );
+
+    database.run(
+      `INSERT INTO listings
+       (id, card_id, card_name, card_set, platform, listing_title, listing_description, start_price, sold_price, shipping, status, publish_status)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        "sync-link-listing",
+        "sync-link-item",
+        "Teemu Selanne",
+        "Upper Deck",
+        "ebay",
+        "Teemu Selanne card",
+        "Marketplace sync reused order link test",
+        90,
+        90,
+        5,
+        "active",
+        "active",
+      ],
+    );
+
+    database.run(
+      `INSERT INTO listing_channels
+       (id, listing_id, marketplace, external_listing_id, status, last_sync_at, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,datetime('now'),datetime('now'))`,
+      [
+        "sync-link-channel",
+        "sync-link-listing",
+        "ebay",
+        "ebay-sync-link",
+        "active",
+        new Date().toISOString(),
+      ],
+    );
+
+    database.run(
+      `INSERT INTO sales
+       (id, card_id, order_id, card_name, card_set, sale_price, cost_basis, platform, buyer_handle, fees, shipping_cost, packaging_cost, grading_cost, tax_collected, payout_amount, net_profit, listing_id, date)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        "existing-link-sale",
+        "sync-link-item",
+        null,
+        "Teemu Selanne",
+        "Upper Deck",
+        90,
+        0,
+        "ebay",
+        null,
+        0,
+        5,
+        0,
+        0,
+        0,
+        90,
+        85,
+        "sync-link-listing",
+        new Date().toISOString(),
+      ],
+    );
+
+    database.run(
+      `INSERT INTO orders
+       (id, sale_id, listing_id, item_id, platform, external_order_id, buyer_handle, sale_price, fees, shipping_charge, tax_collected, destination_country, destination_postal_code, payment_status, fulfillment_status, sold_at, created_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))`,
+      [
+        "existing-link-order",
+        null,
+        "sync-link-listing",
+        "sync-link-item",
+        "ebay",
+        null,
+        null,
+        90,
+        0,
+        0,
+        0,
+        "CA",
+        null,
+        "paid",
+        "pending",
+        new Date().toISOString(),
+      ],
+    );
+
+    adapter.sync = async (listing) => ({
+      marketplace: "ebay",
+      externalListingId: listing.external_listing_id,
+      status: "sold",
+      syncedAt: new Date().toISOString(),
+      payload: {
+        buyerHandle: "linked_buyer",
+        externalOrderId: "EBAY-LINK-1",
+        salePrice: 92,
+        shippingCharge: 6,
+        taxCollected: 2,
+        payoutAmount: 94,
+        shippingAddress: {
+          countryCode: "US",
+          postalCode: "30301",
+        },
+      },
+    });
+
+    const results = await syncService.syncMarketplaceListings("ebay", "sync-link-listing");
+    assert.equal(results.length, 1);
+
+    const sale = database.get(`SELECT * FROM sales WHERE id = ?`, ["existing-link-sale"]);
+    const order = database.get(`SELECT * FROM orders WHERE id = ?`, ["existing-link-order"]);
+
+    assert.equal(sale.order_id, "existing-link-order");
+    assert.equal(order.sale_id, "existing-link-sale");
+    assert.equal(order.external_order_id, "EBAY-LINK-1");
+  } finally {
+    adapter.sync = originalSync;
+    db.close();
+    if (previousPath === undefined) {
+      delete process.env.CARDVAULT_DB_PATH;
+    } else {
+      process.env.CARDVAULT_DB_PATH = previousPath;
+    }
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
