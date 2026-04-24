@@ -47,6 +47,14 @@ export function registerSalesRoutes(app) {
           body.date || new Date().toISOString(),
         ],
       );
+      if (body.order_id) {
+        run(
+          `UPDATE orders
+           SET sale_id = COALESCE(sale_id, ?)
+           WHERE id = ?`,
+          [id, body.order_id],
+        );
+      }
       if (body.card_id) {
         run(
           `UPDATE user_items

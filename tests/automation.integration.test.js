@@ -681,3 +681,104 @@ test("manual order creation backfills the linked sale order_id", async (t) => {
   assert.ok(sale);
   assert.equal(sale.orderId, "sale-link-order");
 });
+
+test("manual sale creation backfills the linked order sale_id", async (t) => {
+  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-sales-order-link-"));
+  const dbPath = join(tempDir, "cardvault-test.db");
+  const port = 4550 + Math.floor(Math.random() * 100);
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  const server = spawn(process.execPath, ["server.js"], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      PORT: String(port),
+      CARDVAULT_DB_PATH: dbPath,
+    },
+    stdio: "ignore",
+  });
+
+  t.after(async () => {
+    if (!server.killed) {
+      server.kill("SIGTERM");
+    }
+    await new Promise((resolve) => server.once("exit", resolve));
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  await waitForServer(baseUrl);
+
+  const itemResponse = await fetch(`${baseUrl}/api/items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "order-link-item",
+      name: "Martin Brodeur",
+      set: "Upper Deck",
+      listedOn: [],
+      priceHistory: [],
+      marketPrice: 50,
+      suggestedListingPrice: 54.99,
+    }),
+  });
+  assert.equal(itemResponse.status, 201);
+
+  const listingResponse = await fetch(`${baseUrl}/api/listings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "order-link-listing",
+      cardId: "order-link-item",
+      cardName: "Martin Brodeur",
+      cardSet: "Upper Deck",
+      platform: "ebay",
+      listingTitle: "Martin Brodeur card",
+      listingDescription: "Manual sale should relink order",
+      startPrice: 54.99,
+      status: "draft",
+    }),
+  });
+  assert.equal(listingResponse.status, 201);
+
+  const orderResponse = await fetch(`${baseUrl}/api/orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "order-link-order",
+      itemId: "order-link-item",
+      listingId: "order-link-listing",
+      platform: "ebay",
+      salePrice: 54.99,
+      destinationCountry: "CA",
+      paymentStatus: "paid",
+      fulfillmentStatus: "pending",
+    }),
+  });
+  assert.equal(orderResponse.status, 201);
+
+  const saleResponse = await fetch(`${baseUrl}/api/sales`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "order-link-sale",
+      orderId: "order-link-order",
+      cardId: "order-link-item",
+      listingId: "order-link-listing",
+      cardName: "Martin Brodeur",
+      cardSet: "Upper Deck",
+      platform: "ebay",
+      salePrice: 54.99,
+      costBasis: 12,
+      netProfit: 42.99,
+    }),
+  });
+  assert.equal(saleResponse.status, 201);
+
+  const ordersResponse = await fetch(`${baseUrl}/api/orders`);
+  assert.equal(ordersResponse.status, 200);
+  const ordersPayload = await ordersResponse.json();
+  const order = ordersPayload.find((entry) => entry.id === "order-link-order");
+
+  assert.ok(order);
+  assert.equal(order.sale_id, "order-link-sale");
+});
