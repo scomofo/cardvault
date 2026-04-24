@@ -483,3 +483,142 @@ test("linked manual sales and orders reject conflicting explicit ids", async (t)
   });
   assert.equal(conflictingSaleResponse.status, 409);
 });
+
+test("linked manual sales and orders reject conflicting explicit metadata", async (t) => {
+  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-link-meta-conflict-"));
+  const dbPath = join(tempDir, "cardvault-test.db");
+  const port = 5600 + Math.floor(Math.random() * 400);
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  const server = spawn(process.execPath, ["server.js"], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      PORT: String(port),
+      CARDVAULT_DB_PATH: dbPath,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  t.after(async () => {
+    if (!server.killed) {
+      server.kill("SIGTERM");
+    }
+    await new Promise((resolve) => server.once("exit", resolve));
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  await waitForServer(baseUrl);
+
+  const itemResponse = await fetch(`${baseUrl}/api/items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "meta-conflict-item",
+      name: "Meta Conflict Card",
+      set: "Route Set",
+      number: "55",
+      costBasis: 7,
+      listedOn: [],
+      priceHistory: [],
+    }),
+  });
+  assert.equal(itemResponse.status, 201);
+
+  const listingResponse = await fetch(`${baseUrl}/api/listings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "meta-conflict-listing",
+      cardId: "meta-conflict-item",
+      cardName: "Meta Conflict Card",
+      cardSet: "Route Set",
+      cardNumber: "55",
+      platform: "ebay",
+      format: "fixed",
+      startPrice: 18.99,
+      shipping: 1.25,
+      status: "draft",
+    }),
+  });
+  assert.equal(listingResponse.status, 201);
+
+  const saleResponse = await fetch(`${baseUrl}/api/sales`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "meta-conflict-sale",
+      cardId: "meta-conflict-item",
+      listingId: "meta-conflict-listing",
+      cardName: "Meta Conflict Card",
+      cardSet: "Route Set",
+      platform: "ebay",
+      salePrice: 18.99,
+      netProfit: 11.99,
+    }),
+  });
+  assert.equal(saleResponse.status, 201);
+
+  const conflictingOrderPlatformResponse = await fetch(`${baseUrl}/api/orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "meta-conflict-order-platform",
+      saleId: "meta-conflict-sale",
+      platform: "shopify",
+    }),
+  });
+  assert.equal(conflictingOrderPlatformResponse.status, 409);
+
+  const conflictingOrderPriceResponse = await fetch(`${baseUrl}/api/orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "meta-conflict-order-price",
+      saleId: "meta-conflict-sale",
+      salePrice: 99.99,
+    }),
+  });
+  assert.equal(conflictingOrderPriceResponse.status, 409);
+
+  const orderResponse = await fetch(`${baseUrl}/api/orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "meta-conflict-order",
+      itemId: "meta-conflict-item",
+      listingId: "meta-conflict-listing",
+      platform: "ebay",
+      salePrice: 18.99,
+    }),
+  });
+  assert.equal(orderResponse.status, 201);
+
+  const conflictingSalePlatformResponse = await fetch(`${baseUrl}/api/sales`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "meta-conflict-sale-platform",
+      orderId: "meta-conflict-order",
+      cardName: "Meta Conflict Card",
+      cardSet: "Route Set",
+      platform: "shopify",
+      netProfit: 11.99,
+    }),
+  });
+  assert.equal(conflictingSalePlatformResponse.status, 409);
+
+  const conflictingSalePriceResponse = await fetch(`${baseUrl}/api/sales`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "meta-conflict-sale-price",
+      orderId: "meta-conflict-order",
+      cardName: "Meta Conflict Card",
+      cardSet: "Route Set",
+      salePrice: 99.99,
+      netProfit: 11.99,
+    }),
+  });
+  assert.equal(conflictingSalePriceResponse.status, 409);
+});

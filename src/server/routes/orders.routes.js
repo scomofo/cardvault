@@ -60,6 +60,20 @@ export function registerOrderRoutes(app) {
       ) {
         return res.status(409).json({ error: "item does not match linked sale" });
       }
+      if (
+        linkedSale
+        && body.platform
+        && body.platform !== linkedSale.platform
+      ) {
+        return res.status(409).json({ error: "platform does not match linked sale" });
+      }
+      if (
+        linkedSale
+        && (body.salePrice != null || body.sale_price != null)
+        && Number(body.salePrice ?? body.sale_price) !== Number(linkedSale.sale_price)
+      ) {
+        return res.status(409).json({ error: "sale price does not match linked sale" });
+      }
       const resolvedPlatform = body.platform || linkedSale?.platform || null;
       if (!resolvedPlatform) return res.status(400).json({ error: "platform required" });
       const resolvedSalePrice = body.salePrice ?? body.sale_price ?? linkedSale?.sale_price;
