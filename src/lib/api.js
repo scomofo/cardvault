@@ -162,6 +162,7 @@ export const purchasesAPI = {
   create: (data) => request("/purchases", { method: "POST", body: data }),
   update: (id, data) => request(`/purchases/${id}`, { method: "PUT", body: data }),
   delete: (id) => request(`/purchases/${id}`, { method: "DELETE" }),
+  importEbayCsv: (data) => request("/purchases/import/ebay-csv", { method: "POST", body: data }),
 };
 
 // Settings

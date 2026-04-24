@@ -158,6 +158,7 @@ export function createTables(db) {
 
     CREATE TABLE IF NOT EXISTS purchases (
       id TEXT PRIMARY KEY,
+      external_order_id TEXT,
       name TEXT NOT NULL,
       card_set TEXT,
       platform TEXT,

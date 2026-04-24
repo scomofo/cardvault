@@ -3,7 +3,7 @@ import { useToast } from "./Toast";
 import { useData } from "../lib/DataContext";
 import { PLATFORMS } from "../lib/constants";
 import { uid, fmtShort } from "../lib/utils";
-import { actionQueueAPI, marketplacesAPI, ordersAPI, automationAPI } from "../lib/api";
+import { actionQueueAPI, marketplacesAPI, ordersAPI, automationAPI, purchasesAPI, itemsAPI } from "../lib/api";
 import { requestNotificationPermission, canNotify, sendNotification, scheduleAuctionNotification, cancelNotificationTimer } from "../lib/notifications";
 import { IconPlus, IconBell, IconCheck, IconX, Spinner } from "./Icons";
 import EbayExport from "./EbayExport";
@@ -20,10 +20,11 @@ export { PLATFORM_FEES };
 
 export default function SalesFlow() {
   const toast = useToast();
-  const { catalog, setCatalog, sales, setSales, orders, setOrders, listings, setListings, purchases, setPurchases, shipFrom } = useData();
+  const { catalog, setCatalog, sales, setSales, orders, setOrders, listings, setListings, purchases, setPurchases, shipFrom, useServer } = useData();
   const [tab, setTab] = useState("active");
   const [showCreate, setShowCreate] = useState(false);
   const [showBuy, setShowBuy] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [notifEnabled, setNotifEnabled] = useState(canNotify());
   const [actionQueue, setActionQueue] = useState([]);
   const [busyListingId, setBusyListingId] = useState(null);
@@ -46,6 +47,8 @@ export default function SalesFlow() {
   const [shippingBusy, setShippingBusy] = useState(null);
 
   const [addToCollection, setAddToCollection] = useState(true);
+  const [importToCollection, setImportToCollection] = useState(true);
+  const [importBusy, setImportBusy] = useState(false);
   const [newPurchase, setNewPurchase] = useState({
     name: "", set: "", platform: "ebay", price: "", shipping: "", seller: "", date: "", notes: "",
   });
@@ -170,6 +173,39 @@ export default function SalesFlow() {
     setNewPurchase({ name: "", set: "", platform: "ebay", price: "", shipping: "", seller: "", date: "", notes: "" });
     setAddToCollection(true);
     toast.success(`Purchase logged: ${purchase.name}`);
+  };
+
+  const importEbayPurchases = async (file) => {
+    if (!file) return;
+    if (!useServer) {
+      toast.error("eBay CSV import currently requires the backend server mode");
+      return;
+    }
+
+    setImportBusy(true);
+    try {
+      const csv = await file.text();
+      const summary = await purchasesAPI.importEbayCsv({
+        csv,
+        addToInventory: importToCollection,
+      });
+      const [nextPurchases, nextCatalog] = await Promise.all([
+        purchasesAPI.list(),
+        itemsAPI.list(),
+      ]);
+      setPurchases(Array.isArray(nextPurchases) ? nextPurchases : []);
+      setCatalog(Array.isArray(nextCatalog) ? nextCatalog : []);
+      setShowImport(false);
+      toast.success(
+        `Imported ${summary.importedPurchases} purchase${summary.importedPurchases === 1 ? "" : "s"}`
+        + (summary.importedItems ? ` and ${summary.importedItems} item${summary.importedItems === 1 ? "" : "s"}` : "")
+        + (summary.skippedDuplicates ? `, skipped ${summary.skippedDuplicates} duplicate${summary.skippedDuplicates === 1 ? "" : "s"}` : ""),
+      );
+    } catch (error) {
+      toast.error(error.message || "Failed to import eBay purchases");
+    } finally {
+      setImportBusy(false);
+    }
   };
 
   const timeLeft = (dateStr) => {
@@ -309,11 +345,51 @@ export default function SalesFlow() {
         <button className="btn btn-outline flex-1" onClick={() => setShowBuy(!showBuy)}><IconPlus size={14} /> Log Purchase</button>
       </div>
       <div className="mb-12">
+        <button className="btn btn-ghost btn-full" onClick={() => setShowImport(!showImport)}>
+          {showImport ? "Hide" : "Import eBay Purchases CSV"}
+        </button>
+      </div>
+      <div className="mb-12">
         <button className="btn btn-ghost btn-full" onClick={() => setShowEbayExport(!showEbayExport)}>
           {showEbayExport ? "Hide" : "Export to eBay CSV"}
         </button>
       </div>
       {showEbayExport && <EbayExport />}
+
+      {showImport && (
+        <div className="card-elevated fade mb-12">
+          <div className="lbl">Import eBay Purchases</div>
+          <div className="text-xs text-dim mt-6">
+            Upload a CSV exported from your eBay purchase history. CardVault will import purchases and can also create inventory items from each row.
+          </div>
+          {!useServer && (
+            <div className="text-xs mt-8" style={{ color: "var(--red)" }}>
+              Backend server mode is required for CSV import.
+            </div>
+          )}
+          <label className="flex items-center gap-8 mt-8" style={{ cursor: "pointer" }}>
+            <input type="checkbox" checked={importToCollection} onChange={(e) => setImportToCollection(e.target.checked)} />
+            <span className="text-xs">Also create inventory items from imported purchases</span>
+          </label>
+          <input
+            className="inp mt-8"
+            type="file"
+            accept=".csv,text/csv"
+            disabled={importBusy || !useServer}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                importEbayPurchases(file);
+              }
+              e.target.value = "";
+            }}
+          />
+          <div className="text-xxs text-dim mt-6">
+            Best results if the CSV includes columns like item title, order number, seller, item subtotal, shipping, total, quantity, and paid date.
+          </div>
+          {importBusy && <div className="text-xs mt-8">Importing...</div>}
+        </div>
+      )}
 
       {showCreate && (
         <div className="card-elevated fade mb-12">

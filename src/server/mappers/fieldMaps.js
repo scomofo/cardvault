@@ -67,6 +67,7 @@ export const SALE_FIELD_MAP = {
 };
 
 export const PURCHASE_FIELD_MAP = {
+  external_order_id: "externalOrderId",
   card_set: "cardSet",
   total_cost: "totalCost",
   created_at: "createdAt",

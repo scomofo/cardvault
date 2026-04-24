@@ -6,7 +6,8 @@ import {
   WATCHLIST_FIELD_MAP,
 } from "../mappers/fieldMaps.js";
 import { json } from "../mappers/recordMappers.js";
-import { toCamel, toCamelArray } from "../mappers/recordMappers.js";
+import { toCamel, toCamelArray, toSnake } from "../mappers/recordMappers.js";
+import { importEbayPurchasesCsv } from "../services/ebayPurchaseImport.js";
 import { requireJsonBody } from "../validation/common.js";
 import { registerCRUD, uid } from "./shared.js";
 
@@ -102,7 +103,7 @@ export function registerCollectionRoutes(app) {
 
   app.post("/api/purchases", requireJsonBody, (req, res) => {
     try {
-      const body = req.body;
+      const body = toSnake(req.body);
       if (!body.name || body.price == null || isNaN(Number(body.price))) {
         return res.status(400).json({ error: "name and price required" });
       }
@@ -114,10 +115,11 @@ export function registerCollectionRoutes(app) {
       }
       const id = body.id || uid();
       run(
-        `INSERT INTO purchases (id, name, card_set, platform, seller, price, shipping, total_cost, date, notes)
-         VALUES (?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO purchases (id, external_order_id, name, card_set, platform, seller, price, shipping, total_cost, date, notes)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
         [
           id,
+          body.external_order_id || null,
           body.name,
           body.card_set,
           body.platform,
@@ -135,12 +137,28 @@ export function registerCollectionRoutes(app) {
     }
   });
 
+  app.post("/api/purchases/import/ebay-csv", requireJsonBody, (req, res) => {
+    try {
+      const csv = String(req.body?.csv || "");
+      if (!csv.trim()) {
+        return res.status(400).json({ error: "csv required" });
+      }
+
+      const summary = importEbayPurchasesCsv(csv, {
+        addToInventory: req.body?.addToInventory !== false,
+      });
+      res.status(201).json(summary);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.put("/api/purchases/:id", requireJsonBody, (req, res) => {
     try {
       const existing = get("SELECT * FROM purchases WHERE id = ?", [req.params.id]);
       if (!existing) return res.status(404).json({ error: "Purchase not found" });
 
-      const body = { ...existing, ...req.body };
+      const body = { ...existing, ...toSnake(req.body) };
       if (!body.name || body.price == null || isNaN(Number(body.price))) {
         return res.status(400).json({ error: "name and price required" });
       }
@@ -153,11 +171,12 @@ export function registerCollectionRoutes(app) {
 
       run(
         `UPDATE purchases SET
-          name=?, card_set=?, platform=?, seller=?, price=?, shipping=?, total_cost=?, date=?, notes=?
+          external_order_id=?, name=?, card_set=?, platform=?, seller=?, price=?, shipping=?, total_cost=?, date=?, notes=?
          WHERE id=?`,
         [
+          body.external_order_id ?? null,
           body.name,
-          body.cardSet ?? body.card_set,
+          body.card_set,
           body.platform,
           body.seller,
           body.price,

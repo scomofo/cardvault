@@ -80,6 +80,8 @@ export function runMigrations(db) {
   addColumnIfMissing("sales", "payout_amount", "REAL DEFAULT 0");
   addColumnIfMissing("sales", "tracking_number", "TEXT");
 
+  addColumnIfMissing("purchases", "external_order_id", "TEXT");
+
   addColumnIfMissing("orders", "destination_country", "TEXT DEFAULT 'CA'");
   addColumnIfMissing("orders", "destination_postal_code", "TEXT");
 
@@ -138,6 +140,7 @@ export function createIndexes(db) {
     CREATE INDEX IF NOT EXISTS idx_listing_exports_exported_at ON listing_exports(exported_at);
     CREATE INDEX IF NOT EXISTS idx_orders_item_id ON orders(item_id);
     CREATE INDEX IF NOT EXISTS idx_orders_fulfillment_status ON orders(fulfillment_status);
+    CREATE INDEX IF NOT EXISTS idx_purchases_external_order_id ON purchases(external_order_id);
     CREATE INDEX IF NOT EXISTS idx_shipments_order_id ON shipments(order_id);
     CREATE INDEX IF NOT EXISTS idx_shipments_tracking_number ON shipments(tracking_number);
     CREATE INDEX IF NOT EXISTS idx_sale_items_sale_id ON sale_items(sale_id);
