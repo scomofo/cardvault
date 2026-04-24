@@ -46,9 +46,10 @@ export function registerMarketplaceRoutes(app) {
 
   app.post("/api/marketplace-connections", requireJsonBody, (req, res) => {
     try {
-      const { marketplace, accountLabel, authStatus = "connected", metadata, shopName } = req.body;
+      const { marketplace, accountLabel, metadata, shopName } = req.body;
       if (!marketplace) return res.status(400).json({ error: "marketplace required" });
       const resolvedAccountLabel = accountLabel || shopName || marketplace;
+      const authStatus = "configured";
       const id = uid();
       run(
         `INSERT INTO marketplace_connections

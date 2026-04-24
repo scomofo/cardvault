@@ -916,7 +916,6 @@ test("server routes handle validation, migration, and listing side effects", asy
     body: JSON.stringify({
       marketplace: "shopify",
       shopName: "route-store",
-      authStatus: "connected",
       metadata: { region: "ca" },
     }),
   });
@@ -924,7 +923,7 @@ test("server routes handle validation, migration, and listing side effects", asy
   const createdConnectionPayload = await createdConnectionResponse.json();
   assert.equal(createdConnectionPayload.marketplace, "shopify");
   assert.equal(createdConnectionPayload.accountLabel, "route-store");
-  assert.equal(createdConnectionPayload.authStatus, "connected");
+  assert.equal(createdConnectionPayload.authStatus, "configured");
   assert.deepEqual(createdConnectionPayload.metadata, { region: "ca" });
   assert.ok("createdAt" in createdConnectionPayload);
   assert.equal("account_label" in createdConnectionPayload, false);
@@ -937,7 +936,7 @@ test("server routes handle validation, migration, and listing side effects", asy
   const connectionsPayload = await connectionsResponse.json();
   assert.equal(Array.isArray(connectionsPayload), true);
   assert.equal(connectionsPayload[0].accountLabel, "route-store");
-  assert.equal(connectionsPayload[0].authStatus, "connected");
+  assert.equal(connectionsPayload[0].authStatus, "configured");
   assert.deepEqual(connectionsPayload[0].metadata, { region: "ca" });
   assert.ok("updatedAt" in connectionsPayload[0]);
   assert.equal("access_token" in connectionsPayload[0], false);

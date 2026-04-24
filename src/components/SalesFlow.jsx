@@ -419,9 +419,9 @@ export default function SalesFlow() {
               <div className="text-xs fw-700 mb-6">Import Preview</div>
               <div className="text-xxs text-dim">
                 Parsed rows: {importPreview.parsedRows.length}
-                {" · "}
+                {" - "}
                 Importable rows: {importPreview.normalizedRows.length}
-                {" · "}
+                {" - "}
                 Skipped invalid: {importPreview.skippedInvalid}
               </div>
               {importPreview.normalizedRows.length > 0 && (
@@ -430,10 +430,10 @@ export default function SalesFlow() {
                     <div key={`${row.externalOrderId || row.title}-${index}`} style={{ padding: 8, background: "var(--s1)", borderRadius: 8 }}>
                       <div className="text-xs fw-700">{row.title}</div>
                       <div className="text-xxs text-dim">
-                        {[row.cardSet, row.seller && `from ${row.seller}`, row.externalOrderId, row.date].filter(Boolean).join(" · ")}
+                        {[row.cardSet, row.seller && `from ${row.seller}`, row.externalOrderId, row.date].filter(Boolean).join(" - ")}
                       </div>
                       <div className="text-xxs mt-4">
-                        Qty {row.quantity} · Total {fmtShort(row.totalCost)}
+                        Qty {row.quantity} - Total {fmtShort(row.totalCost)}
                       </div>
                     </div>
                   ))}
@@ -659,3 +659,4 @@ export default function SalesFlow() {
     </div>
   );
 }
+

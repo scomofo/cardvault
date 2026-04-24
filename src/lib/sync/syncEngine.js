@@ -4,14 +4,17 @@ export function createSyncEngine({ onSyncStateChange } = {}) {
   const syncTimers = {};
   const lastSynced = {};
   const syncInFlight = {};
+  const pendingSync = {};
+  let lastSyncState = false;
 
-  function setSyncState(value) {
-    onSyncStateChange?.(value);
+  function setSyncState() {
+    const nextSyncState = Object.values(syncInFlight).some(Boolean);
+    if (nextSyncState === lastSyncState) return;
+    lastSyncState = nextSyncState;
+    onSyncStateChange?.(nextSyncState);
   }
 
-  function syncCollection(key, api, current) {
-    if (syncInFlight[key]) return;
-
+  function performCollectionSync(key, api, current) {
     const previous = lastSynced[key] || [];
     const { added, removed, changed } = diffById(previous, current);
     const operations = [
@@ -22,11 +25,16 @@ export function createSyncEngine({ onSyncStateChange } = {}) {
 
     if (operations.length === 0) {
       lastSynced[key] = current;
+      const pending = pendingSync[key];
+      if (pending) {
+        delete pendingSync[key];
+        performCollectionSync(key, pending.api, pending.current);
+        return;
+      }
+      syncInFlight[key] = false;
+      setSyncState();
       return;
     }
-
-    syncInFlight[key] = true;
-    setSyncState(true);
 
     Promise.all(operations)
       .then(() => {
@@ -36,9 +44,26 @@ export function createSyncEngine({ onSyncStateChange } = {}) {
         console.warn(`Sync error (${key}):`, error);
       })
       .finally(() => {
+        const pending = pendingSync[key];
+        if (pending) {
+          delete pendingSync[key];
+          performCollectionSync(key, pending.api, pending.current);
+          return;
+        }
         syncInFlight[key] = false;
-        setSyncState(false);
+        setSyncState();
       });
+  }
+
+  function syncCollection(key, api, current) {
+    if (syncInFlight[key]) {
+      pendingSync[key] = { api, current };
+      return;
+    }
+
+    syncInFlight[key] = true;
+    setSyncState();
+    performCollectionSync(key, api, current);
   }
 
   function scheduleCollectionSync(key, api, current, delay = 500) {

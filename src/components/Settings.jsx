@@ -207,7 +207,7 @@ function MarketplaceConnectionsSection() {
   const [marketplaces, setMarketplaces] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
-  const [newConn, setNewConn] = useState({ marketplace: "ebay", apiKey: "", shopName: "" });
+  const [newConn, setNewConn] = useState({ marketplace: "ebay", accountLabel: "", shopName: "" });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -228,8 +228,8 @@ function MarketplaceConnectionsSection() {
       const result = await marketplacesAPI.connect(newConn);
       setConnections((p) => [...p, result]);
       setShowAdd(false);
-      setNewConn({ marketplace: "ebay", apiKey: "", shopName: "" });
-      toast.success("Marketplace connected");
+      setNewConn({ marketplace: "ebay", accountLabel: "", shopName: "" });
+      toast.success("Marketplace connection saved");
     } catch (e) {
       toast.error(e.message || "Failed to connect");
     }
@@ -251,7 +251,7 @@ function MarketplaceConnectionsSection() {
       {loading ? (
         <div className="text-xs text-dim">Loading...</div>
       ) : connections.length === 0 ? (
-        <div className="text-xs text-dim">No marketplace connections. Add one to enable publishing.</div>
+        <div className="text-xs text-dim">No marketplace connection metadata saved yet.</div>
       ) : (
         connections.map((conn, i) => (
           <div key={conn.id || i} className="flex justify-between items-center mt-6" style={{ padding: "8px 12px", background: "var(--s3)", borderRadius: "var(--radius)" }}>
@@ -260,7 +260,7 @@ function MarketplaceConnectionsSection() {
               {conn.accountLabel && <span className="text-xxs text-dim ml-8">{conn.accountLabel}</span>}
             </div>
             <span className={`badge ${conn.authStatus === "connected" ? "badge-grn" : "badge-dim"}`}>
-              <IconCheck size={10} /> {conn.authStatus || "connected"}
+              <IconCheck size={10} /> {conn.authStatus || "configured"}
             </span>
           </div>
         ))
@@ -268,6 +268,9 @@ function MarketplaceConnectionsSection() {
 
       {showAdd && (
         <div className="fade mt-10" style={{ padding: 12, background: "var(--acc-bg)", borderRadius: "var(--radius)", border: "1px solid var(--acc-brd)" }}>
+          <div className="text-xxs text-dim mb-8">
+            This section saves account labels and shop metadata for publishing workflows. Use the dedicated eBay connection above for real OAuth credentials.
+          </div>
           <div className="form-grid mt-4">
             <label className="fld">
               <span className="text-xxs text-dim">Marketplace</span>
@@ -280,17 +283,17 @@ function MarketplaceConnectionsSection() {
               </select>
             </label>
             <label className="fld">
-              <span className="text-xxs text-dim">API Key / Token</span>
-              <input className="inp" type="password" placeholder="API key or token" value={newConn.apiKey} onChange={(e) => setNewConn((p) => ({ ...p, apiKey: e.target.value }))} />
+              <span className="text-xxs text-dim">Account Label</span>
+              <input className="inp" placeholder="Storefront label" value={newConn.accountLabel} onChange={(e) => setNewConn((p) => ({ ...p, accountLabel: e.target.value }))} />
             </label>
             <label className="fld">
-              <span className="text-xxs text-dim">Shop Name (Shopify only)</span>
+              <span className="text-xxs text-dim">Shop Name (optional)</span>
               <input className="inp" placeholder="my-store" value={newConn.shopName} onChange={(e) => setNewConn((p) => ({ ...p, shopName: e.target.value }))} />
             </label>
           </div>
           <div className="flex gap-8 mt-8">
             <button className="btn btn-primary btn-sm" onClick={saveConnection} disabled={saving}>
-              {saving ? <Spinner size={12} /> : <IconCheck size={12} />} Connect
+              {saving ? <Spinner size={12} /> : <IconCheck size={12} />} Save Connection
             </button>
             <button className="btn btn-ghost btn-sm" onClick={() => setShowAdd(false)}>Cancel</button>
           </div>
@@ -322,7 +325,7 @@ export default function Settings() {
       const summary = await automationAPI.refreshAllPricing();
       setLastPricingRefresh(summary);
       if (summary.failed > 0) {
-        toast.error(`Refreshed ${summary.refreshed}/${summary.total} — ${summary.failed} failed`);
+        toast.error(`Refreshed ${summary.refreshed}/${summary.total} - ${summary.failed} failed`);
       } else if (summary.total === 0) {
         toast.info("No owned cards to refresh");
       } else {
@@ -506,7 +509,7 @@ export default function Settings() {
           <div className="text-xxs text-dim mt-6">
             Last run: {lastPricingRefresh.refreshed}/{lastPricingRefresh.total} refreshed
             {lastPricingRefresh.failed > 0 ? ` (${lastPricingRefresh.failed} failed)` : ""}
-            {" — "}
+            {" - "}
             {(lastPricingRefresh.durationMs / 1000).toFixed(1)}s
           </div>
         )}
@@ -529,3 +532,4 @@ export default function Settings() {
     </div>
   );
 }
+

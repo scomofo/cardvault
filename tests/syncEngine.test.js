@@ -65,3 +65,109 @@ test("sync engine schedules create update and delete operations", async () => {
   ]);
   assert.deepEqual(syncStates, [true, false]);
 });
+
+test("sync engine replays the latest queued collection state after an in-flight sync", async () => {
+  const calls = [];
+  const syncStates = [];
+  let releaseFirstSync;
+  const firstSyncDone = new Promise((resolve) => {
+    releaseFirstSync = resolve;
+  });
+  const engine = createSyncEngine({
+    onSyncStateChange: (value) => syncStates.push(value),
+  });
+
+  engine.setSnapshot({
+    catalog: [{ id: "card-1", name: "before", updatedAt: "1" }],
+  });
+
+  const api = {
+    create: async () => {
+      throw new Error("create should not be called");
+    },
+    update: async (id, item) => {
+      calls.push(["update", id, item.name]);
+      if (item.name === "first-pass") {
+        await firstSyncDone;
+      }
+    },
+    delete: async () => {
+      throw new Error("delete should not be called");
+    },
+  };
+
+  engine.scheduleCollectionSync(
+    "catalog",
+    api,
+    [{ id: "card-1", name: "first-pass", updatedAt: "2" }],
+    0,
+  );
+
+  await wait(5);
+
+  engine.scheduleCollectionSync(
+    "catalog",
+    api,
+    [{ id: "card-1", name: "second-pass", updatedAt: "3" }],
+    0,
+  );
+
+  await wait(5);
+  releaseFirstSync();
+  await wait(20);
+
+  assert.deepEqual(calls, [
+    ["update", "card-1", "first-pass"],
+    ["update", "card-1", "second-pass"],
+  ]);
+  assert.deepEqual(syncStates, [true, false]);
+});
+
+test("sync engine keeps the global syncing state true until all collections finish", async () => {
+  const syncStates = [];
+  let releaseCatalog;
+  let releaseSales;
+  const catalogDone = new Promise((resolve) => {
+    releaseCatalog = resolve;
+  });
+  const salesDone = new Promise((resolve) => {
+    releaseSales = resolve;
+  });
+  const engine = createSyncEngine({
+    onSyncStateChange: (value) => syncStates.push(value),
+  });
+
+  const slowApi = (donePromise) => ({
+    create: async () => {
+      await donePromise;
+    },
+    update: async () => {
+      await donePromise;
+    },
+    delete: async () => {
+      await donePromise;
+    },
+  });
+
+  engine.scheduleCollectionSync(
+    "catalog",
+    slowApi(catalogDone),
+    [{ id: "catalog-1", name: "Catalog item" }],
+    0,
+  );
+  engine.scheduleCollectionSync(
+    "sales",
+    slowApi(salesDone),
+    [{ id: "sale-1", cardName: "Sale item" }],
+    0,
+  );
+
+  await wait(5);
+  releaseCatalog();
+  await wait(5);
+  assert.deepEqual(syncStates, [true]);
+
+  releaseSales();
+  await wait(20);
+  assert.deepEqual(syncStates, [true, false]);
+});
