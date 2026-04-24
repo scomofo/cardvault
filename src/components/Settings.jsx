@@ -349,6 +349,8 @@ export default function Settings() {
     setTrades([]);
     setWatchlist([]);
     setGradings([]);
+    setUserName("");
+    setShipFrom("");
     const keysToRemove = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
