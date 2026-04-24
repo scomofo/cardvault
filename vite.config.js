@@ -19,6 +19,9 @@ function loadHttpsConfig(env) {
       `HTTPS is enabled but the certificate files were not found. Expected key at ${resolvedKeyPath} and cert at ${resolvedCertPath}.`
     );
   }
+  if (resolvedCaPath && !existsSync(resolvedCaPath)) {
+    throw new Error(`HTTPS is enabled but the CA bundle was not found at ${resolvedCaPath}.`);
+  }
 
   return {
     key: readFileSync(resolvedKeyPath),

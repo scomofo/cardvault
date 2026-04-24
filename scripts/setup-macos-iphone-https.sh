@@ -124,7 +124,7 @@ main() {
 
   local bonjour_host
   local lan_ip
-  local redirect_uri
+  local callback_url
   local caroot
 
   bonjour_host="${CARDVAULT_HOSTNAME:-$(detect_bonjour_host)}"
@@ -134,7 +134,7 @@ main() {
     fail "Could not determine the MacBook's LAN IP. Re-run with CARDVAULT_IP=your.ip.address."
   fi
 
-  redirect_uri="https://${bonjour_host}:${PORT}/api/ebay/callback"
+  callback_url="https://${bonjour_host}:${PORT}/api/ebay/callback"
 
   log "Using Bonjour host: ${bonjour_host}"
   log "Using LAN IP: ${lan_ip}"
@@ -158,7 +158,7 @@ main() {
   upsert_env_var "SSL_KEY_FILE" "$KEY_PATH"
   upsert_env_var "SSL_CERT_FILE" "$CERT_PATH"
   upsert_env_var "DEV_HOSTNAME" "$bonjour_host"
-  upsert_env_var "EBAY_REDIRECT_URI" "$redirect_uri"
+  upsert_env_var "EBAY_CALLBACK_URL" "$callback_url"
 
   caroot="$(mkcert -CAROOT)"
 

@@ -93,7 +93,7 @@ export default function Camera({ side, image, onCapture, onRetake, compact }) {
           <p className="text-xxs text-dim mb-8">{side}</p>
           {camError && <p className="text-xxs text-red mb-6">{camError}</p>}
           {!liveCameraSupported && (
-            <p className="text-xxs text-dim mb-6">On iPhone over Wi-Fi, Upload will still open the rear camera.</p>
+            <p className="text-xxs text-dim mb-6">Use Upload to access your camera on this device.</p>
           )}
           <div className="flex gap-8 justify-center">
             <button className="btn btn-primary btn-sm" onClick={start}><IconCamera size={14} /> Camera</button>

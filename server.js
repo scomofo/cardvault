@@ -43,6 +43,8 @@ const ALLOWED_MODELS = [
   "claude-haiku-4-5-20251001",
 ];
 const MAX_TOKENS_CAP = 4000;
+const CV_ANALYZE_TIMEOUT_MS = 30_000;
+const CV_HEALTH_TIMEOUT_MS = 5_000;
 
 function isPrivateIpv4(hostname) {
   if (!/^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname)) return false;
@@ -84,6 +86,20 @@ function getNetworkUrls(port) {
   }
 
   return urls;
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 // Security headers
@@ -200,21 +216,24 @@ app.post("/api/ai", aiLimiter, authCheck, validateBody, async (req, res) => {
 // CV service proxy for production builds without the Vite proxy.
 app.post("/api/cv/analyze", express.json({ limit: "5mb" }), async (req, res) => {
   try {
-    const response = await fetch(`${CV_SERVICE_URL}/analyze-json`, {
+    const response = await fetchWithTimeout(`${CV_SERVICE_URL}/analyze-json`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(req.body),
-    });
+    }, CV_ANALYZE_TIMEOUT_MS);
     const data = await response.json();
     res.status(response.status).json(data);
   } catch (error) {
+    if (error.name === "AbortError") {
+      return res.status(504).json({ error: "CV service timeout", details: "CV analysis took too long" });
+    }
     res.status(502).json({ error: "CV service unavailable", details: error.message });
   }
 });
 
 app.get("/api/cv/health", async (_req, res) => {
   try {
-    const response = await fetch(`${CV_SERVICE_URL}/health`);
+    const response = await fetchWithTimeout(`${CV_SERVICE_URL}/health`, {}, CV_HEALTH_TIMEOUT_MS);
     const data = await response.json();
     res.json(data);
   } catch {
