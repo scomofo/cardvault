@@ -5,7 +5,27 @@ import { uid } from "./shared.js";
 export function registerOrderRoutes(app) {
   app.get("/api/orders", (_req, res) => {
     try {
-      res.json(all(`SELECT * FROM orders ORDER BY sold_at DESC, created_at DESC`));
+      res.json(all(`
+        SELECT
+          orders.*,
+          shipments.id AS shipment_id,
+          shipments.tracking_number,
+          shipments.label_url,
+          shipments.status AS shipment_status,
+          shipments.carrier,
+          shipments.service_level,
+          shipments.shipped_at
+        FROM orders
+        LEFT JOIN shipments
+          ON shipments.id = (
+            SELECT id
+            FROM shipments
+            WHERE order_id = orders.id
+            ORDER BY created_at DESC
+            LIMIT 1
+          )
+        ORDER BY orders.sold_at DESC, orders.created_at DESC
+      `));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

@@ -363,3 +363,97 @@ test("shipping automation is idempotent for the same order", async (t) => {
     db.close();
   }
 });
+
+test("orders API includes shipment tracking after automated shipping", async (t) => {
+  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-automation-orders-"));
+  const dbPath = join(tempDir, "cardvault-test.db");
+  const port = 4250 + Math.floor(Math.random() * 100);
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  const server = spawn(process.execPath, ["server.js"], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      PORT: String(port),
+      CARDVAULT_DB_PATH: dbPath,
+    },
+    stdio: "ignore",
+  });
+
+  t.after(async () => {
+    if (!server.killed) {
+      server.kill("SIGTERM");
+    }
+    await new Promise((resolve) => server.once("exit", resolve));
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  await waitForServer(baseUrl);
+
+  const itemResponse = await fetch(`${baseUrl}/api/items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "orders-api-item",
+      name: "Leon Draisaitl",
+      set: "Upper Deck",
+      listedOn: [],
+      priceHistory: [],
+      marketPrice: 60,
+      suggestedListingPrice: 69.99,
+    }),
+  });
+  assert.equal(itemResponse.status, 201);
+
+  const listingResponse = await fetch(`${baseUrl}/api/listings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "orders-api-listing",
+      cardId: "orders-api-item",
+      cardName: "Leon Draisaitl",
+      cardSet: "Upper Deck",
+      platform: "ebay",
+      listingTitle: "Leon Draisaitl card",
+      listingDescription: "Orders API should include shipment data",
+      startPrice: 69.99,
+      status: "draft",
+    }),
+  });
+  assert.equal(listingResponse.status, 201);
+
+  const orderResponse = await fetch(`${baseUrl}/api/orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "orders-api-order",
+      itemId: "orders-api-item",
+      listingId: "orders-api-listing",
+      platform: "ebay",
+      salePrice: 69.99,
+      destinationCountry: "CA",
+      paymentStatus: "paid",
+      fulfillmentStatus: "pending",
+    }),
+  });
+  assert.equal(orderResponse.status, 201);
+
+  const shipmentResponse = await fetch(`${baseUrl}/api/automation/shipping/orders-api-order`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ destinationCountry: "CA", weightOz: 6 }),
+  });
+  assert.equal(shipmentResponse.status, 200);
+  const shipmentPayload = await shipmentResponse.json();
+
+  const ordersResponse = await fetch(`${baseUrl}/api/orders`);
+  assert.equal(ordersResponse.status, 200);
+  const ordersPayload = await ordersResponse.json();
+  const order = ordersPayload.find((entry) => entry.id === "orders-api-order");
+
+  assert.ok(order);
+  assert.equal(order.fulfillment_status, "shipped");
+  assert.equal(order.tracking_number, shipmentPayload.tracking_number);
+  assert.equal(order.shipment_status, shipmentPayload.status);
+  assert.equal(order.service_level, shipmentPayload.service_level);
+});
