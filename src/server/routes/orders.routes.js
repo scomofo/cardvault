@@ -68,6 +68,14 @@ export function registerOrderRoutes(app) {
           body.soldAt || body.sold_at || new Date().toISOString(),
         ],
       );
+      if (body.saleId || body.sale_id) {
+        run(
+          `UPDATE sales
+           SET order_id = COALESCE(order_id, ?)
+           WHERE id = ?`,
+          [id, body.saleId || body.sale_id],
+        );
+      }
       res.status(201).json(get(`SELECT * FROM orders WHERE id = ?`, [id]));
     } catch (error) {
       res.status(500).json({ error: error.message });
