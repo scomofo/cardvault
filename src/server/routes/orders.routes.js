@@ -45,24 +45,34 @@ export function registerOrderRoutes(app) {
         if (err) return sendValidationError(res, err);
       }
       const id = body.id || uid();
-      const linkedListingId = body.listingId || body.listing_id || null;
-      const linkedItemId = body.itemId || body.item_id || get(
+      const linkedSaleId = body.saleId || body.sale_id || null;
+      const linkedSale = linkedSaleId
+        ? get(
+          `SELECT id, card_id, listing_id, order_id, sale_price, net_profit, date
+           FROM sales
+           WHERE id = ?`,
+          [linkedSaleId],
+        )
+        : null;
+      const linkedListingId = body.listingId || body.listing_id || linkedSale?.listing_id || null;
+      const linkedItemId = body.itemId || body.item_id || linkedSale?.card_id || get(
         "SELECT card_id FROM listings WHERE id = ?",
         [linkedListingId],
       )?.card_id || null;
+      const soldAt = body.soldAt || body.sold_at || linkedSale?.date || new Date().toISOString();
       run(
         `INSERT INTO orders
          (id, sale_id, listing_id, item_id, platform, external_order_id, buyer_handle, sale_price, fees, shipping_charge, tax_collected, destination_country, destination_postal_code, payment_status, fulfillment_status, sold_at, created_at)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))`,
         [
           id,
-          body.saleId || body.sale_id || null,
+          linkedSaleId,
           linkedListingId,
           linkedItemId,
           body.platform,
           body.externalOrderId || body.external_order_id || null,
           body.buyerHandle || body.buyer_handle || null,
-          body.salePrice || body.sale_price || 0,
+          body.salePrice || body.sale_price || linkedSale?.sale_price || 0,
           body.fees || 0,
           body.shippingCharge || body.shipping_charge || 0,
           body.taxCollected || body.tax_collected || 0,
@@ -70,18 +80,18 @@ export function registerOrderRoutes(app) {
           body.destinationPostalCode || body.destination_postal_code || null,
           body.paymentStatus || body.payment_status || "paid",
           body.fulfillmentStatus || body.fulfillment_status || "pending",
-          body.soldAt || body.sold_at || new Date().toISOString(),
+          soldAt,
         ],
       );
-      if (body.saleId || body.sale_id) {
+      if (linkedSaleId) {
         run(
           `UPDATE sales
            SET order_id = COALESCE(order_id, ?)
            WHERE id = ?`,
-          [id, body.saleId || body.sale_id],
+          [id, linkedSaleId],
         );
       }
-      if (body.listingId || body.listing_id) {
+      if (linkedListingId) {
         run(
           `UPDATE listings
            SET status = 'sold',
@@ -90,9 +100,9 @@ export function registerOrderRoutes(app) {
                sold_date = COALESCE(sold_date, ?)
            WHERE id = ?`,
           [
-            body.salePrice || body.sale_price || 0,
-            body.soldAt || body.sold_at || new Date().toISOString(),
-            body.listingId || body.listing_id,
+            body.salePrice || body.sale_price || linkedSale?.sale_price || 0,
+            soldAt,
+            linkedListingId,
           ],
         );
       }
@@ -100,14 +110,19 @@ export function registerOrderRoutes(app) {
         run(
           `UPDATE user_items
            SET status = 'sold',
-               listing_status = CASE WHEN ? IS NOT NULL THEN 'ended' ELSE listing_status END,
-               sale_status = 'sold',
-               sold_at = COALESCE(?, sold_at),
-               updated_at = datetime('now')
-            WHERE id = ?`,
+                listing_status = CASE WHEN ? IS NOT NULL THEN 'ended' ELSE listing_status END,
+                sale_status = 'sold',
+                profit_realized = CASE
+                  WHEN profit_realized IS NULL OR profit_realized = 0 THEN ?
+                  ELSE profit_realized
+                END,
+                sold_at = COALESCE(?, sold_at),
+                updated_at = datetime('now')
+             WHERE id = ?`,
           [
             linkedListingId,
-            body.soldAt || body.sold_at || new Date().toISOString(),
+            linkedSale?.net_profit || 0,
+            soldAt,
             linkedItemId,
           ],
         );
