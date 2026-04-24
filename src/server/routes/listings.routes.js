@@ -199,6 +199,13 @@ export function registerListingRoutes(app) {
       if (!existing) return res.status(404).json({ error: "Listing not found" });
       run("DELETE FROM listings WHERE id = ?", [req.params.id]);
       if (existing.card_id) {
+        const remainingSoldCount = get(
+          `SELECT COUNT(*) AS count
+           FROM listings
+           WHERE card_id = ?
+             AND status = 'sold'`,
+          [existing.card_id],
+        )?.count || 0;
         const remainingListings = get(
           `SELECT COUNT(*) AS count FROM listings WHERE card_id = ?`,
           [existing.card_id],
@@ -212,6 +219,17 @@ export function registerListingRoutes(app) {
                    ELSE status
                  END,
                  listing_status = 'not_listed',
+                 updated_at = datetime('now')
+             WHERE id = ?`,
+            [existing.card_id],
+          );
+        } else if (existing.status === "sold" && remainingSoldCount === 0) {
+          run(
+            `UPDATE user_items
+             SET status = 'listed',
+                 listing_status = 'listed',
+                 sale_status = 'available',
+                 sold_at = NULL,
                  updated_at = datetime('now')
              WHERE id = ?`,
             [existing.card_id],

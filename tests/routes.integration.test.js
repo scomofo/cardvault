@@ -258,6 +258,19 @@ test("server routes handle validation, migration, and listing side effects", asy
   assert.equal(stillSoldItemPayload.listingStatus, "ended");
   assert.equal(stillSoldItemPayload.saleStatus, "sold");
 
+  const deleteSoldSiblingResponse = await fetch(`${baseUrl}/api/listings/multi-route-listing-b`, {
+    method: "DELETE",
+  });
+  assert.equal(deleteSoldSiblingResponse.status, 200);
+
+  const revertedMultiItemResponse = await fetch(`${baseUrl}/api/items/multi-route-item`);
+  assert.equal(revertedMultiItemResponse.status, 200);
+  const revertedMultiItemPayload = await revertedMultiItemResponse.json();
+  assert.equal(revertedMultiItemPayload.status, "listed");
+  assert.equal(revertedMultiItemPayload.listingStatus, "listed");
+  assert.equal(revertedMultiItemPayload.saleStatus, "available");
+  assert.equal(revertedMultiItemPayload.soldAt, null);
+
   const secondItemResponse = await fetch(`${baseUrl}/api/items`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
