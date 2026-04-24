@@ -35,8 +35,7 @@ const TOOL_TABS = [
   { v: "trade", l: "Trades" },
 ];
 
-function ToolsView() {
-  const [tab, setTab] = useState("batch");
+function ToolsView({ tab, setTab }) {
   return (
     <div className="fade">
       <h1 className="page-title">Tools</h1>
@@ -60,8 +59,23 @@ function ToolsView() {
 
 function AppContent() {
   const [view, setView] = useState("dashboard");
+  const [toolsTab, setToolsTab] = useState("batch");
   const [online, setOnline] = useState(navigator.onLine);
   const { catalog, userName } = useData();
+
+  const handleNavigate = (target) => {
+    if (typeof target === "string") {
+      setView(target);
+      return;
+    }
+
+    if (target?.toolsTab) {
+      setToolsTab(target.toolsTab);
+    }
+    if (target?.view) {
+      setView(target.view);
+    }
+  };
 
   useEffect(() => {
     const on = () => setOnline(true);
@@ -86,7 +100,7 @@ function AppContent() {
           <span className="gold">Card</span><span style={{ color: "var(--tx)" }}>Vault</span>
         </h1>
         <div className="flex items-center gap-8">
-          <GlobalSearch onNavigate={setView} />
+          <GlobalSearch onNavigate={handleNavigate} />
           {userName && <span className="text-xs text-dim" style={{ letterSpacing: ".5px" }}>{userName}</span>}
           <button className="btn btn-outline btn-sm" onClick={() => setView("cards")}>
             {activeCount} cards
@@ -99,7 +113,7 @@ function AppContent() {
         {view === "scan" && <ScanView onNavigate={setView} />}
         {view === "cards" && <CatalogView />}
         {view === "sales" && <SalesFlow />}
-        {view === "tools" && <ToolsView />}
+        {view === "tools" && <ToolsView tab={toolsTab} setTab={setToolsTab} />}
         {view === "more" && <Settings />}
       </main>
 

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useData } from "../lib/DataContext";
 import { condOf, fmtShort } from "../lib/utils";
 import { matchScore, shouldOpenGlobalSearch } from "../lib/search/globalSearch";
+import { navigationTargetForSearchResult } from "../lib/search/searchNavigation";
 import { IconSearch, IconX } from "./Icons";
 
 const MAX_RESULTS = 20;
@@ -113,23 +114,7 @@ export default function GlobalSearch({ onNavigate }) {
   const handleSelect = useCallback((result) => {
     setOpen(false);
     setQuery("");
-    switch (result.type) {
-      case "card":
-        onNavigate("cards");
-        break;
-      case "sale":
-      case "order":
-      case "listing":
-        onNavigate("sales");
-        break;
-      case "purchase":
-        onNavigate("sales");
-        break;
-      case "watch":
-      case "trade":
-        onNavigate("tools");
-        break;
-    }
+    onNavigate(navigationTargetForSearchResult(result.type));
   }, [onNavigate]);
 
   const typeLabel = { card: "Card", sale: "Sale", order: "Order", listing: "Listing", purchase: "Purchase", watch: "Watchlist", trade: "Trade" };
