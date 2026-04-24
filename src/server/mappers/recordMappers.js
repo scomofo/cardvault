@@ -237,6 +237,38 @@ export function toSnake(body) {
     output.buyer_handle = output.buyerHandle;
     delete output.buyerHandle;
   }
+  if ("gaveValue" in output) {
+    output.gave_value = output.gaveValue;
+    delete output.gaveValue;
+  }
+  if ("receivedValue" in output) {
+    output.received_value = output.receivedValue;
+    delete output.receivedValue;
+  }
+  if ("targetPrice" in output) {
+    output.target_price = output.targetPrice;
+    delete output.targetPrice;
+  }
+  if ("currentPrice" in output) {
+    output.current_price = output.currentPrice;
+    delete output.currentPrice;
+  }
+  if ("dateSent" in output) {
+    output.date_sent = output.dateSent;
+    delete output.dateSent;
+  }
+  if ("preValue" in output) {
+    output.pre_value = output.preValue;
+    delete output.preValue;
+  }
+  if ("certNumber" in output) {
+    output.cert_number = output.certNumber;
+    delete output.certNumber;
+  }
+  if ("postValue" in output) {
+    output.post_value = output.postValue;
+    delete output.postValue;
+  }
   if ("shippingCost" in output) {
     output.shipping_cost = output.shippingCost;
     delete output.shippingCost;

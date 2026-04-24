@@ -1,16 +1,17 @@
 import crypto from "crypto";
 import { all, get, run } from "../database.js";
+import { toCamel, toCamelArray, toSnake } from "../mappers/recordMappers.js";
 import { isObject } from "../validation/common.js";
 
 export const uid = () => crypto.randomUUID();
 
-export function registerCRUD(app, table, requiredField, { columns, insert, update }) {
+export function registerCRUD(app, table, requiredField, { columns, insert, update, fieldMap = {} }) {
   const columnList = columns.split(",").map((column) => column.trim());
   const updateColumns = columnList.slice(1);
 
   app.get(`/api/${table}`, (_req, res) => {
     try {
-      res.json(all(`SELECT * FROM ${table} ORDER BY created_at DESC`));
+      res.json(toCamelArray(all(`SELECT * FROM ${table} ORDER BY created_at DESC`), fieldMap));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -21,7 +22,7 @@ export function registerCRUD(app, table, requiredField, { columns, insert, updat
       if (!isObject(req.body)) {
         return res.status(400).json({ error: "body must be an object" });
       }
-      const body = req.body;
+      const body = toSnake(req.body);
       if (!body[requiredField]) {
         return res.status(400).json({ error: `${requiredField} required` });
       }
@@ -31,7 +32,7 @@ export function registerCRUD(app, table, requiredField, { columns, insert, updat
         `INSERT INTO ${table} (${columns}) VALUES (${placeholders})`,
         insert(body, id),
       );
-      res.status(201).json(get(`SELECT * FROM ${table} WHERE id = ?`, [id]));
+      res.status(201).json(toCamel(get(`SELECT * FROM ${table} WHERE id = ?`, [id]), fieldMap));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -45,13 +46,13 @@ export function registerCRUD(app, table, requiredField, { columns, insert, updat
       const existing = get(`SELECT * FROM ${table} WHERE id = ?`, [req.params.id]);
       if (!existing) return res.status(404).json({ error: "Not found" });
       if (Object.keys(req.body).length === 0) return res.status(400).json({ error: "request body required" });
-      const body = { ...existing, ...req.body };
+      const body = { ...existing, ...toSnake(req.body) };
       const setClause = updateColumns.map((column) => `${column}=?`).join(",");
       run(
         `UPDATE ${table} SET ${setClause} WHERE id=?`,
         [...update(body), req.params.id],
       );
-      res.json(get(`SELECT * FROM ${table} WHERE id = ?`, [req.params.id]));
+      res.json(toCamel(get(`SELECT * FROM ${table} WHERE id = ?`, [req.params.id]), fieldMap));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

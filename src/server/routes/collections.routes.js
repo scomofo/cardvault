@@ -1,5 +1,10 @@
 import { all, get, run } from "../database.js";
-import { PURCHASE_FIELD_MAP } from "../mappers/fieldMaps.js";
+import {
+  GRADING_FIELD_MAP,
+  PURCHASE_FIELD_MAP,
+  TRADE_FIELD_MAP,
+  WATCHLIST_FIELD_MAP,
+} from "../mappers/fieldMaps.js";
 import { json } from "../mappers/recordMappers.js";
 import { toCamel, toCamelArray } from "../mappers/recordMappers.js";
 import { requireJsonBody } from "../validation/common.js";
@@ -8,6 +13,7 @@ import { registerCRUD, uid } from "./shared.js";
 export function registerCollectionRoutes(app) {
   registerCRUD(app, "trades", "partner", {
     columns: "id, partner, gave, received, gave_value, received_value, date, notes",
+    fieldMap: TRADE_FIELD_MAP,
     insert: (body, id) => [
       id,
       body.partner,
@@ -31,6 +37,7 @@ export function registerCollectionRoutes(app) {
 
   registerCRUD(app, "watchlist", "name", {
     columns: "id, name, card_set, card_number, target_price, current_price, price_history",
+    fieldMap: WATCHLIST_FIELD_MAP,
     insert: (body, id) => [
       id,
       body.name,
@@ -53,6 +60,7 @@ export function registerCollectionRoutes(app) {
   registerCRUD(app, "gradings", "card_name", {
     columns:
       "id, card_name, card_set, card_number, company, service, cost, date_sent, pre_value, status, grade, cert_number, post_value",
+    fieldMap: GRADING_FIELD_MAP,
     insert: (body, id) => [
       id,
       body.card_name,

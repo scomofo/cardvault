@@ -77,6 +77,32 @@ export const MARKETPLACE_CONNECTION_FIELD_MAP = {
   updated_at: "updatedAt",
 };
 
+export const TRADE_FIELD_MAP = {
+  gave_value: "gaveValue",
+  received_value: "receivedValue",
+  created_at: "createdAt",
+};
+
+export const WATCHLIST_FIELD_MAP = {
+  card_set: "cardSet",
+  card_number: "cardNumber",
+  target_price: "targetPrice",
+  current_price: "currentPrice",
+  price_history: "priceHistory",
+  created_at: "createdAt",
+};
+
+export const GRADING_FIELD_MAP = {
+  card_name: "cardName",
+  card_set: "cardSet",
+  card_number: "cardNumber",
+  date_sent: "dateSent",
+  pre_value: "preValue",
+  cert_number: "certNumber",
+  post_value: "postValue",
+  created_at: "createdAt",
+};
+
 export const ORDER_FIELD_MAP = {
   sale_id: "saleId",
   listing_id: "listingId",

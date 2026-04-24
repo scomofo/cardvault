@@ -608,5 +608,98 @@ test("server routes handle validation, migration, and listing side effects", asy
   assert.equal("access_token" in connectionsPayload[0], false);
   assert.equal("refresh_token" in connectionsPayload[0], false);
 
+  const tradeResponse = await fetch(`${baseUrl}/api/trades`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "route-trade",
+      partner: "Trade Partner",
+      gave: "Card A",
+      received: "Card B",
+      gaveValue: 5,
+      receivedValue: 7.5,
+      date: "2026-04-24",
+      notes: "Route trade",
+    }),
+  });
+  assert.equal(tradeResponse.status, 201);
+  const tradePayload = await tradeResponse.json();
+  assert.equal(tradePayload.gaveValue, 5);
+  assert.equal(tradePayload.receivedValue, 7.5);
+  assert.ok("createdAt" in tradePayload);
+  assert.equal("gave_value" in tradePayload, false);
+
+  const watchlistResponse = await fetch(`${baseUrl}/api/watchlist`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "route-watch",
+      name: "Watch Card",
+      cardSet: "Watch Set",
+      cardNumber: "9",
+      targetPrice: 15,
+      currentPrice: 12.5,
+      priceHistory: [{ price: 12.5, date: "2026-04-24" }],
+    }),
+  });
+  assert.equal(watchlistResponse.status, 201);
+  const watchlistPayload = await watchlistResponse.json();
+  assert.equal(watchlistPayload.cardSet, "Watch Set");
+  assert.equal(watchlistPayload.cardNumber, "9");
+  assert.equal(watchlistPayload.targetPrice, 15);
+  assert.equal(watchlistPayload.currentPrice, 12.5);
+  assert.deepEqual(watchlistPayload.priceHistory, [{ price: 12.5, date: "2026-04-24" }]);
+  assert.equal("target_price" in watchlistPayload, false);
+
+  const gradingResponse = await fetch(`${baseUrl}/api/gradings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "route-grading",
+      cardName: "Grade Card",
+      cardSet: "Grade Set",
+      cardNumber: "10",
+      company: "PSA",
+      service: "Economy",
+      cost: 22,
+      dateSent: "2026-04-24",
+      preValue: 40,
+      status: "sent",
+      certNumber: "CERT-1",
+      postValue: 75,
+    }),
+  });
+  assert.equal(gradingResponse.status, 201);
+  const gradingPayload = await gradingResponse.json();
+  assert.equal(gradingPayload.cardName, "Grade Card");
+  assert.equal(gradingPayload.cardSet, "Grade Set");
+  assert.equal(gradingPayload.cardNumber, "10");
+  assert.equal(gradingPayload.dateSent, "2026-04-24");
+  assert.equal(gradingPayload.preValue, 40);
+  assert.equal(gradingPayload.certNumber, "CERT-1");
+  assert.equal(gradingPayload.postValue, 75);
+  assert.equal("card_name" in gradingPayload, false);
+  assert.equal("date_sent" in gradingPayload, false);
+
+  const tradesListResponse = await fetch(`${baseUrl}/api/trades`);
+  assert.equal(tradesListResponse.status, 200);
+  const tradesListPayload = await tradesListResponse.json();
+  assert.equal(tradesListPayload[0].gaveValue, 5);
+  assert.equal("gave_value" in tradesListPayload[0], false);
+
+  const watchlistListResponse = await fetch(`${baseUrl}/api/watchlist`);
+  assert.equal(watchlistListResponse.status, 200);
+  const watchlistListPayload = await watchlistListResponse.json();
+  assert.equal(watchlistListPayload[0].targetPrice, 15);
+  assert.deepEqual(watchlistListPayload[0].priceHistory, [{ price: 12.5, date: "2026-04-24" }]);
+  assert.equal("target_price" in watchlistListPayload[0], false);
+
+  const gradingsListResponse = await fetch(`${baseUrl}/api/gradings`);
+  assert.equal(gradingsListResponse.status, 200);
+  const gradingsListPayload = await gradingsListResponse.json();
+  assert.equal(gradingsListPayload[0].cardName, "Grade Card");
+  assert.equal(gradingsListPayload[0].dateSent, "2026-04-24");
+  assert.equal("card_name" in gradingsListPayload[0], false);
+
   assert.match(stderr, /No ANTHROPIC_API_KEY|^$/);
 });
