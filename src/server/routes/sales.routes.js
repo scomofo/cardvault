@@ -173,6 +173,16 @@ export function registerSalesRoutes(app) {
       if (!existing) return res.status(404).json({ error: "Sale not found" });
 
       const body = { ...existing, ...toSnake(req.body) };
+      const nextOrderId = body.order_id || null;
+      if (nextOrderId) {
+        const linkedOrder = get("SELECT id, sale_id FROM orders WHERE id = ?", [nextOrderId]);
+        if (!linkedOrder) {
+          return res.status(404).json({ error: "linked order not found" });
+        }
+        if (linkedOrder.sale_id && linkedOrder.sale_id !== req.params.id) {
+          return res.status(409).json({ error: "order already linked to a different sale" });
+        }
+      }
       run(
         `UPDATE sales SET
           card_id=?, order_id=?, card_name=?, card_set=?, sale_price=?, cost_basis=?,
@@ -202,6 +212,23 @@ export function registerSalesRoutes(app) {
           req.params.id,
         ],
       );
+      if (existing.order_id && existing.order_id !== nextOrderId) {
+        run(
+          `UPDATE orders
+           SET sale_id = NULL
+           WHERE id = ?
+             AND sale_id = ?`,
+          [existing.order_id, req.params.id],
+        );
+      }
+      if (nextOrderId) {
+        run(
+          `UPDATE orders
+           SET sale_id = ?
+           WHERE id = ?`,
+          [req.params.id, nextOrderId],
+        );
+      }
 
       res.json(toCamel(get("SELECT * FROM sales WHERE id = ?", [req.params.id]), SALE_FIELD_MAP));
     } catch (error) {

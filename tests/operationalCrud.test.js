@@ -133,6 +133,36 @@ test("sales, orders, and purchases support full CRUD for sync flows", async (t) 
   assert.equal(orderPayload.destinationPostalCode, "10001");
   assert.equal(orderPayload.fulfillmentStatus, "shipped");
 
+  const saleRelinkResponse = await fetch(`${baseUrl}/api/sales/crud-sale`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      orderId: null,
+    }),
+  });
+  assert.equal(saleRelinkResponse.status, 200);
+
+  const ordersAfterSaleUnlinkResponse = await fetch(`${baseUrl}/api/orders`);
+  assert.equal(ordersAfterSaleUnlinkResponse.status, 200);
+  const ordersAfterSaleUnlink = await ordersAfterSaleUnlinkResponse.json();
+  const unlinkedOrder = ordersAfterSaleUnlink.find((order) => order.id === "crud-order");
+  assert.equal(unlinkedOrder.saleId, null);
+
+  const orderRelinkResponse = await fetch(`${baseUrl}/api/orders/crud-order`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      saleId: "crud-sale",
+    }),
+  });
+  assert.equal(orderRelinkResponse.status, 200);
+
+  const salesAfterOrderRelinkResponse = await fetch(`${baseUrl}/api/sales`);
+  assert.equal(salesAfterOrderRelinkResponse.status, 200);
+  const salesAfterOrderRelink = await salesAfterOrderRelinkResponse.json();
+  const relinkedSale = salesAfterOrderRelink.find((sale) => sale.id === "crud-sale");
+  assert.equal(relinkedSale.orderId, "crud-order");
+
   const purchaseCreateResponse = await fetch(`${baseUrl}/api/purchases`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

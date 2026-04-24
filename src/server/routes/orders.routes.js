@@ -196,6 +196,16 @@ export function registerOrderRoutes(app) {
       if (!existing) return res.status(404).json({ error: "Order not found" });
 
       const body = { ...existing, ...toSnake(req.body) };
+      const nextSaleId = body.sale_id || null;
+      if (nextSaleId) {
+        const linkedSale = get("SELECT id, order_id FROM sales WHERE id = ?", [nextSaleId]);
+        if (!linkedSale) {
+          return res.status(404).json({ error: "linked sale not found" });
+        }
+        if (linkedSale.order_id && linkedSale.order_id !== req.params.id) {
+          return res.status(409).json({ error: "sale already linked to a different order" });
+        }
+      }
       run(
         `UPDATE orders SET
           sale_id=?, listing_id=?, item_id=?, platform=?, external_order_id=?,
@@ -222,6 +232,23 @@ export function registerOrderRoutes(app) {
           req.params.id,
         ],
       );
+      if (existing.sale_id && existing.sale_id !== nextSaleId) {
+        run(
+          `UPDATE sales
+           SET order_id = NULL
+           WHERE id = ?
+             AND order_id = ?`,
+          [existing.sale_id, req.params.id],
+        );
+      }
+      if (nextSaleId) {
+        run(
+          `UPDATE sales
+           SET order_id = ?
+           WHERE id = ?`,
+          [req.params.id, nextSaleId],
+        );
+      }
 
       res.json(toCamel(get("SELECT * FROM orders WHERE id = ?", [req.params.id]), ORDER_FIELD_MAP));
     } catch (error) {

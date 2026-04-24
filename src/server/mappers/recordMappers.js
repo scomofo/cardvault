@@ -273,6 +273,14 @@ export function toSnake(body) {
     output.order_id = output.orderId;
     delete output.orderId;
   }
+  if ("saleId" in output) {
+    output.sale_id = output.saleId;
+    delete output.saleId;
+  }
+  if ("itemId" in output) {
+    output.item_id = output.itemId;
+    delete output.itemId;
+  }
   if ("externalOrderId" in output) {
     output.external_order_id = output.externalOrderId;
     delete output.externalOrderId;
