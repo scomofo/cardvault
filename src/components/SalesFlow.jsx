@@ -5,6 +5,7 @@ import { PLATFORMS } from "../lib/constants";
 import { uid, fmtShort } from "../lib/utils";
 import { actionQueueAPI, marketplacesAPI, ordersAPI, listingsAPI, salesAPI, automationAPI, purchasesAPI, itemsAPI } from "../lib/api";
 import { importEbayPurchasesLocal, parseEbayPurchaseImport } from "../lib/ebayPurchaseImport";
+import { loadServerSalesState } from "../lib/salesViewState";
 import { requestNotificationPermission, canNotify, sendNotification, scheduleAuctionNotification, cancelNotificationTimer } from "../lib/notifications";
 import { IconPlus, IconBell, IconCheck, IconX, Spinner } from "./Icons";
 import EbayExport from "./EbayExport";
@@ -249,24 +250,41 @@ export default function SalesFlow() {
   const totalPurchases = useMemo(() => purchases.reduce((s, p) => s + p.totalCost, 0), [purchases]);
 
   useEffect(() => {
-    actionQueueAPI.list().then(setActionQueue).catch(() => setActionQueue([]));
-    ordersAPI.list().then((data) => setOrders(Array.isArray(data) ? data : [])).catch(() => setOrders([]));
-  }, [catalog.length, listings.length, sales.length]);
+    if (!useServer) {
+      setActionQueue([]);
+      return;
+    }
+    loadServerSalesState({
+      actionQueueAPI,
+      ordersAPI,
+      listingsAPI,
+      salesAPI,
+      itemsAPI,
+    })
+      .then((nextState) => {
+        setActionQueue(nextState.actionQueue);
+        setOrders(nextState.orders);
+      })
+      .catch(() => {
+        setActionQueue([]);
+        setOrders([]);
+      });
+  }, [useServer, catalog.length, listings.length, sales.length, setOrders]);
 
   const refreshServerSalesState = async () => {
     if (!useServer) return;
-    const [nextActionQueue, nextOrders, nextListings, nextSales, nextCatalog] = await Promise.all([
-      actionQueueAPI.list().catch(() => []),
-      ordersAPI.list().catch(() => []),
-      listingsAPI.list().catch(() => []),
-      salesAPI.list().catch(() => []),
-      itemsAPI.list().catch(() => []),
-    ]);
-    setActionQueue(Array.isArray(nextActionQueue) ? nextActionQueue : []);
-    setOrders(Array.isArray(nextOrders) ? nextOrders : []);
-    setListings(Array.isArray(nextListings) ? nextListings : []);
-    setSales(Array.isArray(nextSales) ? nextSales : []);
-    setCatalog(Array.isArray(nextCatalog) ? nextCatalog : []);
+    const nextState = await loadServerSalesState({
+      actionQueueAPI,
+      ordersAPI,
+      listingsAPI,
+      salesAPI,
+      itemsAPI,
+    });
+    setActionQueue(nextState.actionQueue);
+    setOrders(nextState.orders);
+    setListings(nextState.listings);
+    setSales(nextState.sales);
+    setCatalog(nextState.catalog);
   };
 
   const publishListing = async (listingId, marketplace = "ebay") => {

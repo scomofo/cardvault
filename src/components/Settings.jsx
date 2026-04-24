@@ -3,6 +3,7 @@ import { useToast } from "./Toast";
 import { useData } from "../lib/DataContext";
 import { fmtShort } from "../lib/utils";
 import { automationAPI, marketplacesAPI } from "../lib/api";
+import { createBackupPayload, normalizeBackupState } from "../lib/backupState";
 import { genSalesCSV } from "../lib/exports";
 import { clearAllImages, exportAllImages, importAllImages } from "../lib/storage";
 import { IconDownload, IconUpload, IconTrash, IconBarChart, IconCheck, IconEye, IconZap, IconPlus, Spinner } from "./Icons";
@@ -363,9 +364,7 @@ export default function Settings() {
 
   const backupData = async () => {
     const images = await exportAllImages().catch(() => ({}));
-    const data = {
-      _cardvaultBackup: true,
-      _date: new Date().toISOString(),
+    const data = createBackupPayload({
       catalog,
       sales,
       orders,
@@ -377,7 +376,7 @@ export default function Settings() {
       userName,
       shipFrom,
       images,
-    };
+    });
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url; a.download = `cardvault-backup-${new Date().toISOString().slice(0, 10)}.json`; a.click();
@@ -393,17 +392,18 @@ export default function Settings() {
         const data = JSON.parse(reader.result);
         if (!data._cardvaultBackup) { toast.error("Not a valid CardVault backup file"); return; }
         if (!window.confirm("Restore backup? This will replace all current data.")) return;
-        await importAllImages(data.images || {}).catch(() => {});
-        setCatalog(Array.isArray(data.catalog) ? data.catalog : []);
-        setSales(Array.isArray(data.sales) ? data.sales : []);
-        setOrders(Array.isArray(data.orders) ? data.orders : []);
-        setListings(Array.isArray(data.listings) ? data.listings : []);
-        setPurchases(Array.isArray(data.purchases) ? data.purchases : []);
-        setTrades(Array.isArray(data.trades) ? data.trades : []);
-        setWatchlist(Array.isArray(data.watchlist) ? data.watchlist : []);
-        setGradings(Array.isArray(data.gradings) ? data.gradings : []);
-        setUserName(data.userName ?? "");
-        setShipFrom(data.shipFrom ?? "");
+        const normalized = normalizeBackupState(data);
+        await importAllImages(normalized.images).catch(() => {});
+        setCatalog(normalized.catalog);
+        setSales(normalized.sales);
+        setOrders(normalized.orders);
+        setListings(normalized.listings);
+        setPurchases(normalized.purchases);
+        setTrades(normalized.trades);
+        setWatchlist(normalized.watchlist);
+        setGradings(normalized.gradings);
+        setUserName(normalized.userName);
+        setShipFrom(normalized.shipFrom);
         toast.success("Backup restored");
       } catch { toast.error("Failed to parse backup file"); }
     };
