@@ -65,14 +65,27 @@ export function registerListingRoutes(app) {
         ],
       );
       if (body.card_id) {
-        run(
-          `UPDATE user_items
-           SET status = 'listed',
-               listing_status = 'listed',
-               updated_at = datetime('now')
-           WHERE id = ?`,
-          [body.card_id],
-        );
+        if (body.status === "sold") {
+          run(
+            `UPDATE user_items
+             SET status = 'sold',
+                 listing_status = 'ended',
+                 sale_status = 'sold',
+                 sold_at = COALESCE(?, sold_at),
+                 updated_at = datetime('now')
+             WHERE id = ?`,
+            [body.sold_date || new Date().toISOString(), body.card_id],
+          );
+        } else {
+          run(
+            `UPDATE user_items
+             SET status = 'listed',
+                 listing_status = 'listed',
+                 updated_at = datetime('now')
+             WHERE id = ?`,
+            [body.card_id],
+          );
+        }
       }
       res
         .status(201)
@@ -139,16 +152,26 @@ export function registerListingRoutes(app) {
             [body.sold_date || new Date().toISOString(), body.card_id],
           );
         } else if (existing.status === "sold") {
-          run(
-            `UPDATE user_items
-             SET status = 'listed',
-                 listing_status = 'listed',
-                 sale_status = 'available',
-                 sold_at = NULL,
-                 updated_at = datetime('now')
-             WHERE id = ?`,
-            [body.card_id],
-          );
+          const siblingSoldCount = get(
+            `SELECT COUNT(*) AS count
+             FROM listings
+             WHERE card_id = ?
+               AND id != ?
+               AND status = 'sold'`,
+            [body.card_id, req.params.id],
+          )?.count || 0;
+          if (siblingSoldCount === 0) {
+            run(
+              `UPDATE user_items
+               SET status = 'listed',
+                   listing_status = 'listed',
+                   sale_status = 'available',
+                   sold_at = NULL,
+                   updated_at = datetime('now')
+               WHERE id = ?`,
+              [body.card_id],
+            );
+          }
           run(
             `UPDATE listings
              SET publish_status = CASE

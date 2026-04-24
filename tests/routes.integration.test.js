@@ -178,6 +178,86 @@ test("server routes handle validation, migration, and listing side effects", asy
   assert.equal(reopenedItemPayload.saleStatus, "available");
   assert.equal(reopenedItemPayload.soldAt, null);
 
+  const multiItemResponse = await fetch(`${baseUrl}/api/items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "multi-route-item",
+      name: "Multi Route Card",
+      set: "Route Set",
+      number: "3",
+      costBasis: 5.5,
+      listedOn: [],
+      priceHistory: [],
+    }),
+  });
+  assert.equal(multiItemResponse.status, 201);
+
+  const firstMultiListingResponse = await fetch(`${baseUrl}/api/listings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "multi-route-listing-a",
+      cardId: "multi-route-item",
+      cardName: "Multi Route Card",
+      cardSet: "Route Set",
+      cardNumber: "3",
+      platform: "ebay",
+      format: "fixed",
+      startPrice: 15.5,
+      shipping: 1.25,
+      status: "sold",
+      soldPrice: 15.5,
+      soldDate: "2026-04-24T19:00:00.000Z",
+    }),
+  });
+  assert.equal(firstMultiListingResponse.status, 201);
+
+  const secondMultiListingResponse = await fetch(`${baseUrl}/api/listings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "multi-route-listing-b",
+      cardId: "multi-route-item",
+      cardName: "Multi Route Card",
+      cardSet: "Route Set",
+      cardNumber: "3",
+      platform: "shopify",
+      format: "fixed",
+      startPrice: 16.5,
+      shipping: 1.25,
+      status: "sold",
+      soldPrice: 16.5,
+      soldDate: "2026-04-24T19:05:00.000Z",
+    }),
+  });
+  assert.equal(secondMultiListingResponse.status, 201);
+
+  const unsellOneListingResponse = await fetch(`${baseUrl}/api/listings/multi-route-listing-a`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "multi-route-listing-a",
+      cardId: "multi-route-item",
+      cardName: "Multi Route Card",
+      cardSet: "Route Set",
+      cardNumber: "3",
+      platform: "ebay",
+      format: "fixed",
+      startPrice: 15.5,
+      shipping: 1.25,
+      status: "active",
+    }),
+  });
+  assert.equal(unsellOneListingResponse.status, 200);
+
+  const stillSoldItemResponse = await fetch(`${baseUrl}/api/items/multi-route-item`);
+  assert.equal(stillSoldItemResponse.status, 200);
+  const stillSoldItemPayload = await stillSoldItemResponse.json();
+  assert.equal(stillSoldItemPayload.status, "sold");
+  assert.equal(stillSoldItemPayload.listingStatus, "ended");
+  assert.equal(stillSoldItemPayload.saleStatus, "sold");
+
   const secondItemResponse = await fetch(`${baseUrl}/api/items`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
