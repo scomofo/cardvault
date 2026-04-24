@@ -69,10 +69,10 @@ export function registerCRUD(app, table, requiredField, { columns, insert, updat
   });
 }
 
-export function registerRef(app, table, requiredFields) {
+export function registerRef(app, table, requiredFields, { fieldMap = {}, orderBy = "name" } = {}) {
   app.get(`/api/ref/${table}`, (_req, res) => {
     try {
-      res.json(all(`SELECT * FROM ${table} ORDER BY name`));
+      res.json(toCamelArray(all(`SELECT * FROM ${table} ORDER BY ${orderBy}`), fieldMap));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -83,7 +83,7 @@ export function registerRef(app, table, requiredFields) {
       if (!isObject(req.body)) {
         return res.status(400).json({ error: "body must be an object" });
       }
-      const body = req.body;
+      const body = toSnake(req.body);
       for (const field of requiredFields) {
         if (!body[field]) return res.status(400).json({ error: `${field} required` });
       }
@@ -93,7 +93,8 @@ export function registerRef(app, table, requiredFields) {
         `INSERT INTO ${table} (${columns}) VALUES (${placeholders})`,
         requiredFields.map((field) => body[field]),
       );
-      res.status(201).json({ id: get("SELECT last_insert_rowid() as id").id });
+      const id = get("SELECT last_insert_rowid() as id").id;
+      res.status(201).json(toCamel(get(`SELECT * FROM ${table} WHERE id = ?`, [id]), fieldMap));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

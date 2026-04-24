@@ -103,6 +103,64 @@ export const GRADING_FIELD_MAP = {
   created_at: "createdAt",
 };
 
+export const LEAGUE_FIELD_MAP = {
+  sport_type: "sportType",
+  created_at: "createdAt",
+};
+
+export const MANUFACTURER_FIELD_MAP = {
+  licensing_status: "licensingStatus",
+  created_at: "createdAt",
+};
+
+export const TEAM_FIELD_MAP = {
+  league_id: "leagueId",
+  league_name: "leagueName",
+  created_at: "createdAt",
+};
+
+export const CARD_SET_FIELD_MAP = {
+  manufacturer_id: "manufacturerId",
+  manufacturer_name: "manufacturerName",
+  set_name: "setName",
+  parent_set_id: "parentSetId",
+  sport_type: "sportType",
+  release_date: "releaseDate",
+  created_at: "createdAt",
+};
+
+export const PLAYER_FIELD_MAP = {
+  first_name: "firstName",
+  last_name: "lastName",
+  team_id: "teamId",
+  team_name: "teamName",
+  is_rookie: "isRookie",
+  created_at: "createdAt",
+};
+
+export const CARD_REF_FIELD_MAP = {
+  set_id: "setId",
+  player_id: "playerId",
+  first_name: "firstName",
+  last_name: "lastName",
+  card_number: "cardNumber",
+  is_base: "isBase",
+  is_rookie: "isRookie",
+  has_autograph: "hasAutograph",
+  is_memorabilia: "isMemorabilia",
+  is_short_print: "isShortPrint",
+  error_type: "errorType",
+  created_at: "createdAt",
+};
+
+export const PARALLEL_FIELD_MAP = {
+  card_id: "cardId",
+  variation_name: "variationName",
+  print_run: "printRun",
+  is_1of1: "is1of1",
+  created_at: "createdAt",
+};
+
 export const ORDER_FIELD_MAP = {
   sale_id: "saleId",
   listing_id: "listingId",

@@ -11,7 +11,7 @@ export function toCamel(row, map) {
   for (const [key, value] of Object.entries(row)) {
     const camelKey = map[key] || key;
     if (
-      ["listedOn", "priceEstimate", "priceHistory", "itemSpecifics", "shippingProfile", "metadata"].includes(camelKey) &&
+      ["listedOn", "priceEstimate", "priceHistory", "itemSpecifics", "shippingProfile", "metadata", "attributes"].includes(camelKey) &&
       typeof value === "string"
     ) {
       try {
@@ -248,6 +248,90 @@ export function toSnake(body) {
   if ("targetPrice" in output) {
     output.target_price = output.targetPrice;
     delete output.targetPrice;
+  }
+  if ("sportType" in output) {
+    output.sport_type = output.sportType;
+    delete output.sportType;
+  }
+  if ("licensingStatus" in output) {
+    output.licensing_status = output.licensingStatus;
+    delete output.licensingStatus;
+  }
+  if ("leagueId" in output) {
+    output.league_id = output.leagueId;
+    delete output.leagueId;
+  }
+  if ("manufacturerId" in output) {
+    output.manufacturer_id = output.manufacturerId;
+    delete output.manufacturerId;
+  }
+  if ("setName" in output) {
+    output.set_name = output.setName;
+    delete output.setName;
+  }
+  if ("parentSetId" in output) {
+    output.parent_set_id = output.parentSetId;
+    delete output.parentSetId;
+  }
+  if ("releaseDate" in output) {
+    output.release_date = output.releaseDate;
+    delete output.releaseDate;
+  }
+  if ("firstName" in output) {
+    output.first_name = output.firstName;
+    delete output.firstName;
+  }
+  if ("lastName" in output) {
+    output.last_name = output.lastName;
+    delete output.lastName;
+  }
+  if ("teamId" in output) {
+    output.team_id = output.teamId;
+    delete output.teamId;
+  }
+  if ("playerId" in output) {
+    output.player_id = output.playerId;
+    delete output.playerId;
+  }
+  if ("setId" in output) {
+    output.set_id = output.setId;
+    delete output.setId;
+  }
+  if ("isBase" in output) {
+    output.is_base = output.isBase;
+    delete output.isBase;
+  }
+  if ("isRookie" in output) {
+    output.is_rookie = output.isRookie;
+    delete output.isRookie;
+  }
+  if ("hasAutograph" in output) {
+    output.has_autograph = output.hasAutograph;
+    delete output.hasAutograph;
+  }
+  if ("isMemorabilia" in output) {
+    output.is_memorabilia = output.isMemorabilia;
+    delete output.isMemorabilia;
+  }
+  if ("isShortPrint" in output) {
+    output.is_short_print = output.isShortPrint;
+    delete output.isShortPrint;
+  }
+  if ("errorType" in output) {
+    output.error_type = output.errorType;
+    delete output.errorType;
+  }
+  if ("variationName" in output) {
+    output.variation_name = output.variationName;
+    delete output.variationName;
+  }
+  if ("printRun" in output) {
+    output.print_run = output.printRun;
+    delete output.printRun;
+  }
+  if ("is1of1" in output) {
+    output.is_1of1 = output.is1of1;
+    delete output.is1of1;
   }
   if ("currentPrice" in output) {
     output.current_price = output.currentPrice;

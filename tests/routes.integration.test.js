@@ -701,5 +701,161 @@ test("server routes handle validation, migration, and listing side effects", asy
   assert.equal(gradingsListPayload[0].dateSent, "2026-04-24");
   assert.equal("card_name" in gradingsListPayload[0], false);
 
+  const leagueResponse = await fetch(`${baseUrl}/api/ref/leagues`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: "Hockey",
+      sportType: "ice_hockey",
+    }),
+  });
+  assert.equal(leagueResponse.status, 201);
+  const leaguePayload = await leagueResponse.json();
+  assert.equal(leaguePayload.name, "Hockey");
+  assert.equal(leaguePayload.sportType, "ice_hockey");
+  assert.equal("sport_type" in leaguePayload, false);
+
+  const manufacturerResponse = await fetch(`${baseUrl}/api/ref/manufacturers`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: "Route Deck",
+      licensingStatus: "licensed",
+    }),
+  });
+  assert.equal(manufacturerResponse.status, 201);
+  const manufacturerPayload = await manufacturerResponse.json();
+  assert.equal(manufacturerPayload.licensingStatus, "licensed");
+  assert.equal("licensing_status" in manufacturerPayload, false);
+
+  const teamResponse = await fetch(`${baseUrl}/api/ref/teams`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: "Oilers",
+      leagueId: leaguePayload.id,
+      city: "Edmonton",
+      abbreviation: "EDM",
+    }),
+  });
+  assert.equal(teamResponse.status, 201);
+  const teamPayload = await teamResponse.json();
+  assert.equal(teamPayload.leagueId, leaguePayload.id);
+  assert.equal(teamPayload.leagueName, "Hockey");
+  assert.equal("league_id" in teamPayload, false);
+  assert.equal("league_name" in teamPayload, false);
+
+  const setResponse = await fetch(`${baseUrl}/api/ref/sets`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      manufacturerId: manufacturerPayload.id,
+      year: 2026,
+      setName: "Flagship",
+      sportType: "ice_hockey",
+      releaseDate: "2026-04-24",
+    }),
+  });
+  assert.equal(setResponse.status, 201);
+  const setPayload = await setResponse.json();
+  assert.equal(setPayload.manufacturerId, manufacturerPayload.id);
+  assert.equal(setPayload.manufacturerName, "Route Deck");
+  assert.equal(setPayload.setName, "Flagship");
+  assert.equal(setPayload.sportType, "ice_hockey");
+  assert.equal(setPayload.releaseDate, "2026-04-24");
+  assert.equal("manufacturer_id" in setPayload, false);
+  assert.equal("set_name" in setPayload, false);
+
+  const playerResponse = await fetch(`${baseUrl}/api/ref/players`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      firstName: "Connor",
+      lastName: "McDavid",
+      teamId: teamPayload.id,
+      isRookie: 0,
+      position: "C",
+    }),
+  });
+  assert.equal(playerResponse.status, 201);
+  const playerPayload = await playerResponse.json();
+  assert.equal(playerPayload.firstName, "Connor");
+  assert.equal(playerPayload.lastName, "McDavid");
+  assert.equal(playerPayload.teamName, "Oilers");
+  assert.equal("first_name" in playerPayload, false);
+
+  const cardResponse = await fetch(`${baseUrl}/api/ref/cards`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      setId: setPayload.id,
+      playerId: playerPayload.id,
+      cardNumber: "97",
+      isBase: 1,
+      hasAutograph: 0,
+      attributes: { subset: "Base" },
+    }),
+  });
+  assert.equal(cardResponse.status, 201);
+  const cardPayload = await cardResponse.json();
+  assert.equal(cardPayload.setId, setPayload.id);
+  assert.equal(cardPayload.playerId, playerPayload.id);
+  assert.equal(cardPayload.cardNumber, "97");
+  assert.deepEqual(cardPayload.attributes, { subset: "Base" });
+  assert.equal(cardPayload.firstName, "Connor");
+  assert.equal("card_number" in cardPayload, false);
+
+  const parallelResponse = await fetch(`${baseUrl}/api/ref/parallels`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      cardId: cardPayload.id,
+      variationName: "Gold",
+      color: "Gold",
+      printRun: 10,
+      is1of1: 0,
+      tier: "numbered",
+    }),
+  });
+  assert.equal(parallelResponse.status, 201);
+  const parallelPayload = await parallelResponse.json();
+  assert.equal(parallelPayload.cardId, cardPayload.id);
+  assert.equal(parallelPayload.variationName, "Gold");
+  assert.equal(parallelPayload.printRun, 10);
+  assert.equal(parallelPayload.is1of1, 0);
+  assert.equal("variation_name" in parallelPayload, false);
+
+  const leaguesListResponse = await fetch(`${baseUrl}/api/ref/leagues`);
+  assert.equal(leaguesListResponse.status, 200);
+  const leaguesListPayload = await leaguesListResponse.json();
+  assert.equal(leaguesListPayload[0].sportType, "ice_hockey");
+
+  const teamsListResponse = await fetch(`${baseUrl}/api/ref/teams?league_id=${leaguePayload.id}`);
+  assert.equal(teamsListResponse.status, 200);
+  const teamsListPayload = await teamsListResponse.json();
+  assert.equal(teamsListPayload[0].leagueName, "Hockey");
+
+  const setsListResponse = await fetch(`${baseUrl}/api/ref/sets?mfg=${manufacturerPayload.id}`);
+  assert.equal(setsListResponse.status, 200);
+  const setsListPayload = await setsListResponse.json();
+  assert.equal(setsListPayload[0].manufacturerName, "Route Deck");
+
+  const playersListResponse = await fetch(`${baseUrl}/api/ref/players?team=${teamPayload.id}&search=Connor`);
+  assert.equal(playersListResponse.status, 200);
+  const playersListPayload = await playersListResponse.json();
+  assert.equal(playersListPayload[0].teamName, "Oilers");
+
+  const cardsListResponse = await fetch(`${baseUrl}/api/ref/cards?set_id=${setPayload.id}`);
+  assert.equal(cardsListResponse.status, 200);
+  const cardsListPayload = await cardsListResponse.json();
+  assert.equal(cardsListPayload[0].cardNumber, "97");
+  assert.deepEqual(cardsListPayload[0].attributes, { subset: "Base" });
+
+  const parallelsListResponse = await fetch(`${baseUrl}/api/ref/parallels?card_id=${cardPayload.id}`);
+  assert.equal(parallelsListResponse.status, 200);
+  const parallelsListPayload = await parallelsListResponse.json();
+  assert.equal(parallelsListPayload[0].variationName, "Gold");
+  assert.equal(parallelsListPayload[0].printRun, 10);
+
   assert.match(stderr, /No ANTHROPIC_API_KEY|^$/);
 });

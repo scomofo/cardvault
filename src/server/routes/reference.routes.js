@@ -1,11 +1,21 @@
 import { all, get, run } from "../database.js";
+import {
+  CARD_REF_FIELD_MAP,
+  CARD_SET_FIELD_MAP,
+  LEAGUE_FIELD_MAP,
+  MANUFACTURER_FIELD_MAP,
+  PARALLEL_FIELD_MAP,
+  PLAYER_FIELD_MAP,
+  TEAM_FIELD_MAP,
+} from "../mappers/fieldMaps.js";
 import { json } from "../mappers/recordMappers.js";
+import { toCamel, toCamelArray, toSnake } from "../mappers/recordMappers.js";
 import { requireJsonBody } from "../validation/common.js";
 import { registerRef } from "./shared.js";
 
 export function registerReferenceRoutes(app) {
-  registerRef(app, "leagues", ["name", "sport_type"]);
-  registerRef(app, "manufacturers", ["name", "licensing_status"]);
+  registerRef(app, "leagues", ["name", "sport_type"], { fieldMap: LEAGUE_FIELD_MAP });
+  registerRef(app, "manufacturers", ["name", "licensing_status"], { fieldMap: MANUFACTURER_FIELD_MAP });
 
   app.get("/api/ref/teams", (req, res) => {
     try {
@@ -16,7 +26,7 @@ export function registerReferenceRoutes(app) {
         sql += " WHERE t.league_id = ?";
         params.push(req.query.league_id);
       }
-      res.json(all(sql, params));
+      res.json(toCamelArray(all(sql, params), TEAM_FIELD_MAP));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -24,13 +34,19 @@ export function registerReferenceRoutes(app) {
 
   app.post("/api/ref/teams", requireJsonBody, (req, res) => {
     try {
-      const body = req.body;
+      const body = toSnake(req.body);
       if (!body.name) return res.status(400).json({ error: "name required" });
       run(
         "INSERT INTO teams (name, league_id, city, abbreviation) VALUES (?,?,?,?)",
         [body.name, body.league_id, body.city, body.abbreviation],
       );
-      res.status(201).json({ id: get("SELECT last_insert_rowid() as id").id });
+      const id = get("SELECT last_insert_rowid() as id").id;
+      res.status(201).json(
+        toCamel(
+          get("SELECT t.*, l.name as league_name FROM teams t LEFT JOIN leagues l ON t.league_id = l.id WHERE t.id = ?", [id]),
+          TEAM_FIELD_MAP,
+        ),
+      );
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -49,7 +65,7 @@ export function registerReferenceRoutes(app) {
         sql += " AND cs.manufacturer_id = ?";
         params.push(req.query.mfg);
       }
-      res.json(all(sql, params));
+      res.json(toCamelArray(all(sql, params), CARD_SET_FIELD_MAP));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -57,7 +73,7 @@ export function registerReferenceRoutes(app) {
 
   app.post("/api/ref/sets", requireJsonBody, (req, res) => {
     try {
-      const body = req.body;
+      const body = toSnake(req.body);
       if (!body.set_name || !body.year) {
         return res.status(400).json({ error: "set_name and year required" });
       }
@@ -72,7 +88,13 @@ export function registerReferenceRoutes(app) {
           body.release_date,
         ],
       );
-      res.status(201).json({ id: get("SELECT last_insert_rowid() as id").id });
+      const id = get("SELECT last_insert_rowid() as id").id;
+      res.status(201).json(
+        toCamel(
+          get("SELECT cs.*, m.name as manufacturer_name FROM card_sets cs LEFT JOIN manufacturers m ON cs.manufacturer_id = m.id WHERE cs.id = ?", [id]),
+          CARD_SET_FIELD_MAP,
+        ),
+      );
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -91,7 +113,7 @@ export function registerReferenceRoutes(app) {
         sql += " AND (p.first_name LIKE ? OR p.last_name LIKE ?)";
         params.push(`%${req.query.search}%`, `%${req.query.search}%`);
       }
-      res.json(all(sql, params));
+      res.json(toCamelArray(all(sql, params), PLAYER_FIELD_MAP));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -99,7 +121,7 @@ export function registerReferenceRoutes(app) {
 
   app.post("/api/ref/players", requireJsonBody, (req, res) => {
     try {
-      const body = req.body;
+      const body = toSnake(req.body);
       if (!body.first_name || !body.last_name) {
         return res.status(400).json({ error: "first_name and last_name required" });
       }
@@ -107,7 +129,13 @@ export function registerReferenceRoutes(app) {
         "INSERT INTO players (first_name, last_name, team_id, is_rookie, position) VALUES (?,?,?,?,?)",
         [body.first_name, body.last_name, body.team_id, body.is_rookie || 0, body.position],
       );
-      res.status(201).json({ id: get("SELECT last_insert_rowid() as id").id });
+      const id = get("SELECT last_insert_rowid() as id").id;
+      res.status(201).json(
+        toCamel(
+          get("SELECT p.*, t.name as team_name FROM players p LEFT JOIN teams t ON p.team_id = t.id WHERE p.id = ?", [id]),
+          PLAYER_FIELD_MAP,
+        ),
+      );
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -122,7 +150,7 @@ export function registerReferenceRoutes(app) {
         sql += " AND c.set_id = ?";
         params.push(req.query.set_id);
       }
-      res.json(all(sql, params));
+      res.json(toCamelArray(all(sql, params), CARD_REF_FIELD_MAP));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -130,7 +158,7 @@ export function registerReferenceRoutes(app) {
 
   app.post("/api/ref/cards", requireJsonBody, (req, res) => {
     try {
-      const body = req.body;
+      const body = toSnake(req.body);
       if (!body.set_id || !body.card_number) return res.status(400).json({ error: "set_id and card_number required" });
       run(
         `INSERT INTO cards (set_id, player_id, card_number, is_base, is_rookie,
@@ -149,7 +177,13 @@ export function registerReferenceRoutes(app) {
           json(body.attributes),
         ],
       );
-      res.status(201).json({ id: get("SELECT last_insert_rowid() as id").id });
+      const id = get("SELECT last_insert_rowid() as id").id;
+      res.status(201).json(
+        toCamel(
+          get("SELECT c.*, p.first_name, p.last_name FROM cards c LEFT JOIN players p ON c.player_id = p.id WHERE c.id = ?", [id]),
+          CARD_REF_FIELD_MAP,
+        ),
+      );
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -163,7 +197,7 @@ export function registerReferenceRoutes(app) {
         sql += " AND card_id = ?";
         params.push(req.query.card_id);
       }
-      res.json(all(sql, params));
+      res.json(toCamelArray(all(sql, params), PARALLEL_FIELD_MAP));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -171,7 +205,7 @@ export function registerReferenceRoutes(app) {
 
   app.post("/api/ref/parallels", requireJsonBody, (req, res) => {
     try {
-      const body = req.body;
+      const body = toSnake(req.body);
       if (!body.variation_name) {
         return res.status(400).json({ error: "variation_name required" });
       }
@@ -186,7 +220,8 @@ export function registerReferenceRoutes(app) {
           body.tier,
         ],
       );
-      res.status(201).json({ id: get("SELECT last_insert_rowid() as id").id });
+      const id = get("SELECT last_insert_rowid() as id").id;
+      res.status(201).json(toCamel(get("SELECT * FROM parallels WHERE id = ?", [id]), PARALLEL_FIELD_MAP));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
