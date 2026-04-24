@@ -394,16 +394,16 @@ export default function Settings() {
         if (!data._cardvaultBackup) { toast.error("Not a valid CardVault backup file"); return; }
         if (!window.confirm("Restore backup? This will replace all current data.")) return;
         await importAllImages(data.images || {}).catch(() => {});
-        if (Array.isArray(data.catalog)) setCatalog(data.catalog);
-        if (Array.isArray(data.sales)) setSales(data.sales);
-        if (Array.isArray(data.orders)) setOrders(data.orders);
-        if (Array.isArray(data.listings)) setListings(data.listings);
-        if (Array.isArray(data.purchases)) setPurchases(data.purchases);
-        if (Array.isArray(data.trades)) setTrades(data.trades);
-        if (Array.isArray(data.watchlist)) setWatchlist(data.watchlist);
-        if (Array.isArray(data.gradings)) setGradings(data.gradings);
-        if (data.userName !== undefined) setUserName(data.userName);
-        if (data.shipFrom !== undefined) setShipFrom(data.shipFrom);
+        setCatalog(Array.isArray(data.catalog) ? data.catalog : []);
+        setSales(Array.isArray(data.sales) ? data.sales : []);
+        setOrders(Array.isArray(data.orders) ? data.orders : []);
+        setListings(Array.isArray(data.listings) ? data.listings : []);
+        setPurchases(Array.isArray(data.purchases) ? data.purchases : []);
+        setTrades(Array.isArray(data.trades) ? data.trades : []);
+        setWatchlist(Array.isArray(data.watchlist) ? data.watchlist : []);
+        setGradings(Array.isArray(data.gradings) ? data.gradings : []);
+        setUserName(data.userName ?? "");
+        setShipFrom(data.shipFrom ?? "");
         toast.success("Backup restored");
       } catch { toast.error("Failed to parse backup file"); }
     };
