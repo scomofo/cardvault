@@ -36,6 +36,14 @@ export function automateShipment(orderId, options = {}) {
   const order = get(`SELECT * FROM orders WHERE id = ?`, [orderId]);
   if (!order) throw new Error("Order not found");
 
+  const existingShipment = get(
+    `SELECT * FROM shipments WHERE order_id = ? ORDER BY created_at DESC LIMIT 1`,
+    [orderId],
+  );
+  if (existingShipment) {
+    return existingShipment;
+  }
+
   const country = options.destinationCountry || order.destination_country || "CA";
   const weightOz = Number(options.weightOz || 3);
   const packageType = options.packageType || "card_mailer";

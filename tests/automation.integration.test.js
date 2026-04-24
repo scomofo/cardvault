@@ -259,3 +259,107 @@ test("shipping automation records tracking against the order marketplace channel
     db.close();
   }
 });
+
+test("shipping automation is idempotent for the same order", async (t) => {
+  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-automation-idempotent-"));
+  const dbPath = join(tempDir, "cardvault-test.db");
+  const port = 4150 + Math.floor(Math.random() * 100);
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  const server = spawn(process.execPath, ["server.js"], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      PORT: String(port),
+      CARDVAULT_DB_PATH: dbPath,
+    },
+    stdio: "ignore",
+  });
+
+  t.after(async () => {
+    if (!server.killed) {
+      server.kill("SIGTERM");
+    }
+    await new Promise((resolve) => server.once("exit", resolve));
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  await waitForServer(baseUrl);
+
+  const itemResponse = await fetch(`${baseUrl}/api/items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "idempotent-item",
+      name: "Cale Makar",
+      set: "Upper Deck",
+      listedOn: [],
+      priceHistory: [],
+      marketPrice: 45,
+      suggestedListingPrice: 49.99,
+    }),
+  });
+  assert.equal(itemResponse.status, 201);
+
+  const listingResponse = await fetch(`${baseUrl}/api/listings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "idempotent-listing",
+      cardId: "idempotent-item",
+      cardName: "Cale Makar",
+      cardSet: "Upper Deck",
+      platform: "ebay",
+      listingTitle: "Cale Makar card",
+      listingDescription: "Duplicate shipment guard test",
+      startPrice: 49.99,
+      status: "draft",
+    }),
+  });
+  assert.equal(listingResponse.status, 201);
+
+  const orderResponse = await fetch(`${baseUrl}/api/orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "idempotent-order",
+      itemId: "idempotent-item",
+      listingId: "idempotent-listing",
+      platform: "ebay",
+      salePrice: 49.99,
+      destinationCountry: "CA",
+      paymentStatus: "paid",
+      fulfillmentStatus: "pending",
+    }),
+  });
+  assert.equal(orderResponse.status, 201);
+
+  const firstResponse = await fetch(`${baseUrl}/api/automation/shipping/idempotent-order`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ destinationCountry: "CA", weightOz: 3 }),
+  });
+  assert.equal(firstResponse.status, 200);
+  const firstShipment = await firstResponse.json();
+
+  const secondResponse = await fetch(`${baseUrl}/api/automation/shipping/idempotent-order`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ destinationCountry: "US", weightOz: 8 }),
+  });
+  assert.equal(secondResponse.status, 200);
+  const secondShipment = await secondResponse.json();
+
+  assert.equal(secondShipment.id, firstShipment.id);
+
+  const db = new Database(dbPath, { readonly: true });
+  try {
+    const shipments = db.prepare(
+      `SELECT id, order_id FROM shipments WHERE order_id = ? ORDER BY created_at DESC`,
+    ).all("idempotent-order");
+    assert.equal(shipments.length, 1);
+    assert.equal(shipments[0].id, firstShipment.id);
+  } finally {
+    db.close();
+  }
+});
