@@ -298,6 +298,8 @@ export async function syncMarketplaceListings(marketplace, listingId = null) {
     if (!listing) continue;
     const listingForChannel = {
       ...listing,
+      channel_status: channel.status || null,
+      channelStatus: channel.status || null,
       external_listing_id: channel.external_listing_id || listing.external_listing_id || null,
       externalListingId: channel.external_listing_id || listing.external_listing_id || null,
     };

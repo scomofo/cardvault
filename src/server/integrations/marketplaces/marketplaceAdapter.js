@@ -38,10 +38,16 @@ export class MarketplaceAdapter {
   }
 
   async sync(listing) {
+    const channelStatus = String(listing.channel_status || listing.channelStatus || "").toLowerCase();
+    const isPrimaryMarketplace = this.marketplace === String(listing.platform || "").toLowerCase();
+    const status = isPrimaryMarketplace && listing.sold_price
+      ? "sold"
+      : (channelStatus || "active");
+
     return {
       marketplace: this.marketplace,
       externalListingId: listing.external_listing_id || this.buildExternalId(listing.id),
-      status: listing.sold_price ? "sold" : "active",
+      status,
       payload: listing,
       syncedAt: new Date().toISOString(),
     };
