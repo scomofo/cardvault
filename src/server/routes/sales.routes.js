@@ -89,6 +89,12 @@ export function registerSalesRoutes(app) {
         return res.status(409).json({ error: "item does not match listing" });
       }
       const linkedCardId = body.card_id || linkedOrder?.item_id || listingRecord?.card_id || null;
+      const itemRecord = linkedCardId
+        ? get("SELECT id FROM user_items WHERE id = ?", [linkedCardId])
+        : null;
+      if (linkedCardId && !itemRecord) {
+        return res.status(404).json({ error: "linked item not found" });
+      }
       const saleDate = body.date || linkedOrder?.sold_at || new Date().toISOString();
       const salePrice = body.sale_price ?? linkedOrder?.sale_price ?? 0;
       const resolvedPlatform = body.platform || linkedOrder?.platform || null;

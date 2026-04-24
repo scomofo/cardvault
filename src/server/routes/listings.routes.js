@@ -107,6 +107,9 @@ export function registerListingRoutes(app) {
   app.post("/api/listings", validateListingPayload, (req, res) => {
     try {
       const body = toSnake(req.body);
+      if (body.card_id && !get("SELECT id FROM user_items WHERE id = ?", [body.card_id])) {
+        return res.status(404).json({ error: "linked item not found" });
+      }
       const id = body.id || uid();
       const normalizedStatus = normalizeStatus(body.status, "active");
       run(
@@ -165,6 +168,9 @@ export function registerListingRoutes(app) {
       const existing = get("SELECT * FROM listings WHERE id = ?", [req.params.id]);
       if (!existing) return res.status(404).json({ error: "Listing not found" });
       const body = { ...existing, ...toSnake(req.body) };
+      if (body.card_id && !get("SELECT id FROM user_items WHERE id = ?", [body.card_id])) {
+        return res.status(404).json({ error: "linked item not found" });
+      }
       const normalizedStatus = normalizeStatus(body.status);
       const nextPublishStatus = derivePublishStatus(normalizedStatus, body.publish_status);
       const nextSoldPrice = normalizedStatus === "sold" ? body.sold_price : null;

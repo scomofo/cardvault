@@ -119,6 +119,12 @@ export function registerOrderRoutes(app) {
         return res.status(409).json({ error: "item does not match listing" });
       }
       const linkedItemId = explicitItemId || linkedSale?.card_id || listingRecord?.card_id || null;
+      const itemRecord = linkedItemId
+        ? get("SELECT id FROM user_items WHERE id = ?", [linkedItemId])
+        : null;
+      if (linkedItemId && !itemRecord) {
+        return res.status(404).json({ error: "linked item not found" });
+      }
       const soldAt = body.soldAt || body.sold_at || linkedSale?.date || new Date().toISOString();
       run(
         `INSERT INTO orders
