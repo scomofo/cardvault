@@ -34,6 +34,10 @@ function toNumberOrNull(value) {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
+function roundCurrency(value) {
+  return Number(Number(value || 0).toFixed(2));
+}
+
 function normalizeCountry(value) {
   if (typeof value !== "string" || !value.trim()) return null;
   return value.trim().toUpperCase();
@@ -115,10 +119,15 @@ function extractMarketplaceOrderMetadata(synced) {
 function insertSyncedSale(listing, channel, synced, metadata) {
   if (!listing.sold_price && synced.status !== "sold") return null;
   const saleId = uid();
+  const item = listing.card_id
+    ? get(`SELECT id, cost_basis FROM user_items WHERE id = ?`, [listing.card_id])
+    : null;
+  const costBasis = Number(item?.cost_basis || 0);
   const salePrice = Number(metadata.salePrice ?? listing.sold_price ?? listing.start_price ?? 0);
   const shippingCost = Number(listing.shipping || 0);
   const taxCollected = Number(metadata.taxCollected ?? 0);
   const payoutAmount = Number(metadata.payoutAmount ?? salePrice);
+  const netProfit = roundCurrency(payoutAmount - costBasis - shippingCost);
   const inserted = run(
     `INSERT INTO sales
      (id, card_id, order_id, card_name, card_set, sale_price, cost_basis, platform, buyer_handle, fees, shipping_cost, packaging_cost, grading_cost, tax_collected, payout_amount, net_profit, listing_id, date)
@@ -131,7 +140,7 @@ function insertSyncedSale(listing, channel, synced, metadata) {
       listing.card_name,
       listing.card_set,
       salePrice,
-      0,
+      costBasis,
       channel.marketplace,
       metadata.buyerHandle,
       0,
@@ -140,7 +149,7 @@ function insertSyncedSale(listing, channel, synced, metadata) {
       0,
       taxCollected,
       payoutAmount,
-      payoutAmount - shippingCost,
+      netProfit,
       listing.id,
       synced.syncedAt,
       listing.id,

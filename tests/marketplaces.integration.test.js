@@ -480,6 +480,16 @@ test("marketplace sold sync updates the underlying item sale state and creates a
   assert.equal(item.status, "sold");
   assert.equal(item.saleStatus, "sold");
   assert.equal(item.listingStatus, "ended");
+  assert.equal(item.profitRealized, 119.99);
+
+  const salesResponse = await fetch(`${baseUrl}/api/sales`);
+  assert.equal(salesResponse.status, 200);
+  const salesPayload = await salesResponse.json();
+  const sale = salesPayload.find((entry) => entry.listingId === "sync-sold-listing");
+
+  assert.ok(sale);
+  assert.equal(sale.costBasis, 40);
+  assert.equal(sale.netProfit, 119.99);
 
   const ordersResponse = await fetch(`${baseUrl}/api/orders`);
   assert.equal(ordersResponse.status, 200);
@@ -487,7 +497,7 @@ test("marketplace sold sync updates the underlying item sale state and creates a
   const order = ordersPayload.find((entry) => entry.listing_id === "sync-sold-listing");
 
   assert.ok(order);
-  assert.equal(order.sale_id, syncPayload[0].sale.id);
+  assert.equal(order.sale_id, sale.id);
   assert.equal(order.fulfillment_status, "pending");
   assert.equal(order.payment_status, "paid");
 });
