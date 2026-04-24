@@ -76,6 +76,37 @@ export function registerOrderRoutes(app) {
           [id, body.saleId || body.sale_id],
         );
       }
+      if (body.listingId || body.listing_id) {
+        run(
+          `UPDATE listings
+           SET status = 'sold',
+               publish_status = 'sold',
+               sold_price = COALESCE(sold_price, ?),
+               sold_date = COALESCE(sold_date, ?)
+           WHERE id = ?`,
+          [
+            body.salePrice || body.sale_price || 0,
+            body.soldAt || body.sold_at || new Date().toISOString(),
+            body.listingId || body.listing_id,
+          ],
+        );
+      }
+      if (body.itemId || body.item_id) {
+        run(
+          `UPDATE user_items
+           SET status = 'sold',
+               listing_status = CASE WHEN ? IS NOT NULL THEN 'ended' ELSE listing_status END,
+               sale_status = 'sold',
+               sold_at = COALESCE(?, sold_at),
+               updated_at = datetime('now')
+           WHERE id = ?`,
+          [
+            body.listingId || body.listing_id || null,
+            body.soldAt || body.sold_at || new Date().toISOString(),
+            body.itemId || body.item_id,
+          ],
+        );
+      }
       res.status(201).json(get(`SELECT * FROM orders WHERE id = ?`, [id]));
     } catch (error) {
       res.status(500).json({ error: error.message });

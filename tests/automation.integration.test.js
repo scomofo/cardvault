@@ -883,3 +883,102 @@ test("manual sale creation closes out linked listing and item state", async (t) 
   assert.equal(item.listingStatus, "ended");
   assert.equal(item.soldAt, soldAt);
 });
+
+test("manual order creation closes out linked listing and item state", async (t) => {
+  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-orders-listing-close-"));
+  const dbPath = join(tempDir, "cardvault-test.db");
+  const port = 4750 + Math.floor(Math.random() * 100);
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  const server = spawn(process.execPath, ["server.js"], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      PORT: String(port),
+      CARDVAULT_DB_PATH: dbPath,
+    },
+    stdio: "ignore",
+  });
+
+  t.after(async () => {
+    if (!server.killed) {
+      server.kill("SIGTERM");
+    }
+    await new Promise((resolve) => server.once("exit", resolve));
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  await waitForServer(baseUrl);
+
+  const itemResponse = await fetch(`${baseUrl}/api/items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "order-close-item",
+      name: "Carey Price",
+      set: "Upper Deck",
+      listedOn: [],
+      priceHistory: [],
+      marketPrice: 74,
+      suggestedListingPrice: 79.99,
+    }),
+  });
+  assert.equal(itemResponse.status, 201);
+
+  const listingResponse = await fetch(`${baseUrl}/api/listings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "order-close-listing",
+      cardId: "order-close-item",
+      cardName: "Carey Price",
+      cardSet: "Upper Deck",
+      platform: "ebay",
+      listingTitle: "Carey Price card",
+      listingDescription: "Manual order should close out listing state",
+      startPrice: 79.99,
+      status: "active",
+    }),
+  });
+  assert.equal(listingResponse.status, 201);
+
+  const soldAt = "2026-04-24T20:15:00.000Z";
+  const orderResponse = await fetch(`${baseUrl}/api/orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "order-close-order",
+      itemId: "order-close-item",
+      listingId: "order-close-listing",
+      platform: "ebay",
+      salePrice: 79.99,
+      destinationCountry: "CA",
+      paymentStatus: "paid",
+      fulfillmentStatus: "pending",
+      soldAt,
+    }),
+  });
+  assert.equal(orderResponse.status, 201);
+
+  const listingsResponse = await fetch(`${baseUrl}/api/listings`);
+  assert.equal(listingsResponse.status, 200);
+  const listingsPayload = await listingsResponse.json();
+  const listing = listingsPayload.find((entry) => entry.id === "order-close-listing");
+
+  assert.ok(listing);
+  assert.equal(listing.status, "sold");
+  assert.equal(listing.publishStatus, "sold");
+  assert.equal(listing.soldPrice, 79.99);
+  assert.equal(listing.soldDate, soldAt);
+
+  const itemsResponse = await fetch(`${baseUrl}/api/items`);
+  assert.equal(itemsResponse.status, 200);
+  const itemsPayload = await itemsResponse.json();
+  const item = itemsPayload.find((entry) => entry.id === "order-close-item");
+
+  assert.ok(item);
+  assert.equal(item.status, "sold");
+  assert.equal(item.listingStatus, "ended");
+  assert.equal(item.saleStatus, "sold");
+  assert.equal(item.soldAt, soldAt);
+});
