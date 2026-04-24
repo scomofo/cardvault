@@ -147,6 +147,37 @@ test("server routes handle validation, migration, and listing side effects", asy
   assert.equal(soldItemPayload.saleStatus, "sold");
   assert.equal(soldItemPayload.soldAt, soldAt);
 
+  const reopenedListingResponse = await fetch(`${baseUrl}/api/listings/route-listing`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "route-listing",
+      cardId: "route-item",
+      cardName: "Route Card",
+      cardSet: "Route Set",
+      cardNumber: "1",
+      platform: "ebay",
+      format: "fixed",
+      startPrice: 12.5,
+      shipping: 1.25,
+      status: "active",
+    }),
+  });
+  assert.equal(reopenedListingResponse.status, 200);
+  const reopenedListingPayload = await reopenedListingResponse.json();
+  assert.equal(reopenedListingPayload.status, "active");
+  assert.equal(reopenedListingPayload.publishStatus, "active");
+  assert.equal(reopenedListingPayload.soldPrice, null);
+  assert.equal(reopenedListingPayload.soldDate, null);
+
+  const reopenedItemResponse = await fetch(`${baseUrl}/api/items/route-item`);
+  assert.equal(reopenedItemResponse.status, 200);
+  const reopenedItemPayload = await reopenedItemResponse.json();
+  assert.equal(reopenedItemPayload.status, "listed");
+  assert.equal(reopenedItemPayload.listingStatus, "listed");
+  assert.equal(reopenedItemPayload.saleStatus, "available");
+  assert.equal(reopenedItemPayload.soldAt, null);
+
   const secondItemResponse = await fetch(`${baseUrl}/api/items`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
