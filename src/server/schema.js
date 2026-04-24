@@ -105,7 +105,11 @@ export function createTables(db) {
       shipping_weight_oz REAL DEFAULT 0,
       export_batch_id TEXT,
       current_bid REAL,
+      quantity INTEGER DEFAULT 1,
       status TEXT DEFAULT 'active',
+      publish_status TEXT DEFAULT 'draft',
+      publish_error TEXT,
+      last_sync_at TEXT,
       sold_price REAL,
       sold_date TEXT,
       notes TEXT,
@@ -231,6 +235,9 @@ export function createTables(db) {
       purchased_at TEXT,
       shipped_at TEXT,
       delivered_at TEXT,
+      label_url TEXT,
+      status TEXT DEFAULT 'pending',
+      provider TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     );
 
