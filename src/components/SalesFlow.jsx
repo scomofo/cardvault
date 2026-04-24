@@ -20,7 +20,7 @@ export { PLATFORM_FEES };
 
 export default function SalesFlow() {
   const toast = useToast();
-  const { catalog, setCatalog, sales, setSales, listings, setListings, purchases, setPurchases, shipFrom } = useData();
+  const { catalog, setCatalog, sales, setSales, orders, setOrders, listings, setListings, purchases, setPurchases, shipFrom } = useData();
   const [tab, setTab] = useState("active");
   const [showCreate, setShowCreate] = useState(false);
   const [showBuy, setShowBuy] = useState(false);
@@ -43,7 +43,6 @@ export default function SalesFlow() {
     cardId: "", platform: "ebay", format: "fixed", startPrice: "", buyNowPrice: "",
     auctionEndDate: "", shipping: "4.99", notes: "",
   });
-  const [orders, setOrders] = useState([]);
   const [shippingBusy, setShippingBusy] = useState(null);
 
   const [addToCollection, setAddToCollection] = useState(true);

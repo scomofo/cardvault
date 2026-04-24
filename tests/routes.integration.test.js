@@ -93,26 +93,6 @@ test("server routes handle validation, migration, and listing side effects", asy
           netProfit: 0,
           date: "2026-04-24",
         },
-        {
-          id: "migrated-sale-rich",
-          cardName: "Rich Sale",
-          cardSet: "Rich Set",
-          salePrice: 42.5,
-          costBasis: 10,
-          platform: "ebay",
-          orderId: "rich-order-1",
-          buyerHandle: "buyer-rich",
-          fees: 3.25,
-          shippingCost: 1.5,
-          packagingCost: 0.25,
-          gradingCost: 2,
-          taxCollected: 4.75,
-          payoutAmount: 35.5,
-          netProfit: 28.25,
-          trackingNumber: "TRK-RICH-001",
-          listingId: "rich-listing-1",
-          date: "2026-04-24T10:00:00.000Z",
-        },
       ],
       trades: [
         {
@@ -244,6 +224,28 @@ test("server routes handle validation, migration, and listing side effects", asy
           updatedAt: "2026-04-11T00:00:00.000Z",
         },
       ],
+      sales: [
+        {
+          id: "migrated-sale-rich",
+          cardId: "migrated-rich-item",
+          cardName: "Rich Sale",
+          cardSet: "Rich Set",
+          salePrice: 42.5,
+          costBasis: 10,
+          platform: "ebay",
+          buyerHandle: "buyer-rich",
+          fees: 3.25,
+          shippingCost: 1.5,
+          packagingCost: 0.25,
+          gradingCost: 2,
+          taxCollected: 4.75,
+          payoutAmount: 35.5,
+          netProfit: 28.25,
+          trackingNumber: "TRK-RICH-001",
+          listingId: "migrated-rich-listing",
+          date: "2026-04-24T10:00:00.000Z",
+        },
+      ],
       listings: [
         {
           id: "migrated-rich-listing",
@@ -278,6 +280,27 @@ test("server routes handle validation, migration, and listing side effects", asy
           soldDate: null,
           notes: "rich listing note",
           createdAt: "2026-04-12T00:00:00.000Z",
+        },
+      ],
+      orders: [
+        {
+          id: "migrated-order-rich",
+          saleId: "migrated-sale-rich",
+          listingId: "migrated-rich-listing",
+          itemId: "migrated-rich-item",
+          platform: "ebay",
+          externalOrderId: "EXT-ORDER-1",
+          buyerHandle: "buyer-rich",
+          salePrice: 42.5,
+          fees: 3.25,
+          shippingCharge: 1.5,
+          taxCollected: 4.75,
+          destinationCountry: "US",
+          destinationPostalCode: "90210",
+          paymentStatus: "paid",
+          fulfillmentStatus: "pending",
+          soldAt: "2026-04-24T10:00:00.000Z",
+          createdAt: "2026-04-24T10:05:00.000Z",
         },
       ],
     }),
@@ -387,6 +410,21 @@ test("server routes handle validation, migration, and listing side effects", asy
   assert.equal(migratedRichListing.publishStatus, "revised");
   assert.equal(migratedRichListing.publishError, "sync warning");
   assert.equal(migratedRichListing.lastSyncAt, "2026-04-24T12:00:00.000Z");
+
+  const ordersResponse = await fetch(`${baseUrl}/api/orders`);
+  assert.equal(ordersResponse.status, 200);
+  const ordersPayload = await ordersResponse.json();
+  const migratedOrderRich = ordersPayload.find((order) => order.id === "migrated-order-rich");
+  assert.equal(migratedOrderRich.saleId, "migrated-sale-rich");
+  assert.equal(migratedOrderRich.listingId, "migrated-rich-listing");
+  assert.equal(migratedOrderRich.itemId, "migrated-rich-item");
+  assert.equal(migratedOrderRich.externalOrderId, "EXT-ORDER-1");
+  assert.equal(migratedOrderRich.buyerHandle, "buyer-rich");
+  assert.equal(migratedOrderRich.destinationCountry, "US");
+  assert.equal(migratedOrderRich.destinationPostalCode, "90210");
+  assert.equal(migratedOrderRich.fulfillmentStatus, "pending");
+  assert.equal("sale_id" in migratedOrderRich, false);
+  assert.equal("external_order_id" in migratedOrderRich, false);
 
   const draftItemResponse = await fetch(`${baseUrl}/api/items`, {
     method: "POST",
@@ -862,7 +900,7 @@ test("server routes handle validation, migration, and listing side effects", asy
   assert.equal(migratedSaleZero.shippingCost, 0);
 
   const migratedSaleRich = salesPayload.find((sale) => sale.id === "migrated-sale-rich");
-  assert.equal(migratedSaleRich.orderId, "rich-order-1");
+  assert.equal(migratedSaleRich.orderId, "migrated-order-rich");
   assert.equal(migratedSaleRich.buyerHandle, "buyer-rich");
   assert.equal(migratedSaleRich.packagingCost, 0.25);
   assert.equal(migratedSaleRich.gradingCost, 2);

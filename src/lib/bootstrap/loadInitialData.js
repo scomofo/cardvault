@@ -4,6 +4,7 @@ function loadLocalSnapshot() {
   return {
     catalog: loadData("catalog"),
     sales: loadData("sales"),
+    orders: loadData("orders"),
     trades: loadData("trades"),
     watchlist: loadData("watchlist"),
     gradings: loadData("gradings"),
@@ -18,6 +19,7 @@ function hasMeaningfulLocalData(local) {
   return (
     local.catalog.length > 0 ||
     local.sales.length > 0 ||
+    local.orders.length > 0 ||
     local.trades.length > 0 ||
     local.watchlist.length > 0 ||
     local.gradings.length > 0 ||
@@ -34,6 +36,7 @@ function isServerEmpty(server) {
   return (
     toArray(server.catalog).length === 0 &&
     toArray(server.sales).length === 0 &&
+    toArray(server.orders).length === 0 &&
     toArray(server.trades).length === 0 &&
     toArray(server.watchlist).length === 0 &&
     toArray(server.gradings).length === 0 &&
@@ -46,6 +49,7 @@ function persistServerSnapshot(server, setState) {
   const collections = {
     catalog: toArray(server.catalog),
     sales: toArray(server.sales),
+    orders: toArray(server.orders),
     trades: toArray(server.trades),
     watchlist: toArray(server.watchlist),
     gradings: toArray(server.gradings),
@@ -87,6 +91,7 @@ export async function loadInitialData({
   const [
     catalog,
     sales,
+    orders,
     trades,
     watchlist,
     gradings,
@@ -96,6 +101,7 @@ export async function loadInitialData({
   ] = await Promise.all([
     apis.items.list().catch(() => null),
     apis.sales.list().catch(() => null),
+    apis.orders.list().catch(() => null),
     apis.trades.list().catch(() => null),
     apis.watchlist.list().catch(() => null),
     apis.gradings.list().catch(() => null),
@@ -107,6 +113,7 @@ export async function loadInitialData({
   const server = {
     catalog,
     sales,
+    orders,
     trades,
     watchlist,
     gradings,
@@ -122,6 +129,7 @@ export async function loadInitialData({
       snapshot: {
         catalog: local.catalog,
         sales: local.sales,
+        orders: local.orders,
         trades: local.trades,
         watchlist: local.watchlist,
         gradings: local.gradings,

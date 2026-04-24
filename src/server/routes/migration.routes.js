@@ -13,6 +13,7 @@ export function registerMigrationRoutes(app) {
       const imported = {
         items: 0,
         sales: 0,
+        orders: 0,
         listings: 0,
         trades: 0,
         watchlist: 0,
@@ -269,6 +270,47 @@ export function registerMigrationRoutes(app) {
               ],
             );
             imported.listings++;
+          } catch {}
+        }
+      }
+
+      if (Array.isArray(data.orders)) {
+        for (const order of data.orders) {
+          try {
+            run(
+              `INSERT OR IGNORE INTO orders
+               (id,sale_id,listing_id,item_id,platform,external_order_id,buyer_handle,sale_price,fees,shipping_charge,tax_collected,destination_country,destination_postal_code,payment_status,fulfillment_status,sold_at,created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+              [
+                order.id,
+                firstDefined(order.saleId, order.sale_id),
+                firstDefined(order.listingId, order.listing_id),
+                firstDefined(order.itemId, order.item_id),
+                order.platform,
+                firstDefined(order.externalOrderId, order.external_order_id),
+                firstDefined(order.buyerHandle, order.buyer_handle),
+                firstDefined(order.salePrice, order.sale_price, 0),
+                firstDefined(order.fees, 0),
+                firstDefined(order.shippingCharge, order.shipping_charge, 0),
+                firstDefined(order.taxCollected, order.tax_collected, 0),
+                firstDefined(order.destinationCountry, order.destination_country, "CA"),
+                firstDefined(order.destinationPostalCode, order.destination_postal_code),
+                firstDefined(order.paymentStatus, order.payment_status, "paid"),
+                firstDefined(order.fulfillmentStatus, order.fulfillment_status, "pending"),
+                firstDefined(order.soldAt, order.sold_at),
+                firstDefined(order.createdAt, order.created_at),
+              ],
+            );
+            const linkedSaleId = firstDefined(order.saleId, order.sale_id);
+            if (linkedSaleId) {
+              run(
+                `UPDATE sales
+                 SET order_id = COALESCE(order_id, ?)
+                 WHERE id = ?`,
+                [order.id, linkedSaleId],
+              );
+            }
+            imported.orders++;
           } catch {}
         }
       }

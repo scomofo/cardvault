@@ -167,6 +167,7 @@ export function validateMigrationPayload(req, res, next) {
     "catalog",
     "items",
     "sales",
+    "orders",
     "listings",
     "trades",
     "watchlist",

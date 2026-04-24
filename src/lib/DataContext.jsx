@@ -5,6 +5,7 @@ import {
   checkBackend,
   itemsAPI,
   salesAPI,
+  ordersAPI,
   listingsAPI,
   tradesAPI,
   watchlistAPI,
@@ -38,6 +39,7 @@ export function DataProvider({ children }) {
 
   const [catalog, _setCatalog] = useState(() => loadData("catalog"));
   const [sales, _setSales] = useState(() => loadData("sales"));
+  const [orders, _setOrders] = useState(() => loadData("orders"));
   const [trades, _setTrades] = useState(() => loadData("trades"));
   const [watchlist, _setWatchlist] = useState(() => loadData("watchlist"));
   const [gradings, _setGradings] = useState(() => loadData("gradings"));
@@ -68,6 +70,14 @@ export function DataProvider({ children }) {
     setState: _setSales,
     useServerRef,
   });
+
+  const setOrders = (updater) => {
+    _setOrders((previous) => {
+      const next = typeof updater === "function" ? updater(previous) : updater;
+      saveData("orders", next);
+      return next;
+    });
+  };
 
   const setTrades = createCollectionSetter({
     key: "trades",
@@ -140,6 +150,7 @@ export function DataProvider({ children }) {
       catalog: localData.catalog,
       items: localData.catalog,
       sales: localData.sales,
+      orders: localData.orders,
       trades: localData.trades,
       watchlist: localData.watchlist,
       gradings: localData.gradings,
@@ -164,6 +175,7 @@ export function DataProvider({ children }) {
           apis: {
             items: itemsAPI,
             sales: salesAPI,
+            orders: ordersAPI,
             trades: tradesAPI,
             watchlist: watchlistAPI,
             gradings: gradingsAPI,
@@ -175,6 +187,7 @@ export function DataProvider({ children }) {
           setState: {
             catalog: _setCatalog,
             sales: _setSales,
+            orders: _setOrders,
             trades: _setTrades,
             watchlist: _setWatchlist,
             gradings: _setGradings,
@@ -235,6 +248,8 @@ export function DataProvider({ children }) {
     setCatalog,
     sales,
     setSales,
+    orders,
+    setOrders,
     trades,
     setTrades,
     watchlist,
