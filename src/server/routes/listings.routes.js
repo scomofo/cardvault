@@ -9,8 +9,12 @@ import {
 import { validateListingPayload } from "../validation/writeValidators.js";
 import { uid } from "./shared.js";
 
+function normalizeStatus(status, fallback = "") {
+  return String(status || fallback).toLowerCase();
+}
+
 function deriveOpenItemState(cardId) {
-  const listings = all(`SELECT status FROM listings WHERE card_id = ?`, [cardId]);
+  const listings = all(`SELECT status, sold_date, created_at FROM listings WHERE card_id = ?`, [cardId]);
   if (listings.length === 0) {
     return {
       status: "inventory",
@@ -20,13 +24,27 @@ function deriveOpenItemState(cardId) {
     };
   }
 
-  const statuses = listings.map((listing) => String(listing.status || "").toLowerCase());
+  const statuses = listings.map((listing) => normalizeStatus(listing.status));
   if (statuses.includes("sold")) {
+    const soldAt = listings
+      .filter((listing) => normalizeStatus(listing.status) === "sold")
+      .map((listing) => listing.sold_date || listing.created_at || null)
+      .filter(Boolean)
+      .reduce((latest, candidate) => {
+        if (!latest) return candidate;
+        const latestTime = Date.parse(latest);
+        const candidateTime = Date.parse(candidate);
+        if (Number.isNaN(latestTime) || Number.isNaN(candidateTime)) {
+          return latest;
+        }
+        return candidateTime > latestTime ? candidate : latest;
+      }, null);
+
     return {
       status: "sold",
       listingStatus: "ended",
       saleStatus: "sold",
-      soldAt: null,
+      soldAt,
     };
   }
 
@@ -40,11 +58,33 @@ function deriveOpenItemState(cardId) {
 }
 
 function derivePublishStatus(status, fallback = null) {
-  const normalized = String(status || "").toLowerCase();
+  const normalized = normalizeStatus(status);
   if (["draft", "active", "revised", "ended", "sold"].includes(normalized)) {
     return normalized;
   }
   return fallback;
+}
+
+function syncItemState(cardId, fallbackSoldAt = null) {
+  if (!cardId) return;
+
+  const itemState = deriveOpenItemState(cardId);
+  run(
+    `UPDATE user_items
+     SET status = ?,
+         listing_status = ?,
+         sale_status = ?,
+         sold_at = ?,
+         updated_at = datetime('now')
+     WHERE id = ?`,
+    [
+      itemState.status,
+      itemState.listingStatus,
+      itemState.saleStatus,
+      itemState.status === "sold" ? itemState.soldAt || fallbackSoldAt : null,
+      cardId,
+    ],
+  );
 }
 
 export function registerListingRoutes(app) {
@@ -68,6 +108,7 @@ export function registerListingRoutes(app) {
     try {
       const body = toSnake(req.body);
       const id = body.id || uid();
+      const normalizedStatus = normalizeStatus(body.status, "active");
       run(
         `INSERT INTO listings (id, card_id, external_listing_id, card_name, card_set, card_number,
          platform, listing_title, listing_description, category_path, item_specifics, shipping_profile,
@@ -98,83 +139,17 @@ export function registerListingRoutes(app) {
           body.shipping_weight_oz || 0,
           body.export_batch_id,
           body.current_bid,
-          body.status || "active",
-          derivePublishStatus(body.status || "active", body.publish_status || "active"),
-          body.sold_price ?? null,
-          body.sold_date || null,
+          normalizedStatus || "active",
+          derivePublishStatus(normalizedStatus || "active", body.publish_status || "active"),
+          normalizedStatus === "sold" ? (body.sold_price ?? null) : null,
+          normalizedStatus === "sold" ? (body.sold_date || null) : null,
           body.notes,
         ],
       );
-      if (body.card_id) {
-        if (body.status === "sold") {
-          run(
-            `UPDATE user_items
-             SET status = 'sold',
-                 listing_status = 'ended',
-                 sale_status = 'sold',
-                 sold_at = COALESCE(?, sold_at),
-                 updated_at = datetime('now')
-             WHERE id = ?`,
-            [body.sold_date || new Date().toISOString(), body.card_id],
-          );
-        } else {
-          const siblingSoldCount = get(
-            `SELECT COUNT(*) AS count
-             FROM listings
-             WHERE card_id = ?
-               AND id != ?
-               AND status = 'sold'`,
-            [body.card_id, id],
-          )?.count || 0;
-          if (siblingSoldCount === 0) {
-            const itemState = deriveOpenItemState(body.card_id);
-            run(
-              `UPDATE user_items
-               SET status = ?,
-                   listing_status = ?,
-                   sale_status = ?,
-                   sold_at = ?,
-                   updated_at = datetime('now')
-               WHERE id = ?`,
-              [
-                itemState.status,
-                itemState.listingStatus,
-                itemState.saleStatus,
-                itemState.soldAt,
-                body.card_id,
-              ],
-            );
-          }
-        } else {
-          const siblingSoldCount = get(
-            `SELECT COUNT(*) AS count
-             FROM listings
-             WHERE card_id = ?
-               AND id != ?
-               AND status = 'sold'`,
-            [body.card_id, req.params.id],
-          )?.count || 0;
-          if (siblingSoldCount === 0) {
-            const itemState = deriveOpenItemState(body.card_id);
-            run(
-              `UPDATE user_items
-               SET status = ?,
-                   listing_status = ?,
-                   sale_status = ?,
-                   sold_at = ?,
-                   updated_at = datetime('now')
-               WHERE id = ?`,
-              [
-                itemState.status,
-                itemState.listingStatus,
-                itemState.saleStatus,
-                itemState.soldAt,
-                body.card_id,
-              ],
-            );
-          }
-        }
-      }
+      syncItemState(
+        body.card_id,
+        normalizedStatus === "sold" ? body.sold_date || new Date().toISOString() : null,
+      );
       res
         .status(201)
         .json(
@@ -190,6 +165,10 @@ export function registerListingRoutes(app) {
       const existing = get("SELECT * FROM listings WHERE id = ?", [req.params.id]);
       if (!existing) return res.status(404).json({ error: "Listing not found" });
       const body = { ...existing, ...toSnake(req.body) };
+      const normalizedStatus = normalizeStatus(body.status);
+      const nextPublishStatus = derivePublishStatus(normalizedStatus, body.publish_status);
+      const nextSoldPrice = normalizedStatus === "sold" ? body.sold_price : null;
+      const nextSoldDate = normalizedStatus === "sold" ? body.sold_date : null;
       run(
         `UPDATE listings SET card_id=?, external_listing_id=?, card_name=?, card_set=?, card_number=?,
          platform=?, listing_title=?, listing_description=?, category_path=?, item_specifics=?, shipping_profile=?,
@@ -219,66 +198,20 @@ export function registerListingRoutes(app) {
           body.shipping_weight_oz,
           body.export_batch_id,
           body.current_bid,
-          body.status,
-          derivePublishStatus(body.status, body.publish_status),
-          body.sold_price,
-          body.sold_date,
+          normalizedStatus,
+          nextPublishStatus,
+          nextSoldPrice,
+          nextSoldDate,
           body.notes,
           req.params.id,
         ],
       );
-      if (body.card_id) {
-        if (body.status === "sold") {
-          run(
-            `UPDATE user_items
-             SET status = 'sold',
-                 listing_status = 'ended',
-                 sale_status = 'sold',
-                 sold_at = COALESCE(?, sold_at),
-                 updated_at = datetime('now')
-             WHERE id = ?`,
-            [body.sold_date || new Date().toISOString(), body.card_id],
-          );
-        } else if (existing.status === "sold") {
-          const siblingSoldCount = get(
-            `SELECT COUNT(*) AS count
-             FROM listings
-             WHERE card_id = ?
-               AND id != ?
-               AND status = 'sold'`,
-            [body.card_id, req.params.id],
-          )?.count || 0;
-          if (siblingSoldCount === 0) {
-            const itemState = deriveOpenItemState(body.card_id);
-            run(
-              `UPDATE user_items
-               SET status = ?,
-                   listing_status = ?,
-                   sale_status = ?,
-                   sold_at = ?,
-                   updated_at = datetime('now')
-               WHERE id = ?`,
-              [
-                itemState.status,
-                itemState.listingStatus,
-                itemState.saleStatus,
-                itemState.soldAt,
-                body.card_id,
-              ],
-            );
-          }
-          run(
-            `UPDATE listings
-             SET publish_status = CASE
-                   WHEN status IN ('draft', 'active', 'revised', 'ended') THEN status
-                   ELSE publish_status
-                 END,
-                 sold_price = NULL,
-                 sold_date = NULL
-             WHERE id = ?`,
-            [req.params.id],
-          );
-        }
+      syncItemState(
+        body.card_id,
+        normalizedStatus === "sold" ? body.sold_date || new Date().toISOString() : null,
+      );
+      if (existing.card_id && existing.card_id !== body.card_id) {
+        syncItemState(existing.card_id);
       }
       res.json(
         toCamel(get("SELECT * FROM listings WHERE id = ?", [req.params.id]), LISTING_FIELD_MAP),
@@ -294,54 +227,7 @@ export function registerListingRoutes(app) {
       if (!existing) return res.status(404).json({ error: "Listing not found" });
       run("DELETE FROM listings WHERE id = ?", [req.params.id]);
       if (existing.card_id) {
-        const remainingSoldCount = get(
-          `SELECT COUNT(*) AS count
-           FROM listings
-           WHERE card_id = ?
-             AND status = 'sold'`,
-          [existing.card_id],
-        )?.count || 0;
-        const remainingListings = get(
-          `SELECT COUNT(*) AS count FROM listings WHERE card_id = ?`,
-          [existing.card_id],
-        )?.count || 0;
-        if (remainingListings === 0) {
-          const itemState = deriveOpenItemState(existing.card_id);
-          run(
-            `UPDATE user_items
-             SET status = ?,
-                 listing_status = ?,
-                 sale_status = ?,
-                 sold_at = ?,
-                 updated_at = datetime('now')
-             WHERE id = ?`,
-            [
-              itemState.status,
-              itemState.listingStatus,
-              itemState.saleStatus,
-              itemState.soldAt,
-              existing.card_id,
-            ],
-          );
-        } else if (existing.status === "sold" && remainingSoldCount === 0) {
-          const itemState = deriveOpenItemState(existing.card_id);
-          run(
-            `UPDATE user_items
-             SET status = ?,
-                 listing_status = ?,
-                 sale_status = ?,
-                 sold_at = ?,
-                 updated_at = datetime('now')
-             WHERE id = ?`,
-            [
-              itemState.status,
-              itemState.listingStatus,
-              itemState.saleStatus,
-              itemState.soldAt,
-              existing.card_id,
-            ],
-          );
-        }
+        syncItemState(existing.card_id);
       }
       res.json({ deleted: true });
     } catch (error) {
