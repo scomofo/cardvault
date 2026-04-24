@@ -106,10 +106,10 @@ test("manual order creation infers listing and item from linked sale", async (t)
   });
   assert.equal(orderResponse.status, 201);
   const orderPayload = await orderResponse.json();
-  assert.equal(orderPayload.listing_id, "sale-fallback-listing");
-  assert.equal(orderPayload.item_id, "sale-fallback-item");
-  assert.equal(orderPayload.sale_price, 49.99);
-  assert.equal(orderPayload.sold_at, saleDate);
+  assert.equal(orderPayload.listingId, "sale-fallback-listing");
+  assert.equal(orderPayload.itemId, "sale-fallback-item");
+  assert.equal(orderPayload.salePrice, 49.99);
+  assert.equal(orderPayload.soldAt, saleDate);
 
   const listingAfterResponse = await fetch(`${baseUrl}/api/listings`);
   assert.equal(listingAfterResponse.status, 200);

@@ -1,6 +1,6 @@
 import { all, get, run } from "../database.js";
 import { ORDER_FIELD_MAP } from "../mappers/fieldMaps.js";
-import { toCamelArray } from "../mappers/recordMappers.js";
+import { toCamel, toCamelArray } from "../mappers/recordMappers.js";
 import { requireJsonBody, validateNumberLike, sendValidationError } from "../validation/common.js";
 import { uid } from "./shared.js";
 
@@ -195,7 +195,7 @@ export function registerOrderRoutes(app) {
           ],
         );
       }
-      res.status(201).json(get(`SELECT * FROM orders WHERE id = ?`, [id]));
+      res.status(201).json(toCamel(get(`SELECT * FROM orders WHERE id = ?`, [id]), ORDER_FIELD_MAP));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
