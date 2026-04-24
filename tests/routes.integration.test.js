@@ -541,5 +541,39 @@ test("server routes handle validation, migration, and listing side effects", asy
   const settingsPayload = await settingsResponse.json();
   assert.equal(settingsPayload.userName, "Route Test");
 
+  const createdPurchaseResponse = await fetch(`${baseUrl}/api/purchases`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "route-purchase",
+      name: "Purchase Card",
+      card_set: "Purchase Set",
+      platform: "ebay",
+      seller: "seller-1",
+      price: 25,
+      shipping: 3.5,
+      total_cost: 28.5,
+      date: "2026-04-24",
+      notes: "Route purchase",
+    }),
+  });
+  assert.equal(createdPurchaseResponse.status, 201);
+  const createdPurchasePayload = await createdPurchaseResponse.json();
+  assert.equal(createdPurchasePayload.cardSet, "Purchase Set");
+  assert.equal(createdPurchasePayload.totalCost, 28.5);
+  assert.ok("createdAt" in createdPurchasePayload);
+  assert.equal("card_set" in createdPurchasePayload, false);
+  assert.equal("total_cost" in createdPurchasePayload, false);
+
+  const purchasesResponse = await fetch(`${baseUrl}/api/purchases`);
+  assert.equal(purchasesResponse.status, 200);
+  const purchasesPayload = await purchasesResponse.json();
+  assert.equal(Array.isArray(purchasesPayload), true);
+  assert.equal(purchasesPayload[0].cardSet, "Purchase Set");
+  assert.equal(purchasesPayload[0].totalCost, 28.5);
+  assert.ok("createdAt" in purchasesPayload[0]);
+  assert.equal("card_set" in purchasesPayload[0], false);
+  assert.equal("total_cost" in purchasesPayload[0], false);
+
   assert.match(stderr, /No ANTHROPIC_API_KEY|^$/);
 });

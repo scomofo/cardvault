@@ -63,6 +63,12 @@ export const SALE_FIELD_MAP = {
   date: "date",
 };
 
+export const PURCHASE_FIELD_MAP = {
+  card_set: "cardSet",
+  total_cost: "totalCost",
+  created_at: "createdAt",
+};
+
 export const ORDER_FIELD_MAP = {
   sale_id: "saleId",
   listing_id: "listingId",

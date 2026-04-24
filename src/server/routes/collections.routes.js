@@ -1,5 +1,7 @@
 import { all, get, run } from "../database.js";
+import { PURCHASE_FIELD_MAP } from "../mappers/fieldMaps.js";
 import { json } from "../mappers/recordMappers.js";
+import { toCamel, toCamelArray } from "../mappers/recordMappers.js";
 import { requireJsonBody } from "../validation/common.js";
 import { registerCRUD, uid } from "./shared.js";
 
@@ -84,7 +86,7 @@ export function registerCollectionRoutes(app) {
 
   app.get("/api/purchases", (_req, res) => {
     try {
-      res.json(all("SELECT * FROM purchases ORDER BY date DESC"));
+      res.json(toCamelArray(all("SELECT * FROM purchases ORDER BY date DESC"), PURCHASE_FIELD_MAP));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -119,7 +121,7 @@ export function registerCollectionRoutes(app) {
           body.notes,
         ],
       );
-      res.status(201).json(get("SELECT * FROM purchases WHERE id = ?", [id]));
+      res.status(201).json(toCamel(get("SELECT * FROM purchases WHERE id = ?", [id]), PURCHASE_FIELD_MAP));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
