@@ -162,6 +162,100 @@ test("server routes handle validation, migration, and listing side effects", asy
   });
   assert.equal(migrateZeroValuesResponse.status, 200);
 
+  const migrateRichMetadataResponse = await fetch(`${baseUrl}/api/migrate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      items: [
+        {
+          id: "migrated-rich-item",
+          name: "Rich Card",
+          playerName: "Wayne Gretzky",
+          manufacturer: "O-Pee-Chee",
+          sport: "hockey",
+          team: "Oilers",
+          set: "Rich Set",
+          year: "1985",
+          number: "99",
+          type: "sports",
+          rarity: "rare",
+          condition: "mint",
+          parallel: "Rainbow",
+          binder: "Binder A",
+          storageLocation: "Shelf 1",
+          costBasis: 12.5,
+          acquisitionDate: "2026-04-01",
+          acquisitionSource: "trade",
+          status: "listed",
+          listingStatus: "draft",
+          saleStatus: "available",
+          listedOn: ["ebay"],
+          frontImgId: "front-rich",
+          backImgId: "back-rich",
+          priceEstimate: { low: 10, mid: 20, high: 30 },
+          priceHistory: [{ price: 18, date: "2026-04-20" }],
+          marketPrice: 19.5,
+          suggestedListingPrice: 24.5,
+          minAcceptablePrice: 15,
+          lastCompPrice: 18.25,
+          averageCompPrice: 17.75,
+          psa9Price: 45,
+          psa10Price: 120,
+          profitRealized: 0,
+          notes: "rich note",
+          centering: 9,
+          corners: 8,
+          edges: 9,
+          surface: 8,
+          projectedGrade: 8.5,
+          gradingCandidate: 1,
+          vaultStatus: "GREEN",
+          conditionReport: "Sharp copy",
+          cv_centering_lr: "50/50",
+          cv_centering_tb: "52/48",
+          cv_centering_score: 0.95,
+          cv_processed: 1,
+          createdAt: "2026-04-10T00:00:00.000Z",
+          updatedAt: "2026-04-11T00:00:00.000Z",
+        },
+      ],
+      listings: [
+        {
+          id: "migrated-rich-listing",
+          cardId: "migrated-rich-item",
+          externalListingId: "EXT-123",
+          cardName: "Rich Card",
+          cardSet: "Rich Set",
+          cardNumber: "99",
+          platform: "ebay",
+          listingTitle: "Rich Listing Title",
+          listingDescription: "Rich listing description",
+          categoryPath: "Sports Cards > Hockey",
+          itemSpecifics: { Player: "Wayne Gretzky" },
+          shippingProfile: { service: "tracked" },
+          imageCount: 2,
+          automationState: "ready",
+          pricingStrategy: "premium",
+          format: "fixed",
+          startPrice: 29.99,
+          buyNowPrice: 34.99,
+          auctionEndDate: "2026-05-01T00:00:00.000Z",
+          shipping: 3.5,
+          shippingWeightOz: 4,
+          exportBatchId: "batch-rich",
+          currentBid: 0,
+          status: "active",
+          publishStatus: "revised",
+          soldPrice: null,
+          soldDate: null,
+          notes: "rich listing note",
+          createdAt: "2026-04-12T00:00:00.000Z",
+        },
+      ],
+    }),
+  });
+  assert.equal(migrateRichMetadataResponse.status, 200);
+
   const createdItemResponse = await fetch(`${baseUrl}/api/items`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -198,6 +292,48 @@ test("server routes handle validation, migration, and listing side effects", asy
   assert.equal(itemResponse.status, 200);
   const itemPayload = await itemResponse.json();
   assert.equal(itemPayload.status, "listed");
+
+  const migratedRichItemResponse = await fetch(`${baseUrl}/api/items/migrated-rich-item`);
+  assert.equal(migratedRichItemResponse.status, 200);
+  const migratedRichItemPayload = await migratedRichItemResponse.json();
+  assert.equal(migratedRichItemPayload.playerName, "Wayne Gretzky");
+  assert.equal(migratedRichItemPayload.storageLocation, "Shelf 1");
+  assert.equal(migratedRichItemPayload.acquisitionDate, "2026-04-01");
+  assert.equal(migratedRichItemPayload.acquisitionSource, "trade");
+  assert.equal(migratedRichItemPayload.listingStatus, "draft");
+  assert.deepEqual(migratedRichItemPayload.listedOn, ["ebay"]);
+  assert.deepEqual(migratedRichItemPayload.priceEstimate, { low: 10, mid: 20, high: 30 });
+  assert.deepEqual(migratedRichItemPayload.priceHistory, [{ price: 18, date: "2026-04-20" }]);
+  assert.equal(migratedRichItemPayload.marketPrice, 19.5);
+  assert.equal(migratedRichItemPayload.suggestedListingPrice, 24.5);
+  assert.equal(migratedRichItemPayload.minAcceptablePrice, 15);
+  assert.equal(migratedRichItemPayload.lastCompPrice, 18.25);
+  assert.equal(migratedRichItemPayload.averageCompPrice, 17.75);
+  assert.equal(migratedRichItemPayload.psa9Price, 45);
+  assert.equal(migratedRichItemPayload.psa10Price, 120);
+  assert.equal(migratedRichItemPayload.gradingCandidate, 1);
+  assert.equal(migratedRichItemPayload.vaultStatus, "GREEN");
+  assert.equal(migratedRichItemPayload.conditionReport, "Sharp copy");
+  assert.equal(migratedRichItemPayload.cv_centering_lr, "50/50");
+  assert.equal(migratedRichItemPayload.cv_processed, 1);
+
+  const listingsResponse = await fetch(`${baseUrl}/api/listings`);
+  assert.equal(listingsResponse.status, 200);
+  const listingsPayload = await listingsResponse.json();
+  const migratedRichListing = listingsPayload.find((listing) => listing.id === "migrated-rich-listing");
+  assert.equal(migratedRichListing.externalListingId, "EXT-123");
+  assert.equal(migratedRichListing.listingTitle, "Rich Listing Title");
+  assert.equal(migratedRichListing.listingDescription, "Rich listing description");
+  assert.equal(migratedRichListing.categoryPath, "Sports Cards > Hockey");
+  assert.deepEqual(migratedRichListing.itemSpecifics, { Player: "Wayne Gretzky" });
+  assert.deepEqual(migratedRichListing.shippingProfile, { service: "tracked" });
+  assert.equal(migratedRichListing.imageCount, 2);
+  assert.equal(migratedRichListing.automationState, "ready");
+  assert.equal(migratedRichListing.pricingStrategy, "premium");
+  assert.equal(migratedRichListing.buyNowPrice, 34.99);
+  assert.equal(migratedRichListing.shippingWeightOz, 4);
+  assert.equal(migratedRichListing.exportBatchId, "batch-rich");
+  assert.equal(migratedRichListing.publishStatus, "revised");
 
   const draftItemResponse = await fetch(`${baseUrl}/api/items`, {
     method: "POST",
