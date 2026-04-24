@@ -1,4 +1,4 @@
-import { loadData, loadString, saveData, saveString } from "../storage";
+import { loadData, loadString, saveData, saveString } from "../storage.js";
 
 function loadLocalSnapshot() {
   return {
@@ -42,6 +42,14 @@ function isServerEmpty(server) {
     toArray(server.gradings).length === 0 &&
     toArray(server.listings).length === 0 &&
     toArray(server.purchases).length === 0
+  );
+}
+
+function hasMeaningfulServerSettings(server) {
+  return (
+    server.settings?.userName != null && server.settings.userName !== ""
+  ) || (
+    server.settings?.shipFrom != null && server.settings.shipFrom !== ""
   );
 }
 
@@ -123,7 +131,11 @@ export async function loadInitialData({
   };
 
   if (isServerEmpty(server) && hasMeaningfulLocalData(local)) {
-    await migrate(local);
+    await migrate({
+      ...local,
+      userName: server.settings?.userName ?? local.userName,
+      shipFrom: server.settings?.shipFrom ?? local.shipFrom,
+    });
     return {
       useServer: true,
       snapshot: {
@@ -139,7 +151,7 @@ export async function loadInitialData({
     };
   }
 
-  if (!isServerEmpty(server)) {
+  if (!isServerEmpty(server) || hasMeaningfulServerSettings(server)) {
     return {
       useServer: true,
       snapshot: persistServerSnapshot(server, setState),
