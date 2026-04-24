@@ -682,6 +682,23 @@ test("manual order creation backfills the linked sale order_id", async (t) => {
   assert.equal(sale.orderId, "sale-link-order");
   assert.equal(sale.platform, "ebay");
   assert.equal(sale.salePrice, 59.99);
+
+  const shipmentResponse = await fetch(`${baseUrl}/api/automation/shipping/sale-link-order`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ destinationCountry: "CA", weightOz: 3 }),
+  });
+  assert.equal(shipmentResponse.status, 200);
+  const shipmentPayload = await shipmentResponse.json();
+
+  const shippedSalesResponse = await fetch(`${baseUrl}/api/sales`);
+  assert.equal(shippedSalesResponse.status, 200);
+  const shippedSalesPayload = await shippedSalesResponse.json();
+  const shippedSale = shippedSalesPayload.find((entry) => entry.id === "sale-link-sale");
+
+  assert.ok(shippedSale);
+  assert.equal(shippedSale.trackingNumber, shipmentPayload.tracking_number);
+  assert.equal("tracking_number" in shippedSale, false);
 });
 
 test("manual sale creation backfills the linked order sale_id", async (t) => {

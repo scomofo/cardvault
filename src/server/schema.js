@@ -76,6 +76,7 @@ export function createTables(db) {
       tax_collected REAL DEFAULT 0,
       payout_amount REAL DEFAULT 0,
       net_profit REAL DEFAULT 0,
+      tracking_number TEXT,
       listing_id TEXT,
       date TEXT DEFAULT (datetime('now'))
     );

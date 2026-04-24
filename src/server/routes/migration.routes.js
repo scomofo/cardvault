@@ -114,7 +114,7 @@ export function registerMigrationRoutes(app) {
           key: "sales",
           table: "sales",
           columns:
-            "id,card_id,card_name,card_set,sale_price,cost_basis,platform,fees,shipping_cost,net_profit,listing_id,date",
+            "id,card_id,card_name,card_set,sale_price,cost_basis,platform,fees,shipping_cost,net_profit,tracking_number,listing_id,date",
           values: (sale) => [
             sale.id,
             firstDefined(sale.cardId, sale.card_id),
@@ -126,6 +126,7 @@ export function registerMigrationRoutes(app) {
             firstDefined(sale.fees, 0),
             firstDefined(sale.shippingCost, sale.shipping_cost, 0),
             firstDefined(sale.netProfit, sale.net_profit, 0),
+            firstDefined(sale.trackingNumber, sale.tracking_number),
             firstDefined(sale.listingId, sale.listing_id),
             sale.date,
           ],

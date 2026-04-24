@@ -61,6 +61,7 @@ export const SALE_FIELD_MAP = {
   tax_collected: "taxCollected",
   payout_amount: "payoutAmount",
   net_profit: "netProfit",
+  tracking_number: "trackingNumber",
   listing_id: "listingId",
   date: "date",
 };
