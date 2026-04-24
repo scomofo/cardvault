@@ -309,3 +309,56 @@ test("linked manual sales and orders reject duplicate one-to-one pairings", asyn
   });
   assert.equal(secondSaleResponse.status, 409);
 });
+
+test("linked manual sales and orders reject dangling link ids", async (t) => {
+  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-link-missing-"));
+  const dbPath = join(tempDir, "cardvault-test.db");
+  const port = 4800 + Math.floor(Math.random() * 400);
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  const server = spawn(process.execPath, ["server.js"], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      PORT: String(port),
+      CARDVAULT_DB_PATH: dbPath,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  t.after(async () => {
+    if (!server.killed) {
+      server.kill("SIGTERM");
+    }
+    await new Promise((resolve) => server.once("exit", resolve));
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  await waitForServer(baseUrl);
+
+  const missingSaleOrderResponse = await fetch(`${baseUrl}/api/orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "missing-link-order",
+      saleId: "missing-sale-id",
+      platform: "ebay",
+      salePrice: 12.99,
+    }),
+  });
+  assert.equal(missingSaleOrderResponse.status, 404);
+
+  const missingOrderSaleResponse = await fetch(`${baseUrl}/api/sales`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "missing-link-sale",
+      orderId: "missing-order-id",
+      cardName: "Missing Link Card",
+      cardSet: "Route Set",
+      platform: "ebay",
+      salePrice: 12.99,
+    }),
+  });
+  assert.equal(missingOrderSaleResponse.status, 404);
+});

@@ -43,6 +43,9 @@ export function registerOrderRoutes(app) {
           [linkedSaleId],
         )
         : null;
+      if (linkedSaleId && !linkedSale) {
+        return res.status(404).json({ error: "linked sale not found" });
+      }
       const resolvedPlatform = body.platform || linkedSale?.platform || null;
       if (!resolvedPlatform) return res.status(400).json({ error: "platform required" });
       const resolvedSalePrice = body.salePrice ?? body.sale_price ?? linkedSale?.sale_price;
