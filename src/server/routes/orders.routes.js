@@ -1,6 +1,7 @@
 import { all, get, run } from "../database.js";
 import { ORDER_FIELD_MAP } from "../mappers/fieldMaps.js";
 import { toCamel, toCamelArray, toSnake } from "../mappers/recordMappers.js";
+import { markListingSold, restoreListingAfterOperationalDelete, syncItemState } from "../services/listingStateSync.js";
 import { requireJsonBody, validateNumberLike, sendValidationError } from "../validation/common.js";
 import { uid } from "./shared.js";
 
@@ -160,19 +161,7 @@ export function registerOrderRoutes(app) {
         );
       }
       if (linkedListingId) {
-        run(
-          `UPDATE listings
-           SET status = 'sold',
-               publish_status = 'sold',
-               sold_price = COALESCE(sold_price, ?),
-               sold_date = COALESCE(sold_date, ?)
-           WHERE id = ?`,
-          [
-            resolvedSalePrice || 0,
-            soldAt,
-            linkedListingId,
-          ],
-        );
+        markListingSold(linkedListingId, resolvedSalePrice || 0, soldAt);
       }
       if (linkedItemId) {
         run(
@@ -253,6 +242,12 @@ export function registerOrderRoutes(app) {
            WHERE id = ?`,
           [existing.sale_id],
         );
+      }
+      if (existing.listing_id) {
+        restoreListingAfterOperationalDelete(existing.listing_id);
+      }
+      if (existing.item_id) {
+        syncItemState(existing.item_id);
       }
       if (result.changes === 0) return res.status(404).json({ error: "Order not found" });
       res.json({ deleted: true });

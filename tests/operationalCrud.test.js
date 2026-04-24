@@ -178,6 +178,93 @@ test("sales, orders, and purchases support full CRUD for sync flows", async (t) 
   });
   assert.equal(saleDeleteResponse.status, 200);
 
+  const itemsAfterSaleDeleteResponse = await fetch(`${baseUrl}/api/items`);
+  assert.equal(itemsAfterSaleDeleteResponse.status, 200);
+  const itemsAfterSaleDelete = await itemsAfterSaleDeleteResponse.json();
+  const reopenedItem = itemsAfterSaleDelete.find((item) => item.id === "crud-item");
+  assert.equal(reopenedItem.status, "listed");
+  assert.equal(reopenedItem.listingStatus, "draft");
+  assert.equal(reopenedItem.saleStatus, "available");
+  assert.equal(reopenedItem.soldAt, null);
+
+  const listingsAfterSaleDeleteResponse = await fetch(`${baseUrl}/api/listings`);
+  assert.equal(listingsAfterSaleDeleteResponse.status, 200);
+  const listingsAfterSaleDelete = await listingsAfterSaleDeleteResponse.json();
+  const reopenedListing = listingsAfterSaleDelete.find((listing) => listing.id === "crud-listing");
+  assert.equal(reopenedListing.status, "draft");
+  assert.equal(reopenedListing.publishStatus, "draft");
+  assert.equal(reopenedListing.soldPrice, null);
+  assert.equal(reopenedListing.soldDate, null);
+
+  const orderOnlyItemResponse = await fetch(`${baseUrl}/api/items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "order-only-item",
+      name: "Order Only Card",
+      set: "Route Set",
+      number: "89",
+      costBasis: 9,
+      listedOn: [],
+      priceHistory: [],
+    }),
+  });
+  assert.equal(orderOnlyItemResponse.status, 201);
+
+  const orderOnlyListingResponse = await fetch(`${baseUrl}/api/listings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "order-only-listing",
+      cardId: "order-only-item",
+      cardName: "Order Only Card",
+      cardSet: "Route Set",
+      cardNumber: "89",
+      platform: "shopify",
+      format: "fixed",
+      startPrice: 19.99,
+      shipping: 1.25,
+      status: "active",
+    }),
+  });
+  assert.equal(orderOnlyListingResponse.status, 201);
+
+  const directOrderResponse = await fetch(`${baseUrl}/api/orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "direct-order",
+      listingId: "order-only-listing",
+      itemId: "order-only-item",
+      platform: "shopify",
+      salePrice: 19.99,
+    }),
+  });
+  assert.equal(directOrderResponse.status, 201);
+
+  const directOrderDeleteResponse = await fetch(`${baseUrl}/api/orders/direct-order`, {
+    method: "DELETE",
+  });
+  assert.equal(directOrderDeleteResponse.status, 200);
+
+  const itemsAfterOrderDeleteResponse = await fetch(`${baseUrl}/api/items`);
+  assert.equal(itemsAfterOrderDeleteResponse.status, 200);
+  const itemsAfterOrderDelete = await itemsAfterOrderDeleteResponse.json();
+  const reopenedOrderOnlyItem = itemsAfterOrderDelete.find((item) => item.id === "order-only-item");
+  assert.equal(reopenedOrderOnlyItem.status, "listed");
+  assert.equal(reopenedOrderOnlyItem.listingStatus, "listed");
+  assert.equal(reopenedOrderOnlyItem.saleStatus, "available");
+  assert.equal(reopenedOrderOnlyItem.soldAt, null);
+
+  const listingsAfterOrderDeleteResponse = await fetch(`${baseUrl}/api/listings`);
+  assert.equal(listingsAfterOrderDeleteResponse.status, 200);
+  const listingsAfterOrderDelete = await listingsAfterOrderDeleteResponse.json();
+  const reopenedOrderOnlyListing = listingsAfterOrderDelete.find((listing) => listing.id === "order-only-listing");
+  assert.equal(reopenedOrderOnlyListing.status, "active");
+  assert.equal(reopenedOrderOnlyListing.publishStatus, "active");
+  assert.equal(reopenedOrderOnlyListing.soldPrice, null);
+  assert.equal(reopenedOrderOnlyListing.soldDate, null);
+
   const purchaseDeleteResponse = await fetch(`${baseUrl}/api/purchases/crud-purchase`, {
     method: "DELETE",
   });

@@ -5,6 +5,7 @@ import {
   toCamelArray,
   toSnake,
 } from "../mappers/recordMappers.js";
+import { markListingSold, restoreListingAfterOperationalDelete, syncItemState } from "../services/listingStateSync.js";
 import { requireJsonBody } from "../validation/common.js";
 import { validateSalePayload } from "../validation/writeValidators.js";
 import { uid } from "./shared.js";
@@ -138,15 +139,7 @@ export function registerSalesRoutes(app) {
         );
       }
       if (linkedListingId) {
-        run(
-          `UPDATE listings
-           SET status = 'sold',
-               publish_status = 'sold',
-                sold_price = COALESCE(sold_price, ?),
-                sold_date = COALESCE(sold_date, ?)
-            WHERE id = ?`,
-          [salePrice, saleDate, linkedListingId],
-        );
+        markListingSold(linkedListingId, salePrice, saleDate);
       }
       if (linkedCardId) {
         run(
@@ -229,6 +222,12 @@ export function registerSalesRoutes(app) {
            WHERE id = ?`,
           [existing.order_id],
         );
+      }
+      if (existing.listing_id) {
+        restoreListingAfterOperationalDelete(existing.listing_id);
+      }
+      if (existing.card_id) {
+        syncItemState(existing.card_id);
       }
       if (result.changes === 0) return res.status(404).json({ error: "Sale not found" });
       res.json({ deleted: true });

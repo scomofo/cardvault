@@ -6,55 +6,12 @@ import {
   toCamelArray,
   toSnake,
 } from "../mappers/recordMappers.js";
+import { syncItemState } from "../services/listingStateSync.js";
 import { validateListingPayload } from "../validation/writeValidators.js";
 import { uid } from "./shared.js";
 
 function normalizeStatus(status, fallback = "") {
   return String(status || fallback).toLowerCase();
-}
-
-function deriveOpenItemState(cardId) {
-  const listings = all(`SELECT status, sold_date, created_at FROM listings WHERE card_id = ?`, [cardId]);
-  if (listings.length === 0) {
-    return {
-      status: "inventory",
-      listingStatus: "not_listed",
-      saleStatus: "available",
-      soldAt: null,
-    };
-  }
-
-  const statuses = listings.map((listing) => normalizeStatus(listing.status));
-  if (statuses.includes("sold")) {
-    const soldAt = listings
-      .filter((listing) => normalizeStatus(listing.status) === "sold")
-      .map((listing) => listing.sold_date || listing.created_at || null)
-      .filter(Boolean)
-      .reduce((latest, candidate) => {
-        if (!latest) return candidate;
-        const latestTime = Date.parse(latest);
-        const candidateTime = Date.parse(candidate);
-        if (Number.isNaN(latestTime) || Number.isNaN(candidateTime)) {
-          return latest;
-        }
-        return candidateTime > latestTime ? candidate : latest;
-      }, null);
-
-    return {
-      status: "sold",
-      listingStatus: "ended",
-      saleStatus: "sold",
-      soldAt,
-    };
-  }
-
-  const hasPublishedListing = statuses.some((status) => ["active", "revised", "ended"].includes(status));
-  return {
-    status: "listed",
-    listingStatus: hasPublishedListing ? "listed" : "draft",
-    saleStatus: "available",
-    soldAt: null,
-  };
 }
 
 function derivePublishStatus(status, fallback = null) {
@@ -63,28 +20,6 @@ function derivePublishStatus(status, fallback = null) {
     return normalized;
   }
   return fallback;
-}
-
-function syncItemState(cardId, fallbackSoldAt = null) {
-  if (!cardId) return;
-
-  const itemState = deriveOpenItemState(cardId);
-  run(
-    `UPDATE user_items
-     SET status = ?,
-         listing_status = ?,
-         sale_status = ?,
-         sold_at = ?,
-         updated_at = datetime('now')
-     WHERE id = ?`,
-    [
-      itemState.status,
-      itemState.listingStatus,
-      itemState.saleStatus,
-      itemState.status === "sold" ? itemState.soldAt || fallbackSoldAt : null,
-      cardId,
-    ],
-  );
 }
 
 export function registerListingRoutes(app) {
