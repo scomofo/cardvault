@@ -3,7 +3,7 @@ import { useToast } from "./Toast";
 import { useData } from "../lib/DataContext";
 import { PLATFORMS } from "../lib/constants";
 import { uid, fmtShort } from "../lib/utils";
-import { actionQueueAPI, marketplacesAPI, ordersAPI, listingsAPI, automationAPI, purchasesAPI, itemsAPI } from "../lib/api";
+import { actionQueueAPI, marketplacesAPI, ordersAPI, listingsAPI, salesAPI, automationAPI, purchasesAPI, itemsAPI } from "../lib/api";
 import { importEbayPurchasesLocal, parseEbayPurchaseImport } from "../lib/ebayPurchaseImport";
 import { requestNotificationPermission, canNotify, sendNotification, scheduleAuctionNotification, cancelNotificationTimer } from "../lib/notifications";
 import { IconPlus, IconBell, IconCheck, IconX, Spinner } from "./Icons";
@@ -255,14 +255,18 @@ export default function SalesFlow() {
 
   const refreshServerSalesState = async () => {
     if (!useServer) return;
-    const [nextActionQueue, nextOrders, nextListings] = await Promise.all([
+    const [nextActionQueue, nextOrders, nextListings, nextSales, nextCatalog] = await Promise.all([
       actionQueueAPI.list().catch(() => []),
       ordersAPI.list().catch(() => []),
       listingsAPI.list().catch(() => []),
+      salesAPI.list().catch(() => []),
+      itemsAPI.list().catch(() => []),
     ]);
     setActionQueue(Array.isArray(nextActionQueue) ? nextActionQueue : []);
     setOrders(Array.isArray(nextOrders) ? nextOrders : []);
     setListings(Array.isArray(nextListings) ? nextListings : []);
+    setSales(Array.isArray(nextSales) ? nextSales : []);
+    setCatalog(Array.isArray(nextCatalog) ? nextCatalog : []);
   };
 
   const publishListing = async (listingId, marketplace = "ebay") => {
