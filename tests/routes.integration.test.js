@@ -77,6 +77,91 @@ test("server routes handle validation, migration, and listing side effects", asy
   assert.equal(migratePayload.success, true);
   assert.equal(migratePayload.imported.items, 1);
 
+  const migrateZeroValuesResponse = await fetch(`${baseUrl}/api/migrate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      sales: [
+        {
+          id: "migrated-sale-zero",
+          cardName: "Zero Sale",
+          cardSet: "Zero Set",
+          salePrice: 0,
+          costBasis: 0,
+          fees: 0,
+          shippingCost: 0,
+          netProfit: 0,
+          date: "2026-04-24",
+        },
+      ],
+      trades: [
+        {
+          id: "migrated-trade-zero",
+          partner: "Zero Partner",
+          gave: "Nothing",
+          received: "Something",
+          gaveValue: 0,
+          receivedValue: 0,
+          date: "2026-04-24",
+        },
+      ],
+      watchlist: [
+        {
+          id: "migrated-watch-zero",
+          name: "Zero Watch",
+          cardSet: "Zero Set",
+          cardNumber: "0",
+          targetPrice: 0,
+          currentPrice: 0,
+          priceHistory: [],
+        },
+      ],
+      gradings: [
+        {
+          id: "migrated-grading-zero",
+          cardName: "Zero Grade",
+          cardSet: "Zero Set",
+          cardNumber: "0",
+          company: "PSA",
+          service: "Economy",
+          cost: 0,
+          preValue: 0,
+          status: "sent",
+          postValue: 0,
+        },
+      ],
+      purchases: [
+        {
+          id: "migrated-purchase-zero",
+          name: "Zero Purchase",
+          cardSet: "Zero Set",
+          price: 0,
+          shipping: 0,
+          totalCost: 0,
+          date: "2026-04-24",
+        },
+      ],
+      listings: [
+        {
+          id: "migrated-listing-zero",
+          cardName: "Zero Listing",
+          cardSet: "Zero Set",
+          cardNumber: "0",
+          platform: "ebay",
+          format: "fixed",
+          startPrice: 0,
+          buyNowPrice: 0,
+          shipping: 0,
+          currentBid: 0,
+          status: "draft",
+          soldPrice: 0,
+          soldDate: "2026-04-24T00:00:00.000Z",
+        },
+      ],
+    }),
+  });
+  assert.equal(migrateZeroValuesResponse.status, 200);
+
   const createdItemResponse = await fetch(`${baseUrl}/api/items`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -569,11 +654,15 @@ test("server routes handle validation, migration, and listing side effects", asy
   assert.equal(purchasesResponse.status, 200);
   const purchasesPayload = await purchasesResponse.json();
   assert.equal(Array.isArray(purchasesPayload), true);
-  assert.equal(purchasesPayload[0].cardSet, "Purchase Set");
-  assert.equal(purchasesPayload[0].totalCost, 28.5);
-  assert.ok("createdAt" in purchasesPayload[0]);
-  assert.equal("card_set" in purchasesPayload[0], false);
-  assert.equal("total_cost" in purchasesPayload[0], false);
+  const createdPurchaseEntry = purchasesPayload.find((purchase) => purchase.id === "route-purchase");
+  assert.equal(createdPurchaseEntry.cardSet, "Purchase Set");
+  assert.equal(createdPurchaseEntry.totalCost, 28.5);
+  assert.ok("createdAt" in createdPurchaseEntry);
+  assert.equal("card_set" in createdPurchaseEntry, false);
+  assert.equal("total_cost" in createdPurchaseEntry, false);
+  const migratedPurchaseZero = purchasesPayload.find((purchase) => purchase.id === "migrated-purchase-zero");
+  assert.equal(migratedPurchaseZero.shipping, 0);
+  assert.equal(migratedPurchaseZero.totalCost, 0);
 
   const createdConnectionResponse = await fetch(`${baseUrl}/api/marketplace-connections`, {
     method: "POST",
@@ -684,22 +773,35 @@ test("server routes handle validation, migration, and listing side effects", asy
   const tradesListResponse = await fetch(`${baseUrl}/api/trades`);
   assert.equal(tradesListResponse.status, 200);
   const tradesListPayload = await tradesListResponse.json();
-  assert.equal(tradesListPayload[0].gaveValue, 5);
-  assert.equal("gave_value" in tradesListPayload[0], false);
+  const createdTradeEntry = tradesListPayload.find((trade) => trade.id === "route-trade");
+  assert.equal(createdTradeEntry.gaveValue, 5);
+  assert.equal("gave_value" in createdTradeEntry, false);
+  const migratedTradeZero = tradesListPayload.find((trade) => trade.id === "migrated-trade-zero");
+  assert.equal(migratedTradeZero.gaveValue, 0);
+  assert.equal(migratedTradeZero.receivedValue, 0);
 
   const watchlistListResponse = await fetch(`${baseUrl}/api/watchlist`);
   assert.equal(watchlistListResponse.status, 200);
   const watchlistListPayload = await watchlistListResponse.json();
-  assert.equal(watchlistListPayload[0].targetPrice, 15);
-  assert.deepEqual(watchlistListPayload[0].priceHistory, [{ price: 12.5, date: "2026-04-24" }]);
-  assert.equal("target_price" in watchlistListPayload[0], false);
+  const createdWatchEntry = watchlistListPayload.find((watch) => watch.id === "route-watch");
+  assert.equal(createdWatchEntry.targetPrice, 15);
+  assert.deepEqual(createdWatchEntry.priceHistory, [{ price: 12.5, date: "2026-04-24" }]);
+  assert.equal("target_price" in createdWatchEntry, false);
+  const migratedWatchZero = watchlistListPayload.find((watch) => watch.id === "migrated-watch-zero");
+  assert.equal(migratedWatchZero.targetPrice, 0);
+  assert.equal(migratedWatchZero.currentPrice, 0);
 
   const gradingsListResponse = await fetch(`${baseUrl}/api/gradings`);
   assert.equal(gradingsListResponse.status, 200);
   const gradingsListPayload = await gradingsListResponse.json();
-  assert.equal(gradingsListPayload[0].cardName, "Grade Card");
-  assert.equal(gradingsListPayload[0].dateSent, "2026-04-24");
-  assert.equal("card_name" in gradingsListPayload[0], false);
+  const createdGradingEntry = gradingsListPayload.find((grading) => grading.id === "route-grading");
+  assert.equal(createdGradingEntry.cardName, "Grade Card");
+  assert.equal(createdGradingEntry.dateSent, "2026-04-24");
+  assert.equal("card_name" in createdGradingEntry, false);
+  const migratedGradingZero = gradingsListPayload.find((grading) => grading.id === "migrated-grading-zero");
+  assert.equal(migratedGradingZero.cost, 0);
+  assert.equal(migratedGradingZero.preValue, 0);
+  assert.equal(migratedGradingZero.postValue, 0);
 
   const leagueResponse = await fetch(`${baseUrl}/api/ref/leagues`, {
     method: "POST",
