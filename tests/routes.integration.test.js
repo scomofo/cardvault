@@ -114,6 +114,46 @@ test("server routes handle validation, migration, and listing side effects", asy
   const itemPayload = await itemResponse.json();
   assert.equal(itemPayload.status, "listed");
 
+  const draftItemResponse = await fetch(`${baseUrl}/api/items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "draft-route-item",
+      name: "Draft Route Card",
+      set: "Route Set",
+      number: "0",
+      costBasis: 2.5,
+      listedOn: [],
+      priceHistory: [],
+    }),
+  });
+  assert.equal(draftItemResponse.status, 201);
+
+  const draftListingResponse = await fetch(`${baseUrl}/api/listings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "draft-route-listing",
+      cardId: "draft-route-item",
+      cardName: "Draft Route Card",
+      cardSet: "Route Set",
+      cardNumber: "0",
+      platform: "ebay",
+      format: "fixed",
+      startPrice: 10.5,
+      shipping: 1.25,
+      status: "draft",
+    }),
+  });
+  assert.equal(draftListingResponse.status, 201);
+
+  const draftedItemResponse = await fetch(`${baseUrl}/api/items/draft-route-item`);
+  assert.equal(draftedItemResponse.status, 200);
+  const draftedItemPayload = await draftedItemResponse.json();
+  assert.equal(draftedItemPayload.status, "listed");
+  assert.equal(draftedItemPayload.listingStatus, "draft");
+  assert.equal(draftedItemPayload.saleStatus, "available");
+
   const soldAt = "2026-04-24T18:30:00.000Z";
   const updatedListingResponse = await fetch(`${baseUrl}/api/listings/route-listing`, {
     method: "PUT",
@@ -330,6 +370,72 @@ test("server routes handle validation, migration, and listing side effects", asy
   assert.equal(stillSoldAfterCreatePayload.status, "sold");
   assert.equal(stillSoldAfterCreatePayload.listingStatus, "ended");
   assert.equal(stillSoldAfterCreatePayload.saleStatus, "sold");
+
+  const soldDraftItemResponse = await fetch(`${baseUrl}/api/items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "sold-draft-item",
+      name: "Sold Draft Card",
+      set: "Route Set",
+      number: "5",
+      costBasis: 7.5,
+      listedOn: [],
+      priceHistory: [],
+    }),
+  });
+  assert.equal(soldDraftItemResponse.status, 201);
+
+  const soldDraftListingResponse = await fetch(`${baseUrl}/api/listings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "sold-draft-listing-a",
+      cardId: "sold-draft-item",
+      cardName: "Sold Draft Card",
+      cardSet: "Route Set",
+      cardNumber: "5",
+      platform: "ebay",
+      format: "fixed",
+      startPrice: 19.5,
+      shipping: 1.25,
+      status: "sold",
+      soldPrice: 19.5,
+      soldDate: "2026-04-24T19:20:00.000Z",
+    }),
+  });
+  assert.equal(soldDraftListingResponse.status, 201);
+
+  const siblingDraftListingResponse = await fetch(`${baseUrl}/api/listings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "sold-draft-listing-b",
+      cardId: "sold-draft-item",
+      cardName: "Sold Draft Card",
+      cardSet: "Route Set",
+      cardNumber: "5",
+      platform: "shopify",
+      format: "fixed",
+      startPrice: 20.5,
+      shipping: 1.25,
+      status: "draft",
+    }),
+  });
+  assert.equal(siblingDraftListingResponse.status, 201);
+
+  const deleteSoldDraftResponse = await fetch(`${baseUrl}/api/listings/sold-draft-listing-a`, {
+    method: "DELETE",
+  });
+  assert.equal(deleteSoldDraftResponse.status, 200);
+
+  const reopenedDraftItemResponse = await fetch(`${baseUrl}/api/items/sold-draft-item`);
+  assert.equal(reopenedDraftItemResponse.status, 200);
+  const reopenedDraftItemPayload = await reopenedDraftItemResponse.json();
+  assert.equal(reopenedDraftItemPayload.status, "listed");
+  assert.equal(reopenedDraftItemPayload.listingStatus, "draft");
+  assert.equal(reopenedDraftItemPayload.saleStatus, "available");
+  assert.equal(reopenedDraftItemPayload.soldAt, null);
 
   const secondItemResponse = await fetch(`${baseUrl}/api/items`, {
     method: "POST",

@@ -9,6 +9,36 @@ import {
 import { validateListingPayload } from "../validation/writeValidators.js";
 import { uid } from "./shared.js";
 
+function deriveOpenItemState(cardId) {
+  const listings = all(`SELECT status FROM listings WHERE card_id = ?`, [cardId]);
+  if (listings.length === 0) {
+    return {
+      status: "inventory",
+      listingStatus: "not_listed",
+      saleStatus: "available",
+      soldAt: null,
+    };
+  }
+
+  const statuses = listings.map((listing) => String(listing.status || "").toLowerCase());
+  if (statuses.includes("sold")) {
+    return {
+      status: "sold",
+      listingStatus: "ended",
+      saleStatus: "sold",
+      soldAt: null,
+    };
+  }
+
+  const hasPublishedListing = statuses.some((status) => ["active", "revised", "ended"].includes(status));
+  return {
+    status: "listed",
+    listingStatus: hasPublishedListing ? "listed" : "draft",
+    saleStatus: "available",
+    soldAt: null,
+  };
+}
+
 export function registerListingRoutes(app) {
   app.get("/api/listings", (req, res) => {
     try {
@@ -86,13 +116,22 @@ export function registerListingRoutes(app) {
             [body.card_id, id],
           )?.count || 0;
           if (siblingSoldCount === 0) {
+            const itemState = deriveOpenItemState(body.card_id);
             run(
               `UPDATE user_items
-               SET status = 'listed',
-                   listing_status = 'listed',
+               SET status = ?,
+                   listing_status = ?,
+                   sale_status = ?,
+                   sold_at = ?,
                    updated_at = datetime('now')
                WHERE id = ?`,
-              [body.card_id],
+              [
+                itemState.status,
+                itemState.listingStatus,
+                itemState.saleStatus,
+                itemState.soldAt,
+                body.card_id,
+              ],
             );
           }
         }
@@ -171,15 +210,22 @@ export function registerListingRoutes(app) {
             [body.card_id, req.params.id],
           )?.count || 0;
           if (siblingSoldCount === 0) {
+            const itemState = deriveOpenItemState(body.card_id);
             run(
               `UPDATE user_items
-               SET status = 'listed',
-                   listing_status = 'listed',
-                   sale_status = 'available',
-                   sold_at = NULL,
+               SET status = ?,
+                   listing_status = ?,
+                   sale_status = ?,
+                   sold_at = ?,
                    updated_at = datetime('now')
                WHERE id = ?`,
-              [body.card_id],
+              [
+                itemState.status,
+                itemState.listingStatus,
+                itemState.saleStatus,
+                itemState.soldAt,
+                body.card_id,
+              ],
             );
           }
           run(
@@ -221,28 +267,40 @@ export function registerListingRoutes(app) {
           [existing.card_id],
         )?.count || 0;
         if (remainingListings === 0) {
+          const itemState = deriveOpenItemState(existing.card_id);
           run(
             `UPDATE user_items
-             SET status = CASE
-                   WHEN sale_status = 'sold' THEN status
-                   WHEN status = 'listed' THEN 'inventory'
-                   ELSE status
-                 END,
-                 listing_status = 'not_listed',
+             SET status = ?,
+                 listing_status = ?,
+                 sale_status = ?,
+                 sold_at = ?,
                  updated_at = datetime('now')
              WHERE id = ?`,
-            [existing.card_id],
+            [
+              itemState.status,
+              itemState.listingStatus,
+              itemState.saleStatus,
+              itemState.soldAt,
+              existing.card_id,
+            ],
           );
         } else if (existing.status === "sold" && remainingSoldCount === 0) {
+          const itemState = deriveOpenItemState(existing.card_id);
           run(
             `UPDATE user_items
-             SET status = 'listed',
-                 listing_status = 'listed',
-                 sale_status = 'available',
-                 sold_at = NULL,
+             SET status = ?,
+                 listing_status = ?,
+                 sale_status = ?,
+                 sold_at = ?,
                  updated_at = datetime('now')
              WHERE id = ?`,
-            [existing.card_id],
+            [
+              itemState.status,
+              itemState.listingStatus,
+              itemState.saleStatus,
+              itemState.soldAt,
+              existing.card_id,
+            ],
           );
         }
       }
