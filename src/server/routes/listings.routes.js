@@ -77,14 +77,24 @@ export function registerListingRoutes(app) {
             [body.sold_date || new Date().toISOString(), body.card_id],
           );
         } else {
-          run(
-            `UPDATE user_items
-             SET status = 'listed',
-                 listing_status = 'listed',
-                 updated_at = datetime('now')
-             WHERE id = ?`,
-            [body.card_id],
-          );
+          const siblingSoldCount = get(
+            `SELECT COUNT(*) AS count
+             FROM listings
+             WHERE card_id = ?
+               AND id != ?
+               AND status = 'sold'`,
+            [body.card_id, id],
+          )?.count || 0;
+          if (siblingSoldCount === 0) {
+            run(
+              `UPDATE user_items
+               SET status = 'listed',
+                   listing_status = 'listed',
+                   updated_at = datetime('now')
+               WHERE id = ?`,
+              [body.card_id],
+            );
+          }
         }
       }
       res

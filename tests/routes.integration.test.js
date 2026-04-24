@@ -271,6 +271,66 @@ test("server routes handle validation, migration, and listing side effects", asy
   assert.equal(revertedMultiItemPayload.saleStatus, "available");
   assert.equal(revertedMultiItemPayload.soldAt, null);
 
+  const soldCreateItemResponse = await fetch(`${baseUrl}/api/items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "sold-create-item",
+      name: "Sold Create Card",
+      set: "Route Set",
+      number: "4",
+      costBasis: 6.5,
+      listedOn: [],
+      priceHistory: [],
+    }),
+  });
+  assert.equal(soldCreateItemResponse.status, 201);
+
+  const soldCreateListingResponse = await fetch(`${baseUrl}/api/listings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "sold-create-listing-a",
+      cardId: "sold-create-item",
+      cardName: "Sold Create Card",
+      cardSet: "Route Set",
+      cardNumber: "4",
+      platform: "ebay",
+      format: "fixed",
+      startPrice: 17.5,
+      shipping: 1.25,
+      status: "sold",
+      soldPrice: 17.5,
+      soldDate: "2026-04-24T19:10:00.000Z",
+    }),
+  });
+  assert.equal(soldCreateListingResponse.status, 201);
+
+  const activeSiblingResponse = await fetch(`${baseUrl}/api/listings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "sold-create-listing-b",
+      cardId: "sold-create-item",
+      cardName: "Sold Create Card",
+      cardSet: "Route Set",
+      cardNumber: "4",
+      platform: "shopify",
+      format: "fixed",
+      startPrice: 18.5,
+      shipping: 1.25,
+      status: "active",
+    }),
+  });
+  assert.equal(activeSiblingResponse.status, 201);
+
+  const stillSoldAfterCreateResponse = await fetch(`${baseUrl}/api/items/sold-create-item`);
+  assert.equal(stillSoldAfterCreateResponse.status, 200);
+  const stillSoldAfterCreatePayload = await stillSoldAfterCreateResponse.json();
+  assert.equal(stillSoldAfterCreatePayload.status, "sold");
+  assert.equal(stillSoldAfterCreatePayload.listingStatus, "ended");
+  assert.equal(stillSoldAfterCreatePayload.saleStatus, "sold");
+
   const secondItemResponse = await fetch(`${baseUrl}/api/items`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
