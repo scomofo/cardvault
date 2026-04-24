@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { dashboardAPI, automationAPI } from "../lib/api";
+import { loadDashboardState } from "../lib/dashboardState";
 import { fmtShort } from "../lib/utils";
 import { Skeleton, Spinner, IconZap } from "./Icons";
 import DecisionFeedbackPanel from "./DecisionFeedbackPanel";
@@ -27,11 +28,17 @@ export default function DashboardView() {
   const [loading, setLoading] = useState(true);
   const [autoRunning, setAutoRunning] = useState({});
   const [autoResults, setAutoResults] = useState({});
+  const refreshDashboard = async () => {
+    const result = await loadDashboardState(dashboardAPI);
+    setData(result);
+    return result;
+  };
 
   const runAutomation = async (key, fn) => {
     setAutoRunning((p) => ({ ...p, [key]: true }));
     try {
       const result = await fn();
+      await refreshDashboard().catch(() => {});
       setAutoResults((p) => ({ ...p, [key]: result }));
     } catch (e) {
       setAutoResults((p) => ({ ...p, [key]: { error: e.message } }));
@@ -42,8 +49,7 @@ export default function DashboardView() {
 
   useEffect(() => {
     let cancelled = false;
-    dashboardAPI
-      .get()
+    loadDashboardState(dashboardAPI)
       .then((result) => {
         if (!cancelled) setData(result);
       })
