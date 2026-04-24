@@ -32,6 +32,7 @@ export function createTables(db) {
       listed_on TEXT,
       front_img_id TEXT,
       back_img_id TEXT,
+      front_img_phash TEXT,
       price_estimate TEXT,
       price_history TEXT,
       market_price REAL DEFAULT 0,

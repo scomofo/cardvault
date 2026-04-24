@@ -192,6 +192,7 @@ test("server routes handle validation, migration, and listing side effects", asy
           listedOn: ["ebay"],
           frontImgId: "front-rich",
           backImgId: "back-rich",
+          frontImgPhash: "phash-rich",
           priceEstimate: { low: 10, mid: 20, high: 30 },
           priceHistory: [{ price: 18, date: "2026-04-20" }],
           marketPrice: 19.5,
@@ -265,6 +266,7 @@ test("server routes handle validation, migration, and listing side effects", asy
       set: "Route Set",
       number: "1",
       costBasis: 3.5,
+      frontImgPhash: "route-phash",
       listedOn: [],
       priceHistory: [],
     }),
@@ -292,6 +294,7 @@ test("server routes handle validation, migration, and listing side effects", asy
   assert.equal(itemResponse.status, 200);
   const itemPayload = await itemResponse.json();
   assert.equal(itemPayload.status, "listed");
+  assert.equal(itemPayload.frontImgPhash, "route-phash");
 
   const migratedRichItemResponse = await fetch(`${baseUrl}/api/items/migrated-rich-item`);
   assert.equal(migratedRichItemResponse.status, 200);
@@ -302,6 +305,7 @@ test("server routes handle validation, migration, and listing side effects", asy
   assert.equal(migratedRichItemPayload.acquisitionSource, "trade");
   assert.equal(migratedRichItemPayload.listingStatus, "draft");
   assert.deepEqual(migratedRichItemPayload.listedOn, ["ebay"]);
+  assert.equal(migratedRichItemPayload.frontImgPhash, "phash-rich");
   assert.deepEqual(migratedRichItemPayload.priceEstimate, { low: 10, mid: 20, high: 30 });
   assert.deepEqual(migratedRichItemPayload.priceHistory, [{ price: 18, date: "2026-04-20" }]);
   assert.equal(migratedRichItemPayload.marketPrice, 19.5);

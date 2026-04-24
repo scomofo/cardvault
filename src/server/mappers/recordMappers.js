@@ -65,6 +65,10 @@ export function toSnake(body) {
     output.back_img_id = output.backImgId;
     delete output.backImgId;
   }
+  if ("frontImgPhash" in output) {
+    output.front_img_phash = output.frontImgPhash;
+    delete output.frontImgPhash;
+  }
   if ("priceEstimate" in output) {
     output.price_estimate = output.priceEstimate;
     delete output.priceEstimate;

@@ -16,6 +16,7 @@ export const ITEM_FIELD_MAP = {
   listed_on: "listedOn",
   front_img_id: "frontImgId",
   back_img_id: "backImgId",
+  front_img_phash: "frontImgPhash",
   price_estimate: "priceEstimate",
   price_history: "priceHistory",
   market_price: "marketPrice",

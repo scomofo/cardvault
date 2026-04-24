@@ -21,6 +21,7 @@ export function runMigrations(db) {
   addColumnIfMissing("user_items", "acquisition_source", "TEXT");
   addColumnIfMissing("user_items", "listing_status", "TEXT DEFAULT 'not_listed'");
   addColumnIfMissing("user_items", "sale_status", "TEXT DEFAULT 'available'");
+  addColumnIfMissing("user_items", "front_img_phash", "TEXT");
   addColumnIfMissing("user_items", "market_price", "REAL DEFAULT 0");
   addColumnIfMissing("user_items", "suggested_listing_price", "REAL DEFAULT 0");
   addColumnIfMissing("user_items", "min_acceptable_price", "REAL DEFAULT 0");
