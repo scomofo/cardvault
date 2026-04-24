@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { importEbayPurchasesLocal } from "../src/lib/ebayPurchaseImport.js";
+import { importEbayPurchasesLocal, parseEbayPurchaseImport } from "../src/lib/ebayPurchaseImport.js";
 
 test("local eBay CSV import creates purchases/items and skips duplicate external order ids", () => {
   const csv = [
@@ -20,4 +20,19 @@ test("local eBay CSV import creates purchases/items and skips duplicate external
   assert.equal(summary.purchases[0].cardSet, "O-Pee-Chee Rookie");
   assert.equal(summary.items[0].purchaseId, summary.purchases[0].id);
   assert.equal(summary.items[0].costBasis, 35);
+});
+
+test("local parser accepts html-style table export", () => {
+  const html = `
+    <table>
+      <tr><th>Order number</th><th>Item title</th><th>Total</th><th>Quantity</th></tr>
+      <tr><td>44-44444-44444</td><td>Jaromir Jagr - Pinnacle</td><td>$18.00</td><td>1</td></tr>
+    </table>
+  `;
+
+  const parsed = parseEbayPurchaseImport(html);
+  assert.equal(parsed.normalizedRows.length, 1);
+  assert.equal(parsed.normalizedRows[0].externalOrderId, "44-44444-44444");
+  assert.equal(parsed.normalizedRows[0].title, "Jaromir Jagr - Pinnacle");
+  assert.equal(parsed.normalizedRows[0].totalCost, 18);
 });

@@ -9,11 +9,28 @@ function normalizeHeader(header) {
   return String(header || "")
     .trim()
     .toLowerCase()
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
 }
 
-function parseCsv(text) {
+function stripHtml(text) {
+  return String(text || "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(td|th)>/gi, "\t")
+    .replace(/<\/tr>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/[ \f\v]+/g, " ")
+    .replace(/ *\t */g, "\t")
+    .replace(/ *\n */g, "\n")
+    .trim();
+}
+
+function parseDelimited(text, delimiter) {
   const rows = [];
   let row = [];
   let cell = "";
@@ -33,7 +50,7 @@ function parseCsv(text) {
       continue;
     }
 
-    if (!inQuotes && char === ",") {
+    if (!inQuotes && char === delimiter) {
       row.push(cell);
       cell = "";
       continue;
@@ -58,8 +75,11 @@ function parseCsv(text) {
     rows.push(row);
   }
 
-  if (rows.length === 0) return [];
+  return rows;
+}
 
+function rowsToRecords(rows) {
+  if (rows.length === 0) return [];
   const headers = rows[0].map(normalizeHeader);
   return rows
     .slice(1)
@@ -70,6 +90,21 @@ function parseCsv(text) {
         return record;
       }, {}),
     );
+}
+
+function parseRecords(text) {
+  const rawText = String(text || "").trim();
+  if (!rawText) return [];
+
+  const candidate = /<table|<tr|<td|<th/i.test(rawText) ? stripHtml(rawText) : rawText;
+  const tabRows = parseDelimited(candidate, "\t");
+  const csvRows = parseDelimited(candidate, ",");
+
+  const tabWidth = Math.max(...tabRows.map((row) => row.length), 0);
+  const csvWidth = Math.max(...csvRows.map((row) => row.length), 0);
+  const chosenRows = tabWidth > csvWidth ? tabRows : csvRows;
+
+  return rowsToRecords(chosenRows);
 }
 
 function firstField(record, names) {
@@ -119,6 +154,7 @@ function normalizeImportRow(record) {
     "listing_title",
     "item_name",
     "name",
+    "item",
   ]);
   if (!title) return null;
 
@@ -128,6 +164,7 @@ function normalizeImportRow(record) {
     "order_id",
     "orderid",
     "external_order_id",
+    "purchase_order_id",
   ]);
   const itemSubtotal = parseMoney(firstField(record, [
     "item_subtotal",
@@ -135,18 +172,21 @@ function normalizeImportRow(record) {
     "price",
     "purchase_price",
     "item_total",
+    "subtotal",
   ]));
   const shipping = parseMoney(firstField(record, [
     "shipping",
     "shipping_and_handling",
     "postage",
     "delivery",
+    "shipping_cost",
   ])) ?? 0;
   const totalCost = parseMoney(firstField(record, [
     "total",
     "total_price",
     "order_total",
     "amount_paid",
+    "purchase_total",
   ]));
   const quantity = parseInteger(firstField(record, [
     "quantity",
@@ -158,12 +198,13 @@ function normalizeImportRow(record) {
     "purchase_date",
     "date",
     "order_date",
+    "created_date",
   ]));
 
   return {
     title,
     externalOrderId,
-    seller: firstField(record, ["seller", "seller_username", "seller_name"]),
+    seller: firstField(record, ["seller", "seller_username", "seller_name", "username"]),
     cardSet: firstField(record, ["card_set", "set"]) || inferSetFromTitle(title),
     price: itemSubtotal ?? totalCost ?? 0,
     shipping,
@@ -174,9 +215,18 @@ function normalizeImportRow(record) {
   };
 }
 
-export function importEbayPurchasesLocal(csvText, existingPurchases = [], { addToInventory = true } = {}) {
-  const parsedRows = parseCsv(csvText || "");
+export function parseEbayPurchaseImport(text) {
+  const parsedRows = parseRecords(text);
   const normalizedRows = parsedRows.map(normalizeImportRow).filter(Boolean);
+  return {
+    parsedRows,
+    normalizedRows,
+    skippedInvalid: parsedRows.length - normalizedRows.length,
+  };
+}
+
+export function importEbayPurchasesLocal(text, existingPurchases = [], { addToInventory = true } = {}) {
+  const { parsedRows, normalizedRows, skippedInvalid } = parseEbayPurchaseImport(text);
   const purchaseIds = new Set(existingPurchases.map((purchase) => purchase.externalOrderId).filter(Boolean));
 
   const purchases = [];
@@ -201,7 +251,7 @@ export function importEbayPurchasesLocal(csvText, existingPurchases = [], { addT
       shipping: row.shipping,
       totalCost: row.totalCost,
       date: row.date,
-      notes: [row.notes, row.quantity > 1 ? `Imported quantity: ${row.quantity}` : null, "Imported from eBay CSV"]
+      notes: [row.notes, row.quantity > 1 ? `Imported quantity: ${row.quantity}` : null, "Imported from eBay import"]
         .filter(Boolean)
         .join(" | "),
       createdAt: new Date().toISOString(),
@@ -246,7 +296,7 @@ export function importEbayPurchasesLocal(csvText, existingPurchases = [], { addT
     importedPurchases: purchases.length,
     importedItems: items.length,
     skippedDuplicates,
-    skippedInvalid: parsedRows.length - normalizedRows.length,
+    skippedInvalid,
     purchases,
     items,
   };

@@ -95,3 +95,60 @@ test("eBay CSV import creates purchases, inventory items, and skips duplicates",
   assert.equal(duplicatePayload.importedItems, 0);
   assert.equal(duplicatePayload.skippedDuplicates, 2);
 });
+
+test("eBay import accepts tabular HTML-like exports", async (t) => {
+  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-ebay-purchase-import-html-"));
+  const dbPath = join(tempDir, "cardvault-test.db");
+  const port = 7400 + Math.floor(Math.random() * 200);
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  const server = spawn(process.execPath, ["server.js"], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      PORT: String(port),
+      CARDVAULT_DB_PATH: dbPath,
+    },
+    stdio: "ignore",
+  });
+
+  t.after(async () => {
+    if (!server.killed) {
+      server.kill("SIGTERM");
+    }
+    await new Promise((resolve) => server.once("exit", resolve));
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  await waitForServer(baseUrl);
+
+  const html = `
+    <table>
+      <tr>
+        <th>Order number</th><th>Item title</th><th>Seller</th><th>Total</th><th>Quantity</th><th>Paid on</th>
+      </tr>
+      <tr>
+        <td>33-33333-33333</td><td>Mario Lemieux - Score Rookie</td><td>seller_three</td><td>$45.00</td><td>1</td><td>2026-04-03</td>
+      </tr>
+    </table>
+  `;
+
+  const importResponse = await fetch(`${baseUrl}/api/purchases/import/ebay-csv`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      csv: html,
+      addToInventory: false,
+    }),
+  });
+  assert.equal(importResponse.status, 201);
+  const importPayload = await importResponse.json();
+  assert.equal(importPayload.importedPurchases, 1);
+  assert.equal(importPayload.importedItems, 0);
+
+  const purchasesResponse = await fetch(`${baseUrl}/api/purchases`);
+  const purchases = await purchasesResponse.json();
+  const purchase = purchases.find((entry) => entry.externalOrderId === "33-33333-33333");
+  assert.ok(purchase);
+  assert.equal(purchase.name, "Mario Lemieux - Score Rookie");
+});
