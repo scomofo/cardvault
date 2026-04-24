@@ -104,7 +104,9 @@ export function validateSalePayload(req, res, next) {
           "payoutAmount",
         ),
       () => validateNumberLike(body.netProfit ?? body.net_profit, "netProfit"),
-    ]) || (salePrice == null || salePrice === "" ? "sale_price required" : null)
+    ]) || ((salePrice == null || salePrice === "") && !body.orderId && !body.order_id
+      ? "sale_price required"
+      : null)
     || (!body.cardId && !body.card_id && !body.listingId && !body.listing_id
       && !body.orderId && !body.order_id
       ? "card_id, listing_id, or order_id required"

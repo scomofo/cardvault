@@ -99,8 +99,6 @@ test("manual sale creation infers listing and item from linked order", async (t)
       orderId: "order-fallback-order",
       cardName: "Order Fallback Card",
       cardSet: "Route Set",
-      platform: "ebay",
-      salePrice: 39.99,
       netProfit: 27.99,
     }),
   });
@@ -109,6 +107,8 @@ test("manual sale creation infers listing and item from linked order", async (t)
   assert.equal(salePayload.cardId, "order-fallback-item");
   assert.equal(salePayload.listingId, "order-fallback-listing");
   assert.equal(salePayload.orderId, "order-fallback-order");
+  assert.equal(salePayload.platform, "ebay");
+  assert.equal(salePayload.salePrice, 39.99);
 
   const itemAfterResponse = await fetch(`${baseUrl}/api/items/order-fallback-item`);
   assert.equal(itemAfterResponse.status, 200);
