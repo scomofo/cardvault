@@ -24,9 +24,9 @@ export function registerSalesRoutes(app) {
       const linkedOrderId = body.order_id || null;
       const linkedOrder = linkedOrderId
         ? get(
-          `SELECT id, item_id, listing_id, sale_price, sold_at, platform, buyer_handle
+          `SELECT id, item_id, listing_id, sale_price, sold_at, platform, buyer_handle, sale_id
            FROM orders
-           WHERE id = ?`,
+            WHERE id = ?`,
           [linkedOrderId],
         )
         : null;
@@ -39,6 +39,9 @@ export function registerSalesRoutes(app) {
       const salePrice = body.sale_price ?? linkedOrder?.sale_price ?? 0;
       const resolvedPlatform = body.platform || linkedOrder?.platform || null;
       const resolvedBuyerHandle = body.buyer_handle || linkedOrder?.buyer_handle || null;
+      if (linkedOrder?.sale_id) {
+        return res.status(409).json({ error: "order already linked to a sale" });
+      }
       run(
         `INSERT INTO sales (id, card_id, order_id, card_name, card_set, sale_price,
          cost_basis, platform, buyer_handle, fees, shipping_cost, packaging_cost,

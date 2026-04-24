@@ -55,6 +55,9 @@ export function registerOrderRoutes(app) {
       for (const err of numericChecks) {
         if (err) return sendValidationError(res, err);
       }
+      if (linkedSale?.order_id) {
+        return res.status(409).json({ error: "sale already linked to an order" });
+      }
       const id = body.id || uid();
       const linkedListingId = body.listingId || body.listing_id || linkedSale?.listing_id || null;
       const linkedItemId = body.itemId || body.item_id || linkedSale?.card_id || get(
