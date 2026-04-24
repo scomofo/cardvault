@@ -1,10 +1,14 @@
 import { MarketplaceAdapter } from "./marketplaceAdapter.js";
 import { getEbayStatus } from "../ebay/ebayAuth.js";
-import { addItem, addFixedPriceItem, reviseItem, endItem, createInventoryItem, createOffer, publishOffer } from "../ebay/ebayClient.js";
+import { addItem, addFixedPriceItem, reviseItem, endItem, createInventoryItem, createOffer, publishOffer, getOrders } from "../ebay/ebayClient.js";
 import { listingToTradingXml, listingToInventoryItem, listingToOffer } from "../ebay/ebayMapper.js";
 
 export class EbayAdapter extends MarketplaceAdapter {
   constructor() { super("ebay"); }
+
+  isConnected() {
+    return getEbayStatus().connected;
+  }
 
   getShippingProfile(country = "CA") {
     return {
@@ -22,8 +26,7 @@ export class EbayAdapter extends MarketplaceAdapter {
    * @returns {Promise<object>}
    */
   async publish(listing, item = {}) {
-    const status = getEbayStatus();
-    if (!status.connected) return super.publish(listing);
+    if (!this.isConnected()) return super.publish(listing);
 
     const isAuction = listing.format === "auction";
     let externalId;
@@ -57,8 +60,7 @@ export class EbayAdapter extends MarketplaceAdapter {
    * Revise a listing on eBay.
    */
   async revise(listing, overrides = {}) {
-    const status = getEbayStatus();
-    if (!status.connected) return super.revise(listing, overrides);
+    if (!this.isConnected()) return super.revise(listing, overrides);
     const merged = { ...listing, ...overrides };
     const xml = listingToTradingXml(merged, merged);
     const itemXml = xml.replace("</Item>", "<ItemID>" + (listing.external_listing_id || listing.externalListingId) + "</ItemID></Item>");
@@ -70,11 +72,97 @@ export class EbayAdapter extends MarketplaceAdapter {
    * End a listing on eBay.
    */
   async end(listing) {
-    const status = getEbayStatus();
-    if (!status.connected) return super.end(listing);
+    if (!this.isConnected()) return super.end(listing);
     const itemId = listing.external_listing_id || listing.externalListingId;
     if (itemId) await endItem(itemId);
     return { marketplace: this.marketplace, externalListingId: itemId, status: "ended", syncedAt: new Date().toISOString() };
+  }
+
+  buildListingSku(listing) {
+    return `CV-${listing.id}`;
+  }
+
+  findMatchingLineItem(order, listing) {
+    const itemId = String(listing.external_listing_id || listing.externalListingId || "");
+    const sku = this.buildListingSku(listing);
+    return (order?.lineItems || []).find((lineItem) =>
+      String(lineItem?.legacyItemId || "") === itemId ||
+      String(lineItem?.sku || "") === sku,
+    ) || null;
+  }
+
+  extractShippingAddress(order) {
+    const shipTo = order?.fulfillmentStartInstructions?.[0]?.shippingStep?.shipTo;
+    const buyerAddress = order?.buyer?.buyerRegistrationAddress?.contactAddress;
+    return shipTo || buyerAddress || null;
+  }
+
+  buildSoldPayload(order, lineItem) {
+    const shippingAddress = this.extractShippingAddress(order);
+    return {
+      orderId: order?.orderId || null,
+      externalOrderId: order?.orderId || null,
+      buyerHandle: order?.buyer?.username || order?.buyer?.userId || null,
+      shippingAddress: shippingAddress
+        ? {
+            countryCode: shippingAddress.countryCode || null,
+            postalCode: shippingAddress.postalCode || null,
+            city: shippingAddress.city || null,
+            stateOrProvince: shippingAddress.stateOrProvince || null,
+          }
+        : null,
+      lineItemId: lineItem?.lineItemId || null,
+      legacyItemId: lineItem?.legacyItemId || null,
+      sku: lineItem?.sku || null,
+    };
+  }
+
+  async fetchRemoteOrderForListing(listing) {
+    const itemId = listing.external_listing_id || listing.externalListingId;
+    if (!itemId) return null;
+
+    const limit = 200;
+    for (let page = 0; page < 10; page += 1) {
+      const offset = page * limit;
+      const response = await getOrders({ limit, offset });
+      const orders = Array.isArray(response?.orders) ? response.orders : [];
+      const match = orders.find((order) => this.findMatchingLineItem(order, listing));
+      if (match) return match;
+      if (orders.length < limit) break;
+    }
+
+    return null;
+  }
+
+  async sync(listing) {
+    if (!this.isConnected()) {
+      return super.sync(listing);
+    }
+
+    const itemId = listing.external_listing_id || listing.externalListingId;
+    if (!itemId) {
+      return super.sync(listing);
+    }
+
+    const order = await this.fetchRemoteOrderForListing(listing);
+    if (!order) {
+      return {
+        marketplace: this.marketplace,
+        externalListingId: itemId,
+        status: "active",
+        payload: listing,
+        syncedAt: new Date().toISOString(),
+      };
+    }
+
+    const lineItem = this.findMatchingLineItem(order, listing);
+    return {
+      marketplace: this.marketplace,
+      externalListingId: itemId,
+      status: "sold",
+      payload: this.buildSoldPayload(order, lineItem),
+      syncedAt: new Date().toISOString(),
+    };
   }
 
   mapForExport(listing) {

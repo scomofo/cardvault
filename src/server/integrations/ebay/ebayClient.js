@@ -4,6 +4,8 @@ const SANDBOX_TRADING = "https://api.sandbox.ebay.com/ws/api.dll";
 const PROD_TRADING = "https://api.ebay.com/ws/api.dll";
 const SANDBOX_INVENTORY = "https://api.sandbox.ebay.com/sell/inventory/v1";
 const PROD_INVENTORY = "https://api.ebay.com/sell/inventory/v1";
+const SANDBOX_FULFILLMENT = "https://api.sandbox.ebay.com/sell/fulfillment/v1";
+const PROD_FULFILLMENT = "https://api.ebay.com/sell/fulfillment/v1";
 
 /**
  * Call the eBay Trading API (XML).
@@ -61,6 +63,33 @@ export async function inventoryApiCall(method, path, body) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error("eBay Inventory API error: " + (data.errors?.[0]?.message || res.statusText));
   return data;
+}
+
+/**
+ * Call the eBay Fulfillment API (REST).
+ * @param {string} method
+ * @param {string} path
+ * @returns {Promise<object>}
+ */
+export async function fulfillmentApiCall(method, path) {
+  const token = await getAccessToken();
+  const creds = getEbayCredentials();
+  const base = creds.sandbox ? SANDBOX_FULFILLMENT : PROD_FULFILLMENT;
+  const res = await fetch(base + path, {
+    method,
+    headers: { Authorization: "Bearer " + token, Accept: "application/json" },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error("eBay Fulfillment API error: " + (data.errors?.[0]?.message || res.statusText));
+  return data;
+}
+
+/** @returns {Promise<{ orders?: object[], total?: number, next?: string }>} */
+export async function getOrders({ limit = 200, offset = 0 } = {}) {
+  const params = new URLSearchParams();
+  params.set("limit", String(limit));
+  params.set("offset", String(offset));
+  return fulfillmentApiCall("GET", `/order?${params.toString()}`);
 }
 
 /** @returns {Promise<string>} eBay ItemID */
