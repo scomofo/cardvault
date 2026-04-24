@@ -55,16 +55,28 @@ export function registerSalesRoutes(app) {
           [id, body.order_id],
         );
       }
+      if (body.listing_id) {
+        run(
+          `UPDATE listings
+           SET status = 'sold',
+               publish_status = 'sold',
+               sold_price = COALESCE(sold_price, ?),
+               sold_date = COALESCE(sold_date, ?)
+           WHERE id = ?`,
+          [body.sale_price || 0, body.date || new Date().toISOString(), body.listing_id],
+        );
+      }
       if (body.card_id) {
         run(
           `UPDATE user_items
            SET status = 'sold',
+               listing_status = CASE WHEN ? IS NOT NULL THEN 'ended' ELSE listing_status END,
                sale_status = 'sold',
                profit_realized = ?,
                sold_at = ?,
                updated_at = datetime('now')
            WHERE id = ?`,
-          [body.net_profit || 0, body.date || new Date().toISOString(), body.card_id],
+          [body.listing_id || null, body.net_profit || 0, body.date || new Date().toISOString(), body.card_id],
         );
       }
       res
