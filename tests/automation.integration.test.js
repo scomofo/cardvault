@@ -452,10 +452,10 @@ test("orders API includes shipment tracking after automated shipping", async (t)
   const order = ordersPayload.find((entry) => entry.id === "orders-api-order");
 
   assert.ok(order);
-  assert.equal(order.fulfillment_status, "shipped");
-  assert.equal(order.tracking_number, shipmentPayload.tracking_number);
-  assert.equal(order.shipment_status, shipmentPayload.status);
-  assert.equal(order.service_level, shipmentPayload.service_level);
+  assert.equal(order.fulfillmentStatus, "shipped");
+  assert.equal(order.trackingNumber, shipmentPayload.tracking_number);
+  assert.equal(order.shipmentStatus, shipmentPayload.status);
+  assert.equal(order.serviceLevel, shipmentPayload.service_level);
 });
 
 test("shipping automation repairs order state when a shipment already exists", async (t) => {
@@ -576,8 +576,8 @@ test("shipping automation repairs order state when a shipment already exists", a
   const order = ordersPayload.find((entry) => entry.id === "repair-order");
 
   assert.ok(order);
-  assert.equal(order.fulfillment_status, "shipped");
-  assert.equal(order.tracking_number, "TRK1234567890");
+  assert.equal(order.fulfillmentStatus, "shipped");
+  assert.equal(order.trackingNumber, "TRK1234567890");
 });
 
 test("manual order creation backfills the linked sale order_id", async (t) => {
@@ -780,7 +780,7 @@ test("manual sale creation backfills the linked order sale_id", async (t) => {
   const order = ordersPayload.find((entry) => entry.id === "order-link-order");
 
   assert.ok(order);
-  assert.equal(order.sale_id, "order-link-sale");
+  assert.equal(order.saleId, "order-link-sale");
 });
 
 test("manual sale creation closes out linked listing and item state", async (t) => {

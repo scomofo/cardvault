@@ -60,6 +60,29 @@ export const SALE_FIELD_MAP = {
   listing_id: "listingId",
 };
 
+export const ORDER_FIELD_MAP = {
+  sale_id: "saleId",
+  listing_id: "listingId",
+  item_id: "itemId",
+  external_order_id: "externalOrderId",
+  buyer_handle: "buyerHandle",
+  sale_price: "salePrice",
+  shipping_charge: "shippingCharge",
+  tax_collected: "taxCollected",
+  destination_country: "destinationCountry",
+  destination_postal_code: "destinationPostalCode",
+  payment_status: "paymentStatus",
+  fulfillment_status: "fulfillmentStatus",
+  sold_at: "soldAt",
+  created_at: "createdAt",
+  shipment_id: "shipmentId",
+  tracking_number: "trackingNumber",
+  label_url: "labelUrl",
+  shipment_status: "shipmentStatus",
+  service_level: "serviceLevel",
+  shipped_at: "shippedAt",
+};
+
 export const LISTING_FIELD_MAP = {
   card_id: "cardId",
   external_listing_id: "externalListingId",

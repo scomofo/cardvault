@@ -1,11 +1,13 @@
 import { all, get, run } from "../database.js";
+import { ORDER_FIELD_MAP } from "../mappers/fieldMaps.js";
+import { toCamelArray } from "../mappers/recordMappers.js";
 import { requireJsonBody, validateNumberLike, sendValidationError } from "../validation/common.js";
 import { uid } from "./shared.js";
 
 export function registerOrderRoutes(app) {
   app.get("/api/orders", (_req, res) => {
     try {
-      res.json(all(`
+      res.json(toCamelArray(all(`
         SELECT
           orders.*,
           shipments.id AS shipment_id,
@@ -25,7 +27,7 @@ export function registerOrderRoutes(app) {
             LIMIT 1
           )
         ORDER BY orders.sold_at DESC, orders.created_at DESC
-      `));
+      `), ORDER_FIELD_MAP));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
