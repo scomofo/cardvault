@@ -69,8 +69,9 @@ export function registerItemRoutes(app) {
           average_comp_price, psa9_price, psa10_price, profit_realized, sold_at,
           notes, centering, corners, edges, surface, projected_grade,
           grading_candidate, vault_status, condition_report, cv_centering_lr,
-          cv_centering_tb, cv_centering_score, cv_processed)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          cv_centering_tb, cv_centering_score, cv_processed, ebay_centering,
+          ebay_corner_sharpness, ebay_edge_chipping)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           id,
           body.parallel_id || null,
@@ -124,6 +125,9 @@ export function registerItemRoutes(app) {
           body.cv_centering_tb || null,
           body.cv_centering_score || null,
           body.cv_processed || 0,
+          body.ebay_centering || null,
+          body.ebay_corner_sharpness || null,
+          body.ebay_edge_chipping || null,
         ],
       );
       res
@@ -153,6 +157,7 @@ export function registerItemRoutes(app) {
           centering=?, corners=?, edges=?, surface=?, projected_grade=?,
           grading_candidate=?, vault_status=?, condition_report=?,
           cv_centering_lr=?, cv_centering_tb=?, cv_centering_score=?, cv_processed=?,
+          ebay_centering=?, ebay_corner_sharpness=?, ebay_edge_chipping=?,
           updated_at=datetime('now')
          WHERE id=?`,
         [
@@ -207,6 +212,9 @@ export function registerItemRoutes(app) {
           body.cv_centering_tb,
           body.cv_centering_score,
           body.cv_processed,
+          body.ebay_centering,
+          body.ebay_corner_sharpness,
+          body.ebay_edge_chipping,
           req.params.id,
         ],
       );

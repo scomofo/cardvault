@@ -212,10 +212,13 @@ test("server routes handle validation, migration, and listing side effects", asy
           gradingCandidate: 1,
           vaultStatus: "GREEN",
           conditionReport: "Sharp copy",
-          cv_centering_lr: "50/50",
-          cv_centering_tb: "52/48",
-          cv_centering_score: 0.95,
-          cv_processed: 1,
+          cvCenteringLr: "50/50",
+          cvCenteringTb: "52/48",
+          cvCenteringScore: 0.95,
+          cvProcessed: 1,
+          ebayCentering: "50/50",
+          ebayCornerSharpness: "sharp",
+          ebayEdgeChipping: "none",
           createdAt: "2026-04-10T00:00:00.000Z",
           updatedAt: "2026-04-11T00:00:00.000Z",
         },
@@ -267,6 +270,9 @@ test("server routes handle validation, migration, and listing side effects", asy
       number: "1",
       costBasis: 3.5,
       frontImgPhash: "route-phash",
+      ebayCentering: "55/45",
+      ebayCornerSharpness: "very_sharp",
+      ebayEdgeChipping: "minor",
       listedOn: [],
       priceHistory: [],
     }),
@@ -295,6 +301,9 @@ test("server routes handle validation, migration, and listing side effects", asy
   const itemPayload = await itemResponse.json();
   assert.equal(itemPayload.status, "listed");
   assert.equal(itemPayload.frontImgPhash, "route-phash");
+  assert.equal(itemPayload.ebayCentering, "55/45");
+  assert.equal(itemPayload.ebayCornerSharpness, "very_sharp");
+  assert.equal(itemPayload.ebayEdgeChipping, "minor");
 
   const migratedRichItemResponse = await fetch(`${baseUrl}/api/items/migrated-rich-item`);
   assert.equal(migratedRichItemResponse.status, 200);
@@ -318,8 +327,11 @@ test("server routes handle validation, migration, and listing side effects", asy
   assert.equal(migratedRichItemPayload.gradingCandidate, 1);
   assert.equal(migratedRichItemPayload.vaultStatus, "GREEN");
   assert.equal(migratedRichItemPayload.conditionReport, "Sharp copy");
-  assert.equal(migratedRichItemPayload.cv_centering_lr, "50/50");
-  assert.equal(migratedRichItemPayload.cv_processed, 1);
+  assert.equal(migratedRichItemPayload.cvCenteringLr, "50/50");
+  assert.equal(migratedRichItemPayload.cvProcessed, 1);
+  assert.equal(migratedRichItemPayload.ebayCentering, "50/50");
+  assert.equal(migratedRichItemPayload.ebayCornerSharpness, "sharp");
+  assert.equal(migratedRichItemPayload.ebayEdgeChipping, "none");
 
   const listingsResponse = await fetch(`${baseUrl}/api/listings`);
   assert.equal(listingsResponse.status, 200);

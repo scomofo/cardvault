@@ -35,13 +35,13 @@ export const ITEM_FIELD_MAP = {
   projected_grade: "projectedGrade",
   vault_status: "vaultStatus",
   condition_report: "conditionReport",
-  cv_centering_lr: "cv_centering_lr",
-  cv_centering_tb: "cv_centering_tb",
-  cv_centering_score: "cv_centering_score",
-  cv_processed: "cv_processed",
-  ebay_centering: "ebay_centering",
-  ebay_corner_sharpness: "ebay_corner_sharpness",
-  ebay_edge_chipping: "ebay_edge_chipping",
+  cv_centering_lr: "cvCenteringLr",
+  cv_centering_tb: "cvCenteringTb",
+  cv_centering_score: "cvCenteringScore",
+  cv_processed: "cvProcessed",
+  ebay_centering: "ebayCentering",
+  ebay_corner_sharpness: "ebayCornerSharpness",
+  ebay_edge_chipping: "ebayEdgeChipping",
 };
 
 export const SALE_FIELD_MAP = {

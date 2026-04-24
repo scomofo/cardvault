@@ -69,6 +69,34 @@ export function toSnake(body) {
     output.front_img_phash = output.frontImgPhash;
     delete output.frontImgPhash;
   }
+  if ("cvCenteringLr" in output) {
+    output.cv_centering_lr = output.cvCenteringLr;
+    delete output.cvCenteringLr;
+  }
+  if ("cvCenteringTb" in output) {
+    output.cv_centering_tb = output.cvCenteringTb;
+    delete output.cvCenteringTb;
+  }
+  if ("cvCenteringScore" in output) {
+    output.cv_centering_score = output.cvCenteringScore;
+    delete output.cvCenteringScore;
+  }
+  if ("cvProcessed" in output) {
+    output.cv_processed = output.cvProcessed;
+    delete output.cvProcessed;
+  }
+  if ("ebayCentering" in output) {
+    output.ebay_centering = output.ebayCentering;
+    delete output.ebayCentering;
+  }
+  if ("ebayCornerSharpness" in output) {
+    output.ebay_corner_sharpness = output.ebayCornerSharpness;
+    delete output.ebayCornerSharpness;
+  }
+  if ("ebayEdgeChipping" in output) {
+    output.ebay_edge_chipping = output.ebayEdgeChipping;
+    delete output.ebayEdgeChipping;
+  }
   if ("priceEstimate" in output) {
     output.price_estimate = output.priceEstimate;
     delete output.priceEstimate;
