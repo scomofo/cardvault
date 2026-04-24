@@ -1,48 +1,10 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useData } from "../lib/DataContext";
 import { condOf, fmtShort } from "../lib/utils";
+import { matchScore, shouldOpenGlobalSearch } from "../lib/search/globalSearch";
 import { IconSearch, IconX } from "./Icons";
 
 const MAX_RESULTS = 20;
-
-function normalize(str) {
-  return (str || "").toLowerCase().trim();
-}
-
-function matchScore(item, query) {
-  const q = normalize(query);
-  if (!q) return 0;
-
-  const terms = q.split(/\s+/);
-  const fields = [
-    normalize(item.name),
-    normalize(item.set || item.cardSet || item.card_set),
-    normalize(item.number || item.cardNumber),
-    normalize(item.rarity),
-    normalize(item.parallel),
-    normalize(item.binder),
-    normalize(item.platform),
-    normalize(item.seller),
-    normalize(item.partner),
-    normalize(item.year),
-  ].filter(Boolean);
-
-  const haystack = fields.join(" ");
-  let score = 0;
-
-  for (const term of terms) {
-    if (!haystack.includes(term)) return 0; // all terms must match
-    // Exact field start = higher score
-    if (fields.some((f) => f.startsWith(term))) score += 3;
-    else score += 1;
-  }
-
-  // Boost exact name matches
-  if (normalize(item.name) === q) score += 10;
-  if (normalize(item.name)?.startsWith(q)) score += 5;
-
-  return score;
-}
 
 export default function GlobalSearch({ onNavigate }) {
   const { catalog, sales, orders, listings, purchases, watchlist, trades } = useData();
@@ -54,7 +16,7 @@ export default function GlobalSearch({ onNavigate }) {
   // Keyboard shortcut: Ctrl+K or / to open
   useEffect(() => {
     const handler = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+      if (shouldOpenGlobalSearch(e)) {
         e.preventDefault();
         setOpen(true);
       }
@@ -134,7 +96,13 @@ export default function GlobalSearch({ onNavigate }) {
 
     // Trades
     trades.forEach((t) => {
-      const sc = matchScore({ name: t.partner, notes: t.gave + " " + t.received }, query);
+      const sc = matchScore({
+        name: t.partner,
+        partner: t.partner,
+        gave: t.gave,
+        received: t.received,
+        notes: t.notes,
+      }, query);
       if (sc > 0) all.push({ type: "trade", item: t, score: sc });
     });
 
@@ -313,3 +281,4 @@ export default function GlobalSearch({ onNavigate }) {
     </div>
   );
 }
+
