@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isLoopbackRequest, requireProtectedConfigWrite } from "../src/server/auth.js";
+import { isLoopbackRequest, isTrustedLanRequest, requireProtectedConfigWrite } from "../src/server/auth.js";
 
 function createResponseRecorder() {
   return {
@@ -46,7 +46,39 @@ test("requireProtectedConfigWrite blocks remote requests without a token even if
 
   assert.equal(nextCalled, false);
   assert.equal(res.statusCode, 403);
-  assert.match(res.payload.error, /local request or bearer token/i);
+  assert.match(res.payload.error, /trusted local-network request or bearer token/i);
+
+  if (originalToken == null) delete process.env.PROXY_TOKEN;
+  else process.env.PROXY_TOKEN = originalToken;
+});
+
+test("isTrustedLanRequest accepts RFC1918 LAN addresses", () => {
+  const req = {
+    ip: "192.168.1.44",
+    socket: { remoteAddress: "192.168.1.44" },
+  };
+
+  assert.equal(isTrustedLanRequest(req), true);
+});
+
+test("requireProtectedConfigWrite allows trusted local-network requests without a token", () => {
+  const originalToken = process.env.PROXY_TOKEN;
+  delete process.env.PROXY_TOKEN;
+
+  const req = {
+    ip: "192.168.1.44",
+    socket: { remoteAddress: "192.168.1.44" },
+    headers: {},
+  };
+  const res = createResponseRecorder();
+  let nextCalled = false;
+
+  requireProtectedConfigWrite(req, res, () => {
+    nextCalled = true;
+  });
+
+  assert.equal(nextCalled, true);
+  assert.equal(res.statusCode, 200);
 
   if (originalToken == null) delete process.env.PROXY_TOKEN;
   else process.env.PROXY_TOKEN = originalToken;

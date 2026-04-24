@@ -170,7 +170,7 @@ main() {
   printf '\nNext steps:\n'
   printf '  1. AirDrop "%s" to the iPhone and install it.\n' "${caroot}/rootCA.pem"
   printf '  2. On iPhone: Settings > General > About > Certificate Trust Settings > enable full trust.\n'
-  printf '  3. Start CardVault with: npm run dev:secure\n'
+  printf '  3. Start CardVault with: npm run start:secure\n'
   printf '  4. Open Safari on iPhone: %s\n' "https://${bonjour_host}:${PORT}"
 }
 
