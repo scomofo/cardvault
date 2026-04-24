@@ -111,6 +111,9 @@ export function registerOrderRoutes(app) {
       if (linkedListingId && !listingRecord) {
         return res.status(404).json({ error: "linked listing not found" });
       }
+      if (linkedSale?.card_id && listingRecord?.card_id && linkedSale.card_id !== listingRecord.card_id) {
+        return res.status(409).json({ error: "linked sale item does not match linked listing" });
+      }
       const explicitItemId = body.itemId || body.item_id || null;
       if (explicitItemId && listingRecord?.card_id && explicitItemId !== listingRecord.card_id) {
         return res.status(409).json({ error: "item does not match listing" });

@@ -82,6 +82,9 @@ export function registerSalesRoutes(app) {
       if (linkedListingId && !listingRecord) {
         return res.status(404).json({ error: "linked listing not found" });
       }
+      if (linkedOrder?.item_id && listingRecord?.card_id && linkedOrder.item_id !== listingRecord.card_id) {
+        return res.status(409).json({ error: "linked order item does not match linked listing" });
+      }
       if (body.card_id && listingRecord?.card_id && body.card_id !== listingRecord.card_id) {
         return res.status(409).json({ error: "item does not match listing" });
       }

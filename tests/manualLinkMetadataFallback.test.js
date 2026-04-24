@@ -790,3 +790,136 @@ test("manual sales and orders reject missing or mismatched direct listing refere
   });
   assert.equal(mismatchedSaleResponse.status, 409);
 });
+
+test("linked manual sales and orders reject stale item-listing mismatches", async (t) => {
+  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-stale-link-guard-"));
+  const dbPath = join(tempDir, "cardvault-test.db");
+  const port = 6400 + Math.floor(Math.random() * 400);
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  const server = spawn(process.execPath, ["server.js"], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      PORT: String(port),
+      CARDVAULT_DB_PATH: dbPath,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  t.after(async () => {
+    if (!server.killed) {
+      server.kill("SIGTERM");
+    }
+    await new Promise((resolve) => server.once("exit", resolve));
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  await waitForServer(baseUrl);
+
+  for (const item of [
+    { id: "stale-link-item-a", name: "Stale Link A", number: "57A" },
+    { id: "stale-link-item-b", name: "Stale Link B", number: "57B" },
+  ]) {
+    const itemResponse = await fetch(`${baseUrl}/api/items`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...item,
+        set: "Route Set",
+        costBasis: 5,
+        listedOn: [],
+        priceHistory: [],
+      }),
+    });
+    assert.equal(itemResponse.status, 201);
+  }
+
+  const listingResponse = await fetch(`${baseUrl}/api/listings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "stale-link-listing",
+      cardId: "stale-link-item-a",
+      cardName: "Stale Link Card",
+      cardSet: "Route Set",
+      cardNumber: "57A",
+      platform: "ebay",
+      format: "fixed",
+      startPrice: 14.99,
+      shipping: 1.25,
+      status: "draft",
+    }),
+  });
+  assert.equal(listingResponse.status, 201);
+
+  const orderResponse = await fetch(`${baseUrl}/api/orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "stale-link-order-source",
+      itemId: "stale-link-item-a",
+      listingId: "stale-link-listing",
+      platform: "ebay",
+      salePrice: 14.99,
+    }),
+  });
+  assert.equal(orderResponse.status, 201);
+
+  const saleResponse = await fetch(`${baseUrl}/api/sales`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "stale-link-sale-source",
+      cardId: "stale-link-item-a",
+      listingId: "stale-link-listing",
+      cardName: "Stale Link Card",
+      cardSet: "Route Set",
+      platform: "ebay",
+      salePrice: 14.99,
+      netProfit: 9.99,
+    }),
+  });
+  assert.equal(saleResponse.status, 201);
+
+  const relistResponse = await fetch(`${baseUrl}/api/listings/stale-link-listing`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "stale-link-listing",
+      cardId: "stale-link-item-b",
+      cardName: "Stale Link Card",
+      cardSet: "Route Set",
+      cardNumber: "57B",
+      platform: "ebay",
+      format: "fixed",
+      startPrice: 14.99,
+      shipping: 1.25,
+      status: "draft",
+    }),
+  });
+  assert.equal(relistResponse.status, 200);
+
+  const staleOrderResponse = await fetch(`${baseUrl}/api/orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "stale-link-order",
+      saleId: "stale-link-sale-source",
+    }),
+  });
+  assert.equal(staleOrderResponse.status, 409);
+
+  const staleSaleResponse = await fetch(`${baseUrl}/api/sales`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "stale-link-sale",
+      orderId: "stale-link-order-source",
+      cardName: "Stale Link Card",
+      cardSet: "Route Set",
+      netProfit: 9.99,
+    }),
+  });
+  assert.equal(staleSaleResponse.status, 409);
+});
