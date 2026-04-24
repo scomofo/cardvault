@@ -93,6 +93,26 @@ test("server routes handle validation, migration, and listing side effects", asy
           netProfit: 0,
           date: "2026-04-24",
         },
+        {
+          id: "migrated-sale-rich",
+          cardName: "Rich Sale",
+          cardSet: "Rich Set",
+          salePrice: 42.5,
+          costBasis: 10,
+          platform: "ebay",
+          orderId: "rich-order-1",
+          buyerHandle: "buyer-rich",
+          fees: 3.25,
+          shippingCost: 1.5,
+          packagingCost: 0.25,
+          gradingCost: 2,
+          taxCollected: 4.75,
+          payoutAmount: 35.5,
+          netProfit: 28.25,
+          trackingNumber: "TRK-RICH-001",
+          listingId: "rich-listing-1",
+          date: "2026-04-24T10:00:00.000Z",
+        },
       ],
       trades: [
         {
@@ -832,6 +852,25 @@ test("server routes handle validation, migration, and listing side effects", asy
   const migratedPurchaseZero = purchasesPayload.find((purchase) => purchase.id === "migrated-purchase-zero");
   assert.equal(migratedPurchaseZero.shipping, 0);
   assert.equal(migratedPurchaseZero.totalCost, 0);
+
+  const salesResponse = await fetch(`${baseUrl}/api/sales`);
+  assert.equal(salesResponse.status, 200);
+  const salesPayload = await salesResponse.json();
+  const migratedSaleZero = salesPayload.find((sale) => sale.id === "migrated-sale-zero");
+  assert.equal(migratedSaleZero.salePrice, 0);
+  assert.equal(migratedSaleZero.costBasis, 0);
+  assert.equal(migratedSaleZero.shippingCost, 0);
+
+  const migratedSaleRich = salesPayload.find((sale) => sale.id === "migrated-sale-rich");
+  assert.equal(migratedSaleRich.orderId, "rich-order-1");
+  assert.equal(migratedSaleRich.buyerHandle, "buyer-rich");
+  assert.equal(migratedSaleRich.packagingCost, 0.25);
+  assert.equal(migratedSaleRich.gradingCost, 2);
+  assert.equal(migratedSaleRich.taxCollected, 4.75);
+  assert.equal(migratedSaleRich.payoutAmount, 35.5);
+  assert.equal(migratedSaleRich.trackingNumber, "TRK-RICH-001");
+  assert.equal("order_id" in migratedSaleRich, false);
+  assert.equal("buyer_handle" in migratedSaleRich, false);
 
   const createdConnectionResponse = await fetch(`${baseUrl}/api/marketplace-connections`, {
     method: "POST",
