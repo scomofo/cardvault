@@ -152,3 +152,71 @@ test("eBay import accepts tabular HTML-like exports", async (t) => {
   assert.ok(purchase);
   assert.equal(purchase.name, "Mario Lemieux - Score Rookie");
 });
+
+test("eBay import keeps distinct items from the same order and skips only exact reimports", async (t) => {
+  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-ebay-purchase-import-multi-"));
+  const dbPath = join(tempDir, "cardvault-test.db");
+  const port = 7600 + Math.floor(Math.random() * 200);
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  const server = spawn(process.execPath, ["server.js"], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      PORT: String(port),
+      CARDVAULT_DB_PATH: dbPath,
+    },
+    stdio: "ignore",
+  });
+
+  t.after(async () => {
+    if (!server.killed) {
+      server.kill("SIGTERM");
+    }
+    await new Promise((resolve) => server.once("exit", resolve));
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  await waitForServer(baseUrl);
+
+  const csv = [
+    "Order number,Item title,Seller,Total,Quantity,Paid on",
+    '55-55555-55555,"Sidney Crosby - Young Guns",seller_combo,40.00,1,2026-04-04',
+    '55-55555-55555,"Alex Ovechkin - Young Guns",seller_combo,35.00,1,2026-04-04',
+  ].join("\n");
+
+  const importResponse = await fetch(`${baseUrl}/api/purchases/import/ebay-csv`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      csv,
+      addToInventory: false,
+    }),
+  });
+  assert.equal(importResponse.status, 201);
+  const importPayload = await importResponse.json();
+  assert.equal(importPayload.importedPurchases, 2);
+  assert.equal(importPayload.skippedDuplicates, 0);
+
+  const purchasesResponse = await fetch(`${baseUrl}/api/purchases`);
+  assert.equal(purchasesResponse.status, 200);
+  const purchases = await purchasesResponse.json();
+  assert.equal(purchases.length, 2);
+  assert.deepEqual(
+    purchases.map((purchase) => purchase.name).sort(),
+    ["Alex Ovechkin - Young Guns", "Sidney Crosby - Young Guns"],
+  );
+
+  const duplicateResponse = await fetch(`${baseUrl}/api/purchases/import/ebay-csv`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      csv,
+      addToInventory: false,
+    }),
+  });
+  assert.equal(duplicateResponse.status, 201);
+  const duplicatePayload = await duplicateResponse.json();
+  assert.equal(duplicatePayload.importedPurchases, 0);
+  assert.equal(duplicatePayload.skippedDuplicates, 2);
+});

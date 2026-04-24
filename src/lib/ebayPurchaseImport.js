@@ -147,6 +147,26 @@ function inferSetFromTitle(title) {
   return "";
 }
 
+function normalizeFingerprintPart(value) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+export function buildPurchaseImportFingerprint({
+  externalOrderId,
+  title,
+  totalCost,
+  date,
+  seller,
+}) {
+  return [
+    normalizeFingerprintPart(externalOrderId),
+    normalizeFingerprintPart(title),
+    normalizeFingerprintPart(totalCost),
+    normalizeFingerprintPart(date),
+    normalizeFingerprintPart(seller),
+  ].join("::");
+}
+
 function normalizeImportRow(record) {
   const title = firstField(record, [
     "item_title",
@@ -227,14 +247,25 @@ export function parseEbayPurchaseImport(text) {
 
 export function importEbayPurchasesLocal(text, existingPurchases = [], { addToInventory = true } = {}) {
   const { parsedRows, normalizedRows, skippedInvalid } = parseEbayPurchaseImport(text);
-  const purchaseIds = new Set(existingPurchases.map((purchase) => purchase.externalOrderId).filter(Boolean));
+  const purchaseFingerprints = new Set(
+    existingPurchases.map((purchase) =>
+      buildPurchaseImportFingerprint({
+        externalOrderId: purchase.externalOrderId,
+        title: purchase.name,
+        totalCost: purchase.totalCost,
+        date: purchase.date,
+        seller: purchase.seller,
+      }),
+    ),
+  );
 
   const purchases = [];
   const items = [];
   let skippedDuplicates = 0;
 
   for (const row of normalizedRows) {
-    if (row.externalOrderId && purchaseIds.has(row.externalOrderId)) {
+    const fingerprint = buildPurchaseImportFingerprint(row);
+    if (purchaseFingerprints.has(fingerprint)) {
       skippedDuplicates += 1;
       continue;
     }
@@ -257,9 +288,7 @@ export function importEbayPurchasesLocal(text, existingPurchases = [], { addToIn
       createdAt: new Date().toISOString(),
     };
     purchases.push(purchase);
-    if (row.externalOrderId) {
-      purchaseIds.add(row.externalOrderId);
-    }
+    purchaseFingerprints.add(fingerprint);
 
     if (addToInventory) {
       const perItemCost = row.quantity > 0 ? Number((row.totalCost / row.quantity).toFixed(2)) : row.totalCost;

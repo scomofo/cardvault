@@ -10,7 +10,14 @@ test("local eBay CSV import creates purchases/items and skips duplicate external
   ].join("\n");
 
   const summary = importEbayPurchasesLocal(csv, [
-    { id: "existing", externalOrderId: "11-11111-11111" },
+    {
+      id: "existing",
+      externalOrderId: "11-11111-11111",
+      name: "Connor McDavid - Upper Deck Young Guns",
+      totalCost: 29.5,
+      date: "2026-04-01",
+      seller: "seller_one",
+    },
   ], { addToInventory: true });
 
   assert.equal(summary.importedPurchases, 1);
@@ -35,4 +42,20 @@ test("local parser accepts html-style table export", () => {
   assert.equal(parsed.normalizedRows[0].externalOrderId, "44-44444-44444");
   assert.equal(parsed.normalizedRows[0].title, "Jaromir Jagr - Pinnacle");
   assert.equal(parsed.normalizedRows[0].totalCost, 18);
+});
+
+test("local eBay import keeps distinct items from the same order and only skips true reimports", () => {
+  const csv = [
+    "Order number,Item title,Seller,Total,Quantity,Paid on",
+    '55-55555-55555,"Sidney Crosby - Young Guns",seller_combo,40.00,1,2026-04-04',
+    '55-55555-55555,"Alex Ovechkin - Young Guns",seller_combo,35.00,1,2026-04-04',
+  ].join("\n");
+
+  const summary = importEbayPurchasesLocal(csv, [], { addToInventory: false });
+  assert.equal(summary.importedPurchases, 2);
+  assert.equal(summary.skippedDuplicates, 0);
+
+  const reimportSummary = importEbayPurchasesLocal(csv, summary.purchases, { addToInventory: false });
+  assert.equal(reimportSummary.importedPurchases, 0);
+  assert.equal(reimportSummary.skippedDuplicates, 2);
 });

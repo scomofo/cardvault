@@ -1,5 +1,5 @@
-import { get, run, runInImmediateTransaction } from "../database.js";
-import { parseEbayPurchaseImport } from "../../lib/ebayPurchaseImport.js";
+import { all, run, runInImmediateTransaction } from "../database.js";
+import { buildPurchaseImportFingerprint, parseEbayPurchaseImport } from "../../lib/ebayPurchaseImport.js";
 import { uid } from "../routes/shared.js";
 
 function buildPurchaseNotes(row) {
@@ -42,6 +42,17 @@ export function importEbayPurchasesCsv(csvText, { addToInventory = true } = {}) 
   const { parsedRows, normalizedRows, skippedInvalid } = parseEbayPurchaseImport(csvText || "");
 
   return runInImmediateTransaction(() => {
+    const existingFingerprints = new Set(
+      all("SELECT external_order_id, name, total_cost, date, seller FROM purchases").map((purchase) =>
+        buildPurchaseImportFingerprint({
+          externalOrderId: purchase.external_order_id,
+          title: purchase.name,
+          totalCost: purchase.total_cost,
+          date: purchase.date,
+          seller: purchase.seller,
+        }),
+      ),
+    );
     const summary = {
       parsedRows: parsedRows.length,
       importedPurchases: 0,
@@ -51,15 +62,10 @@ export function importEbayPurchasesCsv(csvText, { addToInventory = true } = {}) 
     };
 
     for (const row of normalizedRows) {
-      if (row.externalOrderId) {
-        const existingPurchase = get(
-          "SELECT id FROM purchases WHERE external_order_id = ?",
-          [row.externalOrderId],
-        );
-        if (existingPurchase) {
-          summary.skippedDuplicates += 1;
-          continue;
-        }
+      const fingerprint = buildPurchaseImportFingerprint(row);
+      if (existingFingerprints.has(fingerprint)) {
+        summary.skippedDuplicates += 1;
+        continue;
       }
 
       const purchaseId = uid();
@@ -82,6 +88,7 @@ export function importEbayPurchasesCsv(csvText, { addToInventory = true } = {}) 
         ],
       );
       summary.importedPurchases += 1;
+      existingFingerprints.add(fingerprint);
 
       if (addToInventory) {
         for (let i = 0; i < row.quantity; i += 1) {

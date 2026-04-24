@@ -396,7 +396,7 @@ export default function SalesFlow() {
           <input
             className="inp mt-8"
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,.tsv,.txt,.html,text/csv,text/plain,text/html"
             disabled={importBusy}
             onChange={(e) => {
               const file = e.target.files?.[0];
