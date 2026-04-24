@@ -146,6 +146,8 @@ test("server routes handle validation, migration, and listing side effects", asy
     }),
   });
   assert.equal(draftListingResponse.status, 201);
+  const draftListingPayload = await draftListingResponse.json();
+  assert.equal(draftListingPayload.publishStatus, "draft");
 
   const draftedItemResponse = await fetch(`${baseUrl}/api/items/draft-route-item`);
   assert.equal(draftedItemResponse.status, 200);
@@ -345,6 +347,10 @@ test("server routes handle validation, migration, and listing side effects", asy
     }),
   });
   assert.equal(soldCreateListingResponse.status, 201);
+  const soldCreateListingPayload = await soldCreateListingResponse.json();
+  assert.equal(soldCreateListingPayload.publishStatus, "sold");
+  assert.equal(soldCreateListingPayload.soldPrice, 17.5);
+  assert.equal(soldCreateListingPayload.soldDate, "2026-04-24T19:10:00.000Z");
 
   const activeSiblingResponse = await fetch(`${baseUrl}/api/listings`, {
     method: "POST",

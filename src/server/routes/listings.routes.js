@@ -64,8 +64,8 @@ export function registerListingRoutes(app) {
         `INSERT INTO listings (id, card_id, external_listing_id, card_name, card_set, card_number,
          platform, listing_title, listing_description, category_path, item_specifics, shipping_profile,
          image_count, automation_state, pricing_strategy, format, start_price, buy_now_price, auction_end_date,
-         shipping, shipping_weight_oz, export_batch_id, current_bid, status, notes)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         shipping, shipping_weight_oz, export_batch_id, current_bid, status, publish_status, sold_price, sold_date, notes)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           id,
           body.card_id,
@@ -91,6 +91,9 @@ export function registerListingRoutes(app) {
           body.export_batch_id,
           body.current_bid,
           body.status || "active",
+          body.publish_status || body.status || "active",
+          body.sold_price ?? null,
+          body.sold_date || null,
           body.notes,
         ],
       );
