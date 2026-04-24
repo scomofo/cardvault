@@ -362,3 +362,124 @@ test("linked manual sales and orders reject dangling link ids", async (t) => {
   });
   assert.equal(missingOrderSaleResponse.status, 404);
 });
+
+test("linked manual sales and orders reject conflicting explicit ids", async (t) => {
+  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-link-conflict-"));
+  const dbPath = join(tempDir, "cardvault-test.db");
+  const port = 5200 + Math.floor(Math.random() * 400);
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  const server = spawn(process.execPath, ["server.js"], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      PORT: String(port),
+      CARDVAULT_DB_PATH: dbPath,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  t.after(async () => {
+    if (!server.killed) {
+      server.kill("SIGTERM");
+    }
+    await new Promise((resolve) => server.once("exit", resolve));
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  await waitForServer(baseUrl);
+
+  for (const item of [
+    { id: "conflict-item-a", name: "Conflict Card A", number: "54A" },
+    { id: "conflict-item-b", name: "Conflict Card B", number: "54B" },
+  ]) {
+    const itemResponse = await fetch(`${baseUrl}/api/items`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...item,
+        set: "Route Set",
+        costBasis: 8,
+        listedOn: [],
+        priceHistory: [],
+      }),
+    });
+    assert.equal(itemResponse.status, 201);
+  }
+
+  for (const listing of [
+    { id: "conflict-listing-a", cardId: "conflict-item-a", cardNumber: "54A" },
+    { id: "conflict-listing-b", cardId: "conflict-item-b", cardNumber: "54B" },
+  ]) {
+    const listingResponse = await fetch(`${baseUrl}/api/listings`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...listing,
+        cardName: "Conflict Card",
+        cardSet: "Route Set",
+        platform: "ebay",
+        format: "fixed",
+        startPrice: 22.99,
+        shipping: 1.25,
+        status: "draft",
+      }),
+    });
+    assert.equal(listingResponse.status, 201);
+  }
+
+  const orderResponse = await fetch(`${baseUrl}/api/orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "conflict-order",
+      itemId: "conflict-item-a",
+      listingId: "conflict-listing-a",
+      platform: "ebay",
+      salePrice: 22.99,
+    }),
+  });
+  assert.equal(orderResponse.status, 201);
+
+  const saleResponse = await fetch(`${baseUrl}/api/sales`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "conflict-sale",
+      cardId: "conflict-item-a",
+      listingId: "conflict-listing-a",
+      cardName: "Conflict Card",
+      cardSet: "Route Set",
+      platform: "ebay",
+      salePrice: 22.99,
+      netProfit: 14.99,
+    }),
+  });
+  assert.equal(saleResponse.status, 201);
+
+  const conflictingOrderResponse = await fetch(`${baseUrl}/api/orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "conflict-order-bad",
+      saleId: "conflict-sale",
+      itemId: "conflict-item-b",
+    }),
+  });
+  assert.equal(conflictingOrderResponse.status, 409);
+
+  const conflictingSaleResponse = await fetch(`${baseUrl}/api/sales`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "conflict-sale-bad",
+      orderId: "conflict-order",
+      cardId: "conflict-item-b",
+      cardName: "Conflict Card",
+      cardSet: "Route Set",
+      salePrice: 22.99,
+      netProfit: 14.99,
+    }),
+  });
+  assert.equal(conflictingSaleResponse.status, 409);
+});

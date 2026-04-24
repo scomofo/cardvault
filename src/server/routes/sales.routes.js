@@ -33,6 +33,20 @@ export function registerSalesRoutes(app) {
       if (linkedOrderId && !linkedOrder) {
         return res.status(404).json({ error: "linked order not found" });
       }
+      if (
+        linkedOrder
+        && body.listing_id
+        && body.listing_id !== linkedOrder.listing_id
+      ) {
+        return res.status(409).json({ error: "listing does not match linked order" });
+      }
+      if (
+        linkedOrder
+        && body.card_id
+        && body.card_id !== linkedOrder.item_id
+      ) {
+        return res.status(409).json({ error: "item does not match linked order" });
+      }
       const linkedListingId = body.listing_id || linkedOrder?.listing_id || null;
       const linkedCardId = body.card_id || linkedOrder?.item_id || get(
         "SELECT card_id FROM listings WHERE id = ?",
