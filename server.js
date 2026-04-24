@@ -2,18 +2,20 @@ import express from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import { config } from "dotenv";
-import { initDB } from "./src/server/database.js";
+import { networkInterfaces } from "node:os";
+import { initDB, get as dbGet, run as dbRun } from "./src/server/database.js";
 import { seedReferenceData } from "./src/server/seed.js";
 import { registerRoutes } from "./src/server/routes/index.js";
+import { authCheck, requireProtectedConfigWrite } from "./src/server/auth.js";
 
 config();
 
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
-import { get as dbGet, run as dbRun } from "./src/server/database.js";
+const HOST = process.env.HOST || "0.0.0.0";
+const CV_SERVICE_URL = (process.env.CV_SERVICE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 
 let anthropicKey = process.env.ANTHROPIC_API_KEY || "";
-const PROXY_TOKEN = process.env.PROXY_TOKEN;
 
 // Initialize database and seed reference data
 initDB();
@@ -27,11 +29,13 @@ if (!anthropicKey) {
       anthropicKey = row.value;
       console.log("Loaded API key from database");
     }
-  } catch { /* settings table may not exist yet on first run */ }
+  } catch {
+    // settings table may not exist yet on first run
+  }
 }
 
 if (!anthropicKey) {
-  console.warn("No ANTHROPIC_API_KEY — AI features disabled until key is set via UI");
+  console.warn("No ANTHROPIC_API_KEY - AI features disabled until key is set via UI");
 }
 
 const ALLOWED_MODELS = [
@@ -39,6 +43,48 @@ const ALLOWED_MODELS = [
   "claude-haiku-4-5-20251001",
 ];
 const MAX_TOKENS_CAP = 4000;
+
+function isPrivateIpv4(hostname) {
+  if (!/^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname)) return false;
+  const [a, b] = hostname.split(".").map(Number);
+
+  return (
+    a === 10 ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168)
+  );
+}
+
+function isAllowedDevOrigin(origin) {
+  try {
+    const { protocol, hostname } = new URL(origin);
+    if (!["http:", "https:"].includes(protocol)) return false;
+
+    const normalizedHost = hostname.toLowerCase();
+    return (
+      normalizedHost === "localhost" ||
+      normalizedHost === "127.0.0.1" ||
+      normalizedHost === "::1" ||
+      normalizedHost.endsWith(".local") ||
+      isPrivateIpv4(normalizedHost)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function getNetworkUrls(port) {
+  const urls = [];
+
+  for (const entries of Object.values(networkInterfaces())) {
+    for (const entry of entries || []) {
+      if (entry.family !== "IPv4" || entry.internal) continue;
+      urls.push(`http://${entry.address}:${port}`);
+    }
+  }
+
+  return urls;
+}
 
 // Security headers
 app.use((req, res, next) => {
@@ -48,8 +94,19 @@ app.use((req, res, next) => {
   next();
 });
 
-// CORS — only allow the Vite dev server
-app.use(cors({ origin: "http://localhost:3000" }));
+// Allow local and private-network origins so the iPhone can hit the dev server on the MacBook.
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || isAllowedDevOrigin(origin)) {
+        return callback(null, true);
+      }
+
+      console.warn(`Blocked CORS origin: ${origin}`);
+      return callback(null, false);
+    },
+  })
+);
 
 // Body parser with reduced limit
 app.use(express.json({ limit: "2mb" }));
@@ -60,18 +117,8 @@ const aiLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Too many requests — try again in a minute" },
+  message: { error: "Too many requests - try again in a minute" },
 });
-
-// Optional bearer token auth
-function authCheck(req, res, next) {
-  if (!PROXY_TOKEN) return next();
-  const header = req.headers.authorization;
-  if (header !== `Bearer ${PROXY_TOKEN}`) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-  next();
-}
 
 // Validate and sanitize request body before forwarding
 function validateBody(req, res, next) {
@@ -86,7 +133,7 @@ function validateBody(req, res, next) {
 
   req.sanitizedBody = {
     model,
-    max_tokens: Math.min(parseInt(max_tokens) || 800, MAX_TOKENS_CAP),
+    max_tokens: Math.min(parseInt(max_tokens, 10) || 800, MAX_TOKENS_CAP),
     messages,
     ...(system && { system }),
     ...(req.body.tools && { tools: req.body.tools }),
@@ -94,9 +141,8 @@ function validateBody(req, res, next) {
   next();
 }
 
-// --- API Key management ---
 // GET: check if key is configured (never returns the actual key)
-app.get("/api/ai/status", authCheck, (req, res) => {
+app.get("/api/ai/status", authCheck, (_req, res) => {
   res.json({
     configured: !!anthropicKey,
     masked: anthropicKey ? anthropicKey.slice(0, 7) + "..." + anthropicKey.slice(-4) : null,
@@ -104,29 +150,32 @@ app.get("/api/ai/status", authCheck, (req, res) => {
 });
 
 // POST: set the API key at runtime and persist to database
-app.post("/api/ai/key", authCheck, (req, res) => {
+app.post("/api/ai/key", requireProtectedConfigWrite, (req, res) => {
   const { key } = req.body;
   if (!key || typeof key !== "string" || !key.startsWith("sk-ant-")) {
     return res.status(400).json({ error: "Invalid API key format. Must start with sk-ant-" });
   }
+
   anthropicKey = key.trim();
-  // Persist to settings table so it survives server restarts
+
   try {
     dbRun(
       "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
       ["anthropic_api_key", anthropicKey]
     );
-  } catch (e) {
-    console.warn("Failed to persist API key:", e.message);
+  } catch (error) {
+    console.warn("Failed to persist API key:", error.message);
   }
+
   res.json({ configured: true, masked: anthropicKey.slice(0, 7) + "..." + anthropicKey.slice(-4) });
 });
 
-// --- AI proxy ---
+// AI proxy
 app.post("/api/ai", aiLimiter, authCheck, validateBody, async (req, res) => {
   if (!anthropicKey) {
     return res.status(503).json({ error: "No API key configured. Add your Anthropic API key in Settings." });
   }
+
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -142,30 +191,30 @@ app.post("/api/ai", aiLimiter, authCheck, validateBody, async (req, res) => {
       return res.status(response.status).json(data);
     }
     res.json(data);
-  } catch (e) {
-    console.error("Proxy error:", e);
+  } catch (error) {
+    console.error("Proxy error:", error);
     res.status(502).json({ error: "AI proxy failed" });
   }
 });
 
-// --- CV Service proxy (for production builds without Vite proxy) ---
+// CV service proxy for production builds without the Vite proxy.
 app.post("/api/cv/analyze", express.json({ limit: "5mb" }), async (req, res) => {
   try {
-    const response = await fetch("http://localhost:8000/analyze-json", {
+    const response = await fetch(`${CV_SERVICE_URL}/analyze-json`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(req.body),
     });
     const data = await response.json();
     res.status(response.status).json(data);
-  } catch (e) {
-    res.status(502).json({ error: "CV service unavailable", details: e.message });
+  } catch (error) {
+    res.status(502).json({ error: "CV service unavailable", details: error.message });
   }
 });
 
 app.get("/api/cv/health", async (_req, res) => {
   try {
-    const response = await fetch("http://localhost:8000/health");
+    const response = await fetch(`${CV_SERVICE_URL}/health`);
     const data = await response.json();
     res.json(data);
   } catch {
@@ -173,10 +222,13 @@ app.get("/api/cv/health", async (_req, res) => {
   }
 });
 
-// Register database REST API routes
 registerRoutes(app);
 
-app.listen(PORT, () => {
+app.listen(PORT, HOST, () => {
   console.log(`CardVault API running on http://localhost:${PORT}`);
-  if (!anthropicKey) console.log("  AI features: disabled (no API key — set via Settings UI)");
+  for (const url of getNetworkUrls(PORT)) {
+    console.log(`  Network: ${url}`);
+  }
+  console.log(`  CV service: ${CV_SERVICE_URL}`);
+  if (!anthropicKey) console.log("  AI features: disabled (no API key - set via Settings UI)");
 });

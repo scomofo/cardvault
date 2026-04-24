@@ -93,24 +93,25 @@ function ApiKeySection() {
 function EbayConnectionSection() {
   const toast = useToast();
   const [status, setStatus] = useState({ configured: false, connected: false, sandbox: true });
-  const [creds, setCreds] = useState({ appId: "", certId: "", devId: "", sandbox: true });
+  const [creds, setCreds] = useState({ appId: "", certId: "", devId: "", ruName: "", sandbox: true });
   const [showSetup, setShowSetup] = useState(false);
   const [saving, setSaving] = useState(false);
+  const callbackUrl = `${window.location.origin}/api/ebay/callback`;
 
   useEffect(() => {
     fetch("/api/ebay/status").then((r) => r.json()).then(setStatus).catch(() => {});
   }, []);
 
   const saveCreds = async () => {
-    if (!creds.appId || !creds.certId) { toast.error("App ID and Cert ID required"); return; }
+    if (!creds.appId || !creds.certId || !creds.ruName) { toast.error("App ID, Cert ID, and RuName are required"); return; }
     setSaving(true);
     try {
       const r = await fetch("/api/ebay/credentials", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          appId: creds.appId, certId: creds.certId, devId: creds.devId,
-          sandbox: creds.sandbox, redirectUri: "http://localhost:3000/api/ebay/callback",
+          appId: creds.appId, certId: creds.certId, devId: creds.devId, ruName: creds.ruName,
+          sandbox: creds.sandbox, callbackUrl,
         }),
       });
       if (r.ok) {
@@ -165,7 +166,7 @@ function EbayConnectionSection() {
 
       {showSetup && (
         <div className="fade mt-10" style={{ padding: 12, background: "var(--acc-bg)", borderRadius: "var(--radius)", border: "1px solid var(--acc-brd)" }}>
-          <div className="text-xxs text-dim mb-8">Register at developer.ebay.com, create an app, and enter your credentials below.</div>
+          <div className="text-xxs text-dim mb-8">Register at developer.ebay.com, create an app, copy your RuName from User Tokens, and configure the accept URL there to match the callback shown below.</div>
           <div className="form-grid mt-4">
             <label className="fld">
               <span className="text-xxs text-dim">App ID (Client ID)</span>
@@ -179,7 +180,12 @@ function EbayConnectionSection() {
               <span className="text-xxs text-dim">Dev ID (optional)</span>
               <input className="inp" value={creds.devId} onChange={(e) => setCreds((p) => ({ ...p, devId: e.target.value }))} placeholder="Your-Dev-ID" />
             </label>
+            <label className="fld">
+              <span className="text-xxs text-dim">RuName (redirect_uri)</span>
+              <input className="inp" value={creds.ruName} onChange={(e) => setCreds((p) => ({ ...p, ruName: e.target.value }))} placeholder="Your-eBay-RuName" />
+            </label>
           </div>
+          <div className="text-xxs text-dim mt-8">Callback URL to configure in eBay: <code>{callbackUrl}</code></div>
           <label className="flex items-center gap-8 mt-8" style={{ cursor: "pointer" }}>
             <input type="checkbox" checked={creds.sandbox} onChange={(e) => setCreds((p) => ({ ...p, sandbox: e.target.checked }))} />
             <span className="text-xs">Sandbox mode (test environment)</span>
