@@ -160,13 +160,14 @@ export class EbayAdapter extends MarketplaceAdapter {
     if (!itemId) return null;
 
     const limit = 200;
-    for (let page = 0; page < 10; page += 1) {
-      const offset = page * limit;
+    let offset = 0;
+    while (true) {
       const response = await getOrders({ limit, offset });
       const orders = Array.isArray(response?.orders) ? response.orders : [];
       const match = orders.find((order) => this.findMatchingLineItem(order, listing));
       if (match) return match;
       if (orders.length < limit) break;
+      offset += limit;
     }
 
     return null;
