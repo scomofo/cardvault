@@ -621,4 +621,54 @@ test("linked manual sales and orders reject conflicting explicit metadata", asyn
     }),
   });
   assert.equal(conflictingSalePriceResponse.status, 409);
+
+  const conflictingOrderBuyerResponse = await fetch(`${baseUrl}/api/orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "meta-conflict-order-buyer",
+      saleId: "meta-conflict-sale",
+      buyerHandle: "wrong_buyer",
+    }),
+  });
+  assert.equal(conflictingOrderBuyerResponse.status, 409);
+
+  const conflictingOrderDateResponse = await fetch(`${baseUrl}/api/orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "meta-conflict-order-date",
+      saleId: "meta-conflict-sale",
+      soldAt: "2026-04-25T00:00:00.000Z",
+    }),
+  });
+  assert.equal(conflictingOrderDateResponse.status, 409);
+
+  const conflictingSaleBuyerResponse = await fetch(`${baseUrl}/api/sales`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "meta-conflict-sale-buyer",
+      orderId: "meta-conflict-order",
+      cardName: "Meta Conflict Card",
+      cardSet: "Route Set",
+      buyerHandle: "wrong_buyer",
+      netProfit: 11.99,
+    }),
+  });
+  assert.equal(conflictingSaleBuyerResponse.status, 409);
+
+  const conflictingSaleDateResponse = await fetch(`${baseUrl}/api/sales`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "meta-conflict-sale-date",
+      orderId: "meta-conflict-order",
+      cardName: "Meta Conflict Card",
+      cardSet: "Route Set",
+      date: "2026-04-25T00:00:00.000Z",
+      netProfit: 11.99,
+    }),
+  });
+  assert.equal(conflictingSaleDateResponse.status, 409);
 });

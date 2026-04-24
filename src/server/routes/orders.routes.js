@@ -74,6 +74,20 @@ export function registerOrderRoutes(app) {
       ) {
         return res.status(409).json({ error: "sale price does not match linked sale" });
       }
+      if (
+        linkedSale
+        && (body.buyerHandle || body.buyer_handle)
+        && (body.buyerHandle || body.buyer_handle) !== linkedSale.buyer_handle
+      ) {
+        return res.status(409).json({ error: "buyer handle does not match linked sale" });
+      }
+      if (
+        linkedSale
+        && (body.soldAt || body.sold_at)
+        && (body.soldAt || body.sold_at) !== linkedSale.date
+      ) {
+        return res.status(409).json({ error: "sold_at does not match linked sale" });
+      }
       const resolvedPlatform = body.platform || linkedSale?.platform || null;
       if (!resolvedPlatform) return res.status(400).json({ error: "platform required" });
       const resolvedSalePrice = body.salePrice ?? body.sale_price ?? linkedSale?.sale_price;

@@ -61,6 +61,20 @@ export function registerSalesRoutes(app) {
       ) {
         return res.status(409).json({ error: "sale price does not match linked order" });
       }
+      if (
+        linkedOrder
+        && body.buyer_handle
+        && body.buyer_handle !== linkedOrder.buyer_handle
+      ) {
+        return res.status(409).json({ error: "buyer handle does not match linked order" });
+      }
+      if (
+        linkedOrder
+        && body.date
+        && body.date !== linkedOrder.sold_at
+      ) {
+        return res.status(409).json({ error: "date does not match linked order" });
+      }
       const linkedListingId = body.listing_id || linkedOrder?.listing_id || null;
       const linkedCardId = body.card_id || linkedOrder?.item_id || get(
         "SELECT card_id FROM listings WHERE id = ?",
