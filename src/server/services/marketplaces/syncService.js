@@ -79,10 +79,15 @@ export async function syncMarketplaceListings(marketplace, listingId = null) {
   for (const channel of channels) {
     const listing = get(`SELECT * FROM listings WHERE id = ?`, [channel.listing_id]);
     if (!listing) continue;
+    const listingForChannel = {
+      ...listing,
+      external_listing_id: channel.external_listing_id || listing.external_listing_id || null,
+      externalListingId: channel.external_listing_id || listing.external_listing_id || null,
+    };
 
     let synced;
     try {
-      synced = await adapter.sync(listing);
+      synced = await adapter.sync(listingForChannel);
     } catch (error) {
       console.error(`Failed to sync ${channel.marketplace} listing ${listing.id}:`, error);
       run(

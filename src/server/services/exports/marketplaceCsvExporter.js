@@ -45,7 +45,15 @@ export function exportListingsForMarketplace({ marketplace, listingIds = [], exp
   const adapter = getMarketplaceAdapter(normalizedMarketplace);
   const listings = listingIds.length
     ? all(`SELECT * FROM listings WHERE id IN (${listingIds.map(() => "?").join(",")})`, listingIds)
-    : all(`SELECT * FROM listings WHERE platform = ? AND publish_status IN ('draft', 'active', 'revised')`, [normalizedMarketplace]);
+    : all(
+        `SELECT DISTINCT listings.*
+         FROM listings
+         INNER JOIN listing_channels
+           ON listing_channels.listing_id = listings.id
+         WHERE listing_channels.marketplace = ?
+           AND listing_channels.status IN ('draft', 'active', 'revised')`,
+        [normalizedMarketplace],
+      );
 
   if (!listings.length) {
     throw new Error("No listings available for export");

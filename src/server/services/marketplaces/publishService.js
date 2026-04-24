@@ -58,6 +58,26 @@ function addChannelEvent(channelId, eventType, status, payload) {
   );
 }
 
+function getListingForMarketplace(listingId, marketplace) {
+  const listing = get(`SELECT * FROM listings WHERE id = ?`, [listingId]);
+  if (!listing) throw new Error("Listing not found");
+
+  const channel = get(
+    `SELECT * FROM listing_channels WHERE listing_id = ? AND marketplace = ?`,
+    [listingId, marketplace],
+  );
+  const externalListingId = channel?.external_listing_id || listing.external_listing_id || null;
+
+  return {
+    channel,
+    listing: {
+      ...listing,
+      external_listing_id: externalListingId,
+      externalListingId,
+    },
+  };
+}
+
 export async function publishListingToMarketplace(listingId, marketplace, options = {}) {
   const listing = get(`SELECT * FROM listings WHERE id = ?`, [listingId]);
   if (!listing) throw new Error("Listing not found");
@@ -78,15 +98,20 @@ export async function publishListingToMarketplace(listingId, marketplace, option
     `UPDATE listings
      SET publish_status = ?, external_listing_id = ?, last_sync_at = ?, status = ?, notes = COALESCE(notes, notes)
      WHERE id = ?`,
-    [result.status, result.externalListingId, result.syncedAt, "active", listingId],
+    [
+      result.status,
+      marketplace === listing.platform ? result.externalListingId : listing.external_listing_id,
+      result.syncedAt,
+      "active",
+      listingId,
+    ],
   );
 
   return get(`SELECT * FROM listing_channels WHERE id = ?`, [channelId]);
 }
 
 export async function reviseListingOnMarketplace(listingId, marketplace, overrides = {}) {
-  const listing = get(`SELECT * FROM listings WHERE id = ?`, [listingId]);
-  if (!listing) throw new Error("Listing not found");
+  const { listing } = getListingForMarketplace(listingId, marketplace);
 
   const adapter = getMarketplaceAdapter(marketplace);
   const result = await adapter.revise(listing, overrides);
@@ -110,8 +135,7 @@ export async function reviseListingOnMarketplace(listingId, marketplace, overrid
 }
 
 export async function endListingOnMarketplace(listingId, marketplace) {
-  const listing = get(`SELECT * FROM listings WHERE id = ?`, [listingId]);
-  if (!listing) throw new Error("Listing not found");
+  const { listing } = getListingForMarketplace(listingId, marketplace);
 
   const adapter = getMarketplaceAdapter(marketplace);
   const result = await adapter.end(listing);
