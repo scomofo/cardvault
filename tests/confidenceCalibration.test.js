@@ -56,6 +56,11 @@ test("confidence calibration returns null before minimum samples, then smoothed 
     const prior = calibration.calibrateConfidence("marketplace_decision", 0.65);
     assert.equal(prior.calibrated, false);
     assert.equal(prior.confidence, 0.65);
+
+    assert.throws(
+      () => calibration.calibrateConfidence("marketplace_decision", 1.5),
+      /priorConfidence must be a finite number between 0 and 1/,
+    );
   } finally {
     db.close();
     if (previousPath === undefined) delete process.env.CARDVAULT_DB_PATH;

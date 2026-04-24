@@ -66,6 +66,15 @@ export function getCalibratedConfidence(decisionType, options = {}) {
  * @returns {{ confidence: number, priorConfidence: number, calibrated: boolean, sampleSize: number }}
  */
 export function calibrateConfidence(decisionType, priorConfidence) {
+  if (
+    typeof priorConfidence !== "number" ||
+    !Number.isFinite(priorConfidence) ||
+    priorConfidence < 0 ||
+    priorConfidence > 1
+  ) {
+    throw new RangeError("priorConfidence must be a finite number between 0 and 1");
+  }
+
   const result = getCalibratedConfidence(decisionType);
   if (!result || result.confidence == null) {
     return {

@@ -7,7 +7,8 @@ import { get } from "../../database.js";
  */
 export function runAcquisitionDecisionAutomation(input = {}) {
   const askingPrice = Number(input.askingPrice || input.asking_price || 0);
-  const estimatedExitValue = Number(input.estimatedExitValue || input.estimated_exit_value || 0);
+  const estimatedExitSource = input.estimatedExitValue ?? input.estimated_exit_value ?? 0;
+  const estimatedExitValue = Number(estimatedExitSource);
   const gradingUpside = Number(input.estimatedGradingUpside || input.estimated_grading_upside || 0);
   const sourceRoi = Number(input.historicalRoiBySource || input.historical_roi_by_source || 0);
   const sealedResale = Number(input.sealedResaleValue || input.sealed_resale_value || 0);

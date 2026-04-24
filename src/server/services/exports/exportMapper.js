@@ -4,9 +4,14 @@
  * @returns {object}
  */
 export function mapListingToEbayRow(listing) {
-  const specifics = typeof listing.item_specifics === "string"
-    ? JSON.parse(listing.item_specifics || "{}")
-    : listing.item_specifics || {};
+  let specifics = listing.item_specifics || {};
+  if (typeof listing.item_specifics === "string") {
+    try {
+      specifics = JSON.parse(listing.item_specifics || "{}");
+    } catch {
+      specifics = {};
+    }
+  }
 
   return {
     Title: listing.listing_title || listing.card_name,

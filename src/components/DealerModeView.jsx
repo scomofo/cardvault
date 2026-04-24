@@ -135,7 +135,31 @@ export default function DealerModeView() {
     try {
       const itemIds = cards.map((c) => c.id);
       const result = await automationAPI.generateListings({ itemIds });
-      const generated = Array.isArray(result?.listings) ? result.listings.length : itemIds.length;
+      const drafts = Array.isArray(result?.drafts) ? result.drafts : [];
+      const generated = drafts.length || itemIds.length;
+      const listedPlatformsByCardId = new Map();
+      drafts.forEach((draft) => {
+        if (!draft?.card_id || !draft?.platform) return;
+        const existing = listedPlatformsByCardId.get(draft.card_id) || [];
+        listedPlatformsByCardId.set(draft.card_id, [...existing, draft.platform]);
+      });
+      if (drafts.length > 0) {
+        setListings((prev) => {
+          const existingIds = new Set(prev.map((listing) => listing.id));
+          const freshDrafts = drafts.filter((draft) => !existingIds.has(draft.id));
+          return freshDrafts.length > 0 ? [...freshDrafts, ...prev] : prev;
+        });
+      }
+      setCatalog((prev) => prev.map((card) => (
+        itemIds.includes(card.id)
+          ? {
+              ...card,
+              status: "listed",
+              listedOn: Array.from(new Set([...(card.listedOn || []), ...(listedPlatformsByCardId.get(card.id) || ["ebay"])])),
+            }
+          : card
+      )));
+      setSelected(new Set());
       toast.success(generated + " listings generated server-side");
     } catch (error) {
       toast.error("Batch listing failed: " + error.message);

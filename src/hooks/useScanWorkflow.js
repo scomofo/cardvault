@@ -460,7 +460,6 @@ export function useScanWorkflow() {
       const item = currentQueue[i];
       setBatchQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: "processing" } : q));
       try {
-        const { aiVisualSearch } = await import("../lib/ai");
         const response = await aiVisualSearch(item.front);
         if (response && response.name) {
           const confidence = response.confidence === "high" ? 0.9 : response.confidence === "medium" ? 0.7 : 0.4;
@@ -488,11 +487,17 @@ export function useScanWorkflow() {
     const saveable = batchQueue.filter((q) => q.status === "done" || q.status === "approved");
     const entries = [];
     for (const item of saveable) {
-      const { storeImage } = await import("../lib/storage");
-      const frontImgId = await storeImage(item.front);
-      const backImgId = item.back ? await storeImage(item.back) : null;
+      const entryId = crypto.randomUUID();
+      const frontImgId = item.front ? `img_${entryId}_front` : null;
+      const backImgId = item.back ? `img_${entryId}_back` : null;
+      if (frontImgId) {
+        await saveImage(frontImgId, item.front);
+      }
+      if (backImgId) {
+        await saveImage(backImgId, item.back);
+      }
       entries.push({
-        id: crypto.randomUUID(),
+        id: entryId,
         name: item.result.name, set: item.result.set, number: item.result.number,
         year: item.result.year, rarity: item.result.rarity, condition: "NM",
         binder: "", type: item.result.type || "sports", status: "inventory",

@@ -1,19 +1,37 @@
-import { all, get, run } from "../../database.js";
+import { all, get, run, runInImmediateTransaction } from "../../database.js";
 import { uid } from "../../routes/shared.js";
-import { getMarketplaceAdapter } from "../../integrations/marketplaces/marketplaceRegistry.js";
+import { getMarketplaceAdapter, listSupportedMarketplaces } from "../../integrations/marketplaces/marketplaceRegistry.js";
 import { reconcileSyncResult } from "./syncReconciler.js";
+
+function validateSyncInputs(marketplace, listingId) {
+  if (typeof marketplace !== "string" || !marketplace.trim()) {
+    throw new Error("marketplace is required");
+  }
+
+  const normalizedMarketplace = marketplace.trim().toLowerCase();
+  if (!listSupportedMarketplaces().includes(normalizedMarketplace)) {
+    throw new Error(`Unsupported marketplace: ${marketplace}`);
+  }
+
+  if (listingId != null && typeof listingId !== "string" && typeof listingId !== "number") {
+    throw new Error("listingId must be a string or number");
+  }
+
+  return {
+    marketplace: normalizedMarketplace,
+    listingId: listingId == null ? null : String(listingId),
+  };
+}
 
 function insertSyncedSale(listing, channel, synced) {
   if (!listing.sold_price && synced.status !== "sold") return null;
-  const existingSale = get(`SELECT * FROM sales WHERE listing_id = ?`, [listing.id]);
-  if (existingSale) return existingSale;
-
   const saleId = uid();
   const salePrice = Number(listing.sold_price || listing.start_price || 0);
-  run(
+  const inserted = run(
     `INSERT INTO sales
      (id, card_id, order_id, card_name, card_set, sale_price, cost_basis, platform, buyer_handle, fees, shipping_cost, packaging_cost, grading_cost, tax_collected, payout_amount, net_profit, listing_id, date)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+     SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+     WHERE NOT EXISTS (SELECT 1 FROM sales WHERE listing_id = ?)`,
     [
       saleId,
       listing.card_id,
@@ -33,8 +51,13 @@ function insertSyncedSale(listing, channel, synced) {
       salePrice - Number(listing.shipping || 0),
       listing.id,
       synced.syncedAt,
+      listing.id,
     ],
   );
+
+  if (inserted.changes === 0) {
+    return get(`SELECT * FROM sales WHERE listing_id = ?`, [listing.id]);
+  }
 
   return get(`SELECT * FROM sales WHERE id = ?`, [saleId]);
 }
@@ -46,17 +69,43 @@ function insertSyncedSale(listing, channel, synced) {
  * @returns {Promise<object[]>}
  */
 export async function syncMarketplaceListings(marketplace, listingId = null) {
-  const adapter = getMarketplaceAdapter(marketplace);
-  const channels = listingId
-    ? all(`SELECT * FROM listing_channels WHERE marketplace = ? AND listing_id = ?`, [marketplace, listingId])
-    : all(`SELECT * FROM listing_channels WHERE marketplace = ?`, [marketplace]);
+  const normalizedInputs = validateSyncInputs(marketplace, listingId);
+  const adapter = getMarketplaceAdapter(normalizedInputs.marketplace);
+  const channels = normalizedInputs.listingId
+    ? all(`SELECT * FROM listing_channels WHERE marketplace = ? AND listing_id = ?`, [normalizedInputs.marketplace, normalizedInputs.listingId])
+    : all(`SELECT * FROM listing_channels WHERE marketplace = ?`, [normalizedInputs.marketplace]);
 
   const results = [];
   for (const channel of channels) {
     const listing = get(`SELECT * FROM listings WHERE id = ?`, [channel.listing_id]);
     if (!listing) continue;
 
-    const synced = await adapter.sync(listing);
+    let synced;
+    try {
+      synced = await adapter.sync(listing);
+    } catch (error) {
+      console.error(`Failed to sync ${channel.marketplace} listing ${listing.id}:`, error);
+      run(
+        `INSERT INTO listing_channel_events (id, listing_channel_id, event_type, status, payload)
+         VALUES (?,?,?,?,?)`,
+        [uid(), channel.id, "sync", "failed", JSON.stringify({ error: error.message || "Sync failed" })],
+      );
+      run(
+        `UPDATE listing_channels
+         SET publish_error = ?, updated_at = datetime('now')
+         WHERE id = ?`,
+        [error.message || "Sync failed", channel.id],
+      );
+      results.push({
+        channelId: channel.id,
+        synced: null,
+        sale: null,
+        reconciliation: null,
+        error: error.message || "Sync failed",
+      });
+      continue;
+    }
+
     const reconciliation = reconcileSyncResult(listing, channel, synced);
 
     if (reconciliation.conflicts.length > 0) {
@@ -78,25 +127,27 @@ export async function syncMarketplaceListings(marketplace, listingId = null) {
       continue;
     }
 
-    run(
-      `UPDATE listing_channels
-       SET status = ?, last_sync_at = ?, publish_error = NULL, updated_at = datetime('now')
-       WHERE id = ?`,
-      [synced.status, synced.syncedAt, channel.id],
-    );
-    run(
-      `INSERT INTO listing_channel_events (id, listing_channel_id, event_type, status, payload)
-       VALUES (?,?,?,?,?)`,
-      [uid(), channel.id, "sync", synced.status, JSON.stringify(synced)],
-    );
-    run(
-      `UPDATE listings
-       SET publish_status = ?, last_sync_at = ?, status = CASE WHEN ? = 'sold' THEN 'sold' ELSE status END
-       WHERE id = ?`,
-      [synced.status, synced.syncedAt, synced.status, listing.id],
-    );
+    const sale = runInImmediateTransaction(() => {
+      run(
+        `UPDATE listing_channels
+         SET status = ?, last_sync_at = ?, publish_error = NULL, updated_at = datetime('now')
+         WHERE id = ?`,
+        [synced.status, synced.syncedAt, channel.id],
+      );
+      run(
+        `INSERT INTO listing_channel_events (id, listing_channel_id, event_type, status, payload)
+         VALUES (?,?,?,?,?)`,
+        [uid(), channel.id, "sync", synced.status, JSON.stringify(synced)],
+      );
+      run(
+        `UPDATE listings
+         SET publish_status = ?, last_sync_at = ?, status = CASE WHEN ? = 'sold' THEN 'sold' ELSE status END
+         WHERE id = ?`,
+        [synced.status, synced.syncedAt, synced.status, listing.id],
+      );
 
-    const sale = insertSyncedSale(listing, channel, synced);
+      return insertSyncedSale(listing, channel, synced);
+    });
     results.push({ channelId: channel.id, synced, sale, reconciliation });
   }
 

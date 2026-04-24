@@ -67,5 +67,7 @@ test("dashboard exposes KPIs and richer action queue categories", async (t) => {
   assert.ok(Array.isArray(dashboard.actionQueue));
   assert.ok(dashboard.actionQueue.some((entry) => entry.queue === "list_now"));
   assert.ok(dashboard.actionQueue.some((entry) => entry.queue === "high_value_unlisted"));
+  assert.ok(dashboard.actionQueue.every((entry) => Object.prototype.hasOwnProperty.call(entry, "itemId")));
+  assert.ok(dashboard.actionQueue.every((entry) => Object.prototype.hasOwnProperty.call(entry, "itemName")));
   assert.ok(Array.isArray(dashboard.performance.topProfitPlayers));
 });

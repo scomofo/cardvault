@@ -9,8 +9,17 @@ export default function BatchCaptureMode({ queue, onAddToQueue, onDone, onCancel
   const [camError, setCamError] = useState(null);
   const [capturingSide, setCapturingSide] = useState("front");
   const [currentFront, setCurrentFront] = useState(null);
+  const liveCameraSupported =
+    typeof window !== "undefined" &&
+    window.isSecureContext &&
+    !!navigator.mediaDevices?.getUserMedia;
 
   const start = useCallback(async () => {
+    if (!liveCameraSupported) {
+      setCamError("Live camera needs HTTPS or localhost on this device. Use Upload instead.");
+      return;
+    }
+
     try {
       setCamError(null);
       if (sRef.current) sRef.current.getTracks().forEach((t) => t.stop());
@@ -22,7 +31,7 @@ export default function BatchCaptureMode({ queue, onAddToQueue, onDone, onCancel
     } catch (e) {
       setCamError(e.name === "NotAllowedError" ? "Camera access denied" : "Camera unavailable");
     }
-  }, []);
+  }, [liveCameraSupported]);
 
   const stop = useCallback(() => {
     if (sRef.current) { sRef.current.getTracks().forEach((t) => t.stop()); sRef.current = null; }
@@ -48,6 +57,28 @@ export default function BatchCaptureMode({ queue, onAddToQueue, onDone, onCancel
     }
   }, [capturingSide, currentFront, onAddToQueue]);
 
+  const handleUpload = useCallback((event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (loadEvent) => {
+      const dataUrl = loadEvent.target?.result;
+      if (typeof dataUrl !== "string") return;
+
+      if (capturingSide === "front") {
+        setCurrentFront(dataUrl);
+        setCapturingSide("back");
+      } else {
+        onAddToQueue({ front: currentFront, back: dataUrl });
+        setCurrentFront(null);
+        setCapturingSide("front");
+      }
+    };
+    reader.readAsDataURL(file);
+    event.target.value = "";
+  }, [capturingSide, currentFront, onAddToQueue]);
+
   const skipBack = useCallback(() => {
     onAddToQueue({ front: currentFront, back: null });
     setCurrentFront(null);
@@ -66,7 +97,7 @@ export default function BatchCaptureMode({ queue, onAddToQueue, onDone, onCancel
         </div>
         {live ? (
           <div>
-            <video ref={vRef} style={{ width: "100%", maxHeight: 300, borderRadius: "var(--radius)", objectFit: "cover", background: "#000" }} playsInline muted />
+            <video ref={vRef} style={{ width: "100%", maxHeight: 300, borderRadius: "var(--radius)", objectFit: "cover", background: "#000" }} playsInline muted autoPlay />
             <canvas ref={cRef} style={{ display: "none" }} />
             <div className="flex gap-8 justify-center mt-8">
               <button onClick={snap} aria-label="Capture" style={{ width: 56, height: 56, borderRadius: 2, border: "3px solid var(--acc)", background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transform: "rotate(45deg)" }}>
@@ -78,7 +109,22 @@ export default function BatchCaptureMode({ queue, onAddToQueue, onDone, onCancel
         ) : (
           <div style={{ padding: "20px 0", textAlign: "center" }}>
             {camError && <p className="text-xs text-red mb-6">{camError}</p>}
-            <button className="btn btn-primary" onClick={start}><IconCamera size={14} /> Open Camera</button>
+            {!liveCameraSupported && (
+              <p className="text-xs text-dim mb-6">On iPhone over Wi-Fi, Upload will still open the rear camera.</p>
+            )}
+            <div className="flex gap-8 justify-center flex-wrap">
+              <button className="btn btn-primary" onClick={start}><IconCamera size={14} /> Open Camera</button>
+              <label className="btn btn-outline" style={{ cursor: "pointer" }}>
+                <IconUpload size={14} /> Upload {capturingSide === "front" ? "Front" : "Back"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleUpload}
+                  style={{ display: "none" }}
+                />
+              </label>
+            </div>
           </div>
         )}
         {currentFront && (

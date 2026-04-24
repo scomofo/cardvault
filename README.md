@@ -3,7 +3,7 @@
   <img src="https://img.shields.io/badge/Vite-6-646cff?style=flat-square&logo=vite" />
   <img src="https://img.shields.io/badge/SQLite-3-003b57?style=flat-square&logo=sqlite" />
   <img src="https://img.shields.io/badge/Claude_AI-Powered-d97706?style=flat-square&logo=anthropic" />
-  <img src="https://img.shields.io/badge/Platform-Windows-0078d4?style=flat-square&logo=windows" />
+  <img src="https://img.shields.io/badge/Platform-macOS%20%2B%20iPhone-111827?style=flat-square&logo=apple" />
 </p>
 
 # CardVault
@@ -57,6 +57,35 @@ npm install                    # Install dependencies
 cp .env.example .env           # Add ANTHROPIC_API_KEY
 npm start                      # Server :3001  +  Frontend :3000
 ```
+
+### MacBook Air + iPhone 15 Pro
+
+- Run the app on the MacBook Air with `HOST=0.0.0.0` so Vite and Express are reachable over your local network.
+- Open `http://<your-macbook-lan-ip>:3000` on the iPhone when both devices are on the same Wi-Fi.
+- iPhone Safari only allows `getUserMedia()` on `https://` or `localhost`. When testing over a LAN IP, use the app's `Upload` buttons to open the rear camera instead of the live camera preview.
+- If you use eBay OAuth, set `EBAY_CALLBACK_URL` to the same host you opened in Safari and use your app's RuName for `EBAY_RU_NAME`.
+
+### Trusted HTTPS For Live Camera
+
+- One-command Mac setup:
+
+```bash
+npm run setup:mac-iphone-https
+```
+
+- Install `mkcert` on the MacBook Air and trust its local CA.
+- Generate a cert that covers your Mac's Bonjour hostname and local IP. Example:
+
+```bash
+mkdir -p certs
+mkcert -key-file certs/cardvault-key.pem -cert-file certs/cardvault-cert.pem localhost 127.0.0.1 ::1 cardvault.local 192.168.1.25
+```
+
+- Copy the generated file paths into `.env` using `SSL_KEY_FILE` and `SSL_CERT_FILE`.
+- Keep `HOST=0.0.0.0`, then run `npm run start:secure`.
+- Open `https://cardvault.local:3000` or the exact host covered by the cert on the iPhone.
+- For the iPhone to trust the site, install and trust the mkcert root CA on the phone as well. After that, Safari should allow the live rear camera path.
+- The setup script auto-detects the Mac's Bonjour hostname and LAN IP, writes the HTTPS env vars into `.env`, and prints the `rootCA.pem` path you need to AirDrop to the iPhone.
 
 ### API
 

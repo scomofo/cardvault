@@ -47,3 +47,20 @@ export function get(sql, params = []) {
 export function all(sql, params = []) {
   return getDB().prepare(sql).all(...(Array.isArray(params) ? params : [params]));
 }
+
+export function runInImmediateTransaction(work) {
+  const database = getDB();
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    const result = work(database);
+    database.exec("COMMIT");
+    return result;
+  } catch (error) {
+    try {
+      database.exec("ROLLBACK");
+    } catch {
+      // Ignore rollback failures so the original error is preserved.
+    }
+    throw error;
+  }
+}

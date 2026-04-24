@@ -18,13 +18,15 @@ export function identificationDecision(context) {
   else if (confidence >= 0.8) recommendation = "needs_manual_review";
   else if (hasFront && !hasBack) recommendation = "requires_back_scan";
 
+  const clampedConfidence = Math.min(Math.max(confidence, 0.35), 0.98);
+
   return {
     decisionType: DECISION_TYPES.IDENTIFICATION,
     subjectType: context.subjectType,
     subjectId: context.subjectId,
     recommendation,
-    confidence: Math.min(Math.max(confidence, 0.35), 0.98),
-    explanation: `Current identification confidence is ${confidence.toFixed(2)} with ${hasBack ? "front and back" : "front only"} imagery.`,
+    confidence: clampedConfidence,
+    explanation: `Current identification confidence is ${clampedConfidence.toFixed(2)} with ${hasBack ? "front and back" : "front only"} imagery.`,
     suggestedAction: action(
       recommendation === "auto_accept_match"
         ? "accept_card_identity"
@@ -32,7 +34,7 @@ export function identificationDecision(context) {
           ? "prompt_back_scan"
           : "open_review_queue",
     ),
-    inputsUsed: { confidence, hasFront, hasBack },
+    inputsUsed: { confidence: clampedConfidence, hasFront, hasBack },
     createdAt: new Date().toISOString(),
   };
 }

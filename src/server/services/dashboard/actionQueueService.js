@@ -15,6 +15,8 @@ export function getActionQueue() {
     queue.push({
       queue: "ship_now",
       item: order.id,
+      itemId: order.id,
+      itemName: null,
       reason: `Order from ${order.platform} is awaiting fulfillment`,
       suggestedAction: "create_shipment",
       priorityScore: score({ base: 200, marketPrice: Number(order.sale_price || 0), urgency: 50 }),
@@ -27,6 +29,8 @@ export function getActionQueue() {
     queue.push({
       queue: "list_now",
       item: item.name,
+      itemId: item.id,
+      itemName: item.name,
       reason: "Inventory is not live yet",
       suggestedAction: "create_listing",
       priorityScore: score({ base: 120, marketPrice: Number(item.market_price || 0), blockedCash: 20 }),
@@ -40,6 +44,8 @@ export function getActionQueue() {
     queue.push({
       queue: "reprice_now",
       item: item.name,
+      itemId: item.item_id,
+      itemName: item.name,
       reason: `${item.age_days} days in inventory`,
       suggestedAction: "revise_listing_price",
       priorityScore: score({ base: 90, marketPrice: Number(item.market_price || 0), ageDays: item.age_days, risk: 15, marketMovement }),
@@ -52,6 +58,8 @@ export function getActionQueue() {
     queue.push({
       queue: "grade_now",
       item: item.name,
+      itemId: item.id,
+      itemName: item.name,
       reason: "Grade upside appears meaningful",
       suggestedAction: "move_to_grading_queue",
       priorityScore: score({ base: 80, marketPrice: Number(item.market_price || 0), blockedCash: 10 }),
@@ -64,6 +72,8 @@ export function getActionQueue() {
     queue.push({
       queue: "dead_inventory",
       item: item.name,
+      itemId: item.item_id,
+      itemName: item.name,
       reason: `Dead inventory risk after ${item.age_days} days`,
       suggestedAction: "mark_clearance",
       priorityScore: score({ base: 70, marketPrice: Number(item.market_price || 0), ageDays: item.age_days, risk: 25, blockedCash: Number(item.market_price || 0) * 0.2 }),
@@ -76,6 +86,8 @@ export function getActionQueue() {
     queue.push({
       queue: "bundle_low_value",
       item: item.name,
+      itemId: item.item_id,
+      itemName: item.name,
       reason: `Low-value card has been sitting ${item.age_days} days`,
       suggestedAction: "add_to_bundle_queue",
       priorityScore: score({ base: 65, marketPrice: Number(item.market_price || 0), ageDays: item.age_days, blockedCash: 15 }),
@@ -88,6 +100,8 @@ export function getActionQueue() {
     queue.push({
       queue: "high_value_unlisted",
       item: item.name,
+      itemId: item.id,
+      itemName: item.name,
       reason: "High-value inventory is not monetizing yet",
       suggestedAction: "create_listing",
       priorityScore: score({ base: 110, marketPrice: Number(item.market_price || 0), blockedCash: 30 }),
@@ -100,6 +114,8 @@ export function getActionQueue() {
     queue.push({
       queue: "orders_awaiting_payment",
       item: order.id,
+      itemId: order.id,
+      itemName: null,
       reason: `Awaiting payment from ${order.platform}`,
       suggestedAction: "review_order",
       priorityScore: score({ base: 60, marketPrice: Number(order.sale_price || 0), urgency: 20 }),
@@ -112,6 +128,8 @@ export function getActionQueue() {
     queue.push({
       queue: "review_alerts",
       item: alert.item_id,
+      itemId: alert.item_id,
+      itemName: null,
       reason: alert.alert_type,
       suggestedAction: alert.suggested_action || "review_alert",
       priorityScore: score({ base: alert.severity === "high" ? 95 : 55 }),

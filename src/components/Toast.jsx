@@ -3,7 +3,11 @@ import { createContext, useContext, useState, useCallback, useRef, useMemo } fro
 const ToastCtx = createContext(null);
 
 export function useToast() {
-  return useContext(ToastCtx);
+  const ctx = useContext(ToastCtx);
+  if (!ctx) {
+    throw new Error("useToast must be used within ToastProvider");
+  }
+  return ctx;
 }
 
 export function ToastProvider({ children }) {

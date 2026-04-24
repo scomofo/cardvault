@@ -18,8 +18,11 @@ export function escapeHtml(str) {
 
 export function download(content, filename, type = "text/csv") {
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([content], { type }));
+  const objectUrl = URL.createObjectURL(new Blob([content], { type }));
+  a.href = objectUrl;
   a.download = filename;
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(a.href);
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
 }

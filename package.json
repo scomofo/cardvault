@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:secure": "vite",
+    "setup:mac-iphone-https": "bash ./scripts/setup-macos-iphone-https.sh",
     "server": "node server.js",
+    "start:secure": "concurrently \"npm run server\" \"npm run dev:secure\"",
     "start": "concurrently \"npm run server\" \"npm run dev\"",
     "build": "vite build",
     "preview": "vite preview",

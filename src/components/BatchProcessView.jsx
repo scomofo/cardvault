@@ -84,8 +84,8 @@ export default function BatchProcessView({ queue, processing, processedCount, on
 
       {!processing && (
         <div className="flex gap-8">
-          <button className="btn btn-primary btn-lg flex-1" disabled={approved.length + done.length === 0} onClick={onSaveAll}>
-            <IconCheck size={14} /> Save {approved.length + done.length} Cards
+          <button className="btn btn-primary btn-lg flex-1" disabled={approved.length === 0} onClick={onSaveAll}>
+            <IconCheck size={14} /> Save {approved.length} Cards
           </button>
           <button className="btn btn-ghost btn-lg" onClick={onCancel}><IconX size={14} /></button>
         </div>

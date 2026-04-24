@@ -10,7 +10,10 @@ export function acquisitionDecision(context) {
   if (context.subjectType !== "purchase" || !context.purchase) return null;
 
   const ask = Number(context.purchase.total_cost || context.purchase.price || 0);
-  const estExit = Number(context.purchase.estimated_exit_value || ask * 1.2);
+  const estimatedExitValue = context.purchase.estimated_exit_value;
+  const estExit = estimatedExitValue == null || estimatedExitValue === ""
+    ? ask * 1.2
+    : Number(estimatedExitValue);
   const spread = estExit - ask;
 
   const recommendation =

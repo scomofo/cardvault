@@ -30,7 +30,7 @@ test("marketplace ecosystem routes publish crosspost sync and export listings", 
       PORT: String(port),
       CARDVAULT_DB_PATH: dbPath,
     },
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: "ignore",
   });
 
   t.after(async () => {

@@ -54,18 +54,6 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
       cancelled = true;
     };
   }, [detail?.id]);
-
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!detail?.id) { setDecisions([]); return undefined; }
-    setDecisionLoading(true);
-    decisionsAPI.evaluate({ subjectType: "inventory_item", subjectId: detail.id, persist: false })
-      .then((result) => { if (!cancelled) setDecisions(Array.isArray(result) ? result : []); })
-      .catch(() => { if (!cancelled) setDecisions([]); })
-      .finally(() => { if (!cancelled) setDecisionLoading(false); });
-    return () => { cancelled = true; };
-  }, [detail?.id]);
   const toggleListed = (id, platform) => {
     setCatalog((p) => p.map((c) => {
       if (c.id !== id) return c;
@@ -114,11 +102,7 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
 
   const doDelete = async () => {
     if (!window.confirm("Delete this card?")) return;
-    if (detail.frontImgId) await deleteImage(detail.frontImgId).catch(() => {});
-    if (detail.backImgId) await deleteImage(detail.backImgId).catch(() => {});
-    setCatalog((p) => p.filter((c) => c.id !== detail.id));
-    setDetailId(null); setView("list");
-    toast.info("Card deleted");
+    await onBack(detail.id);
   };
 
 
@@ -432,7 +416,7 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
           </div>
         )}
 
-        <button className="btn btn-danger btn-sm" onClick={() => onBack(detail.id)}><IconTrash size={14} /> Delete Card</button>
+        <button className="btn btn-danger btn-sm" onClick={doDelete}><IconTrash size={14} /> Delete Card</button>
       </div>
   );
 }

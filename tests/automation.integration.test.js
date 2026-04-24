@@ -33,7 +33,7 @@ test("automation routes handle identify-price, listing generation, aging reprici
       // stable pricing output without needing eBay credentials in CI.
       PRICING_SOURCE: "sportscardspro",
     },
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: "ignore",
   });
 
   t.after(async () => {

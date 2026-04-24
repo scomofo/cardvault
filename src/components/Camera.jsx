@@ -7,8 +7,17 @@ export default function Camera({ side, image, onCapture, onRetake, compact }) {
   const sRef = useRef(null);
   const [live, setLive] = useState(false);
   const [camError, setCamError] = useState(null);
+  const liveCameraSupported =
+    typeof window !== "undefined" &&
+    window.isSecureContext &&
+    !!navigator.mediaDevices?.getUserMedia;
 
   const start = useCallback(async () => {
+    if (!liveCameraSupported) {
+      setCamError("Live camera needs HTTPS or localhost on this device. Use Upload instead.");
+      return;
+    }
+
     try {
       setCamError(null);
       if (sRef.current) sRef.current.getTracks().forEach((t) => t.stop());
@@ -24,7 +33,7 @@ export default function Camera({ side, image, onCapture, onRetake, compact }) {
     } catch (e) {
       setCamError(e.name === "NotAllowedError" ? "Camera access denied" : "Camera unavailable");
     }
-  }, []);
+  }, [liveCameraSupported]);
 
   const stop = useCallback(() => {
     if (sRef.current) { sRef.current.getTracks().forEach((t) => t.stop()); sRef.current = null; }
@@ -69,7 +78,7 @@ export default function Camera({ side, image, onCapture, onRetake, compact }) {
       <span className="badge badge-dim" style={{ position: "absolute", top: 8, left: 8, fontSize: 9 }}>{side}</span>
       {live ? (
         <>
-          <video ref={vRef} style={{ width: "100%", maxHeight: mH, borderRadius: "var(--radius)", objectFit: "cover", background: "#000" }} playsInline muted />
+          <video ref={vRef} style={{ width: "100%", maxHeight: mH, borderRadius: "var(--radius)", objectFit: "cover", background: "#000" }} playsInline muted autoPlay />
           <canvas ref={cRef} style={{ display: "none" }} />
           <div className="flex gap-8 justify-center mt-8">
             <button onClick={snap} aria-label="Take photo" style={{ width: 48, height: 48, borderRadius: 2, border: "2px solid var(--acc)", background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transform: "rotate(45deg)" }}>
@@ -83,11 +92,14 @@ export default function Camera({ side, image, onCapture, onRetake, compact }) {
           <div style={{ fontSize: compact ? 28 : 40, opacity: .25, marginBottom: 8 }}>{side === "front" ? "\ud83c\udca0" : "\ud83c\udca1"}</div>
           <p className="text-xxs text-dim mb-8">{side}</p>
           {camError && <p className="text-xxs text-red mb-6">{camError}</p>}
+          {!liveCameraSupported && (
+            <p className="text-xxs text-dim mb-6">On iPhone over Wi-Fi, Upload will still open the rear camera.</p>
+          )}
           <div className="flex gap-8 justify-center">
             <button className="btn btn-primary btn-sm" onClick={start}><IconCamera size={14} /> Camera</button>
             <label className="btn btn-outline btn-sm" style={{ cursor: "pointer" }}>
               <IconUpload size={14} /> Upload
-              <input type="file" accept="image/*" onChange={upload} style={{ display: "none" }} />
+              <input type="file" accept="image/*" capture="environment" onChange={upload} style={{ display: "none" }} />
             </label>
           </div>
         </div>
