@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, useEffect } from "react";
 import { useToast } from "./Toast";
 import { useData } from "../lib/DataContext";
+import { apiPath } from "../lib/apiBase";
 import { fmtShort } from "../lib/utils";
 import { automationAPI, marketplacesAPI } from "../lib/api";
 import { createBackupPayload, normalizeBackupState } from "../lib/backupState";
@@ -16,14 +17,14 @@ function ApiKeySection() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch("/api/ai/status").then((r) => r.json()).then(setStatus).catch(() => {});
+    fetch(apiPath("/ai/status")).then((r) => r.json()).then(setStatus).catch(() => {});
   }, []);
 
   const saveKey = async () => {
     if (!keyInput.trim()) return;
     setSaving(true);
     try {
-      const r = await fetch("/api/ai/key", {
+      const r = await fetch(apiPath("/ai/key"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ key: keyInput.trim() }),
@@ -101,14 +102,14 @@ function EbayConnectionSection() {
   const callbackUrl = `${window.location.origin}/api/ebay/callback`;
 
   useEffect(() => {
-    fetch("/api/ebay/status").then((r) => r.json()).then(setStatus).catch(() => {});
+    fetch(apiPath("/ebay/status")).then((r) => r.json()).then(setStatus).catch(() => {});
   }, []);
 
   const saveCreds = async () => {
     if (!creds.appId || !creds.certId || !creds.ruName) { toast.error("App ID, Cert ID, and RuName are required"); return; }
     setSaving(true);
     try {
-      const r = await fetch("/api/ebay/credentials", {
+      const r = await fetch(apiPath("/ebay/credentials"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -125,11 +126,11 @@ function EbayConnectionSection() {
     setSaving(false);
   };
 
-  const authorize = () => { window.location.href = "/api/ebay/auth"; };
+  const authorize = () => { window.location.href = apiPath("/ebay/auth"); };
 
   const disconnect = async () => {
     if (!window.confirm("Disconnect eBay?")) return;
-    await fetch("/api/ebay/disconnect", { method: "POST" }).catch(() => {});
+    await fetch(apiPath("/ebay/disconnect"), { method: "POST" }).catch(() => {});
     setStatus({ configured: true, connected: false, sandbox: status.sandbox });
     toast.info("eBay disconnected");
   };

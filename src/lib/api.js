@@ -1,4 +1,4 @@
-const API = import.meta.env.VITE_API_BASE || "/api";
+import { API_BASE, apiPath } from "./apiBase";
 
 async function request(path, options = {}) {
   const { method = "GET", body } = options;
@@ -8,7 +8,7 @@ async function request(path, options = {}) {
   };
   if (body) opts.body = JSON.stringify(body);
 
-  const res = await fetch(`${API}${path}`, opts);
+  const res = await fetch(apiPath(path), opts);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error || `API error ${res.status}`);
@@ -190,7 +190,7 @@ export const refAPI = {
 // Check if backend is available
 export async function checkBackend() {
   try {
-    const res = await fetch(`${API}/settings`, {
+    const res = await fetch(apiPath("/settings"), {
       signal: AbortSignal.timeout(2000),
     });
     return res.ok;
