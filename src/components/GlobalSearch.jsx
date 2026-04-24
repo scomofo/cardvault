@@ -45,7 +45,7 @@ function matchScore(item, query) {
 }
 
 export default function GlobalSearch({ onNavigate }) {
-  const { catalog, sales, listings, purchases, watchlist, trades } = useData();
+  const { catalog, sales, orders, listings, purchases, watchlist, trades } = useData();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const inputRef = useRef(null);
@@ -102,6 +102,18 @@ export default function GlobalSearch({ onNavigate }) {
       if (sc > 0) all.push({ type: "sale", item: s, score: sc });
     });
 
+    // Orders
+    orders.forEach((o) => {
+      const sc = matchScore({
+        name: o.cardName || o.card_name || o.externalOrderId || o.external_order_id || "Order",
+        set: o.cardSet || o.card_set,
+        platform: o.platform,
+        seller: o.buyerHandle || o.buyer_handle,
+        number: o.externalOrderId || o.external_order_id || o.id,
+      }, query);
+      if (sc > 0) all.push({ type: "order", item: o, score: sc });
+    });
+
     // Listings
     listings.forEach((l) => {
       const sc = matchScore({ name: l.cardName, set: l.cardSet || l.set, number: l.cardNumber, platform: l.platform }, query);
@@ -128,7 +140,7 @@ export default function GlobalSearch({ onNavigate }) {
 
     all.sort((a, b) => b.score - a.score);
     return all.slice(0, MAX_RESULTS);
-  }, [query, catalog, sales, listings, purchases, watchlist, trades]);
+  }, [query, catalog, sales, orders, listings, purchases, watchlist, trades]);
 
   const handleSelect = useCallback((result) => {
     setOpen(false);
@@ -138,6 +150,7 @@ export default function GlobalSearch({ onNavigate }) {
         onNavigate("cards");
         break;
       case "sale":
+      case "order":
       case "listing":
         onNavigate("sales");
         break;
@@ -151,8 +164,8 @@ export default function GlobalSearch({ onNavigate }) {
     }
   }, [onNavigate]);
 
-  const typeLabel = { card: "Card", sale: "Sale", listing: "Listing", purchase: "Purchase", watch: "Watchlist", trade: "Trade" };
-  const typeColor = { card: "var(--acc)", sale: "var(--grn)", listing: "var(--blue)", purchase: "var(--orange)", watch: "var(--purple)", trade: "var(--teal)" };
+  const typeLabel = { card: "Card", sale: "Sale", order: "Order", listing: "Listing", purchase: "Purchase", watch: "Watchlist", trade: "Trade" };
+  const typeColor = { card: "var(--acc)", sale: "var(--grn)", order: "var(--gold)", listing: "var(--blue)", purchase: "var(--orange)", watch: "var(--purple)", trade: "var(--teal)" };
 
   if (!open) {
     return (
@@ -258,6 +271,7 @@ export default function GlobalSearch({ onNavigate }) {
                 <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {r.type === "card" && r.item.name}
                   {r.type === "sale" && r.item.cardName}
+                  {r.type === "order" && (r.item.cardName || r.item.card_name || r.item.externalOrderId || r.item.external_order_id || "Order")}
                   {r.type === "listing" && r.item.cardName}
                   {r.type === "purchase" && r.item.name}
                   {r.type === "watch" && r.item.name}
@@ -266,6 +280,7 @@ export default function GlobalSearch({ onNavigate }) {
                 <div style={{ fontSize: 10, color: "var(--dim)", marginTop: 2 }}>
                   {r.type === "card" && [r.item.set, r.item.number && `#${r.item.number}`, condOf(r.item.condition).s].filter(Boolean).join(" \u00b7 ")}
                   {r.type === "sale" && `${r.item.platform} \u00b7 ${fmtShort(r.item.salePrice)}`}
+                  {r.type === "order" && [r.item.platform, r.item.fulfillmentStatus || r.item.fulfillment_status, r.item.buyerHandle || r.item.buyer_handle].filter(Boolean).join(" \u00b7 ")}
                   {r.type === "listing" && `${r.item.platform} \u00b7 ${r.item.status}`}
                   {r.type === "purchase" && `${r.item.platform} \u00b7 ${fmtShort(r.item.totalCost || r.item.price)}`}
                   {r.type === "watch" && [r.item.set || r.item.cardSet, r.item.targetPrice && `Target: ${fmtShort(r.item.targetPrice)}`].filter(Boolean).join(" \u00b7 ")}
@@ -291,7 +306,7 @@ export default function GlobalSearch({ onNavigate }) {
         {/* Footer hint */}
         {!query && (
           <div style={{ padding: "12px 16px", fontSize: 11, color: "var(--dim)", borderTop: "1px solid var(--brd)" }}>
-            Search across your entire collection — cards, sales, listings, purchases, watchlist, and trades
+            Search across your entire collection — cards, sales, orders, listings, purchases, watchlist, and trades
           </div>
         )}
       </div>
