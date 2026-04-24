@@ -4,7 +4,7 @@ import { useData } from "../lib/DataContext";
 import { PLATFORMS } from "../lib/constants";
 import { uid, fmtShort } from "../lib/utils";
 import { actionQueueAPI, marketplacesAPI, ordersAPI, automationAPI, purchasesAPI, itemsAPI } from "../lib/api";
-import { importEbayPurchasesLocal } from "../lib/ebayPurchaseImport";
+import { importEbayPurchasesLocal, parseEbayPurchaseImport } from "../lib/ebayPurchaseImport";
 import { requestNotificationPermission, canNotify, sendNotification, scheduleAuctionNotification, cancelNotificationTimer } from "../lib/notifications";
 import { IconPlus, IconBell, IconCheck, IconX, Spinner } from "./Icons";
 import EbayExport from "./EbayExport";
@@ -50,6 +50,8 @@ export default function SalesFlow() {
   const [addToCollection, setAddToCollection] = useState(true);
   const [importToCollection, setImportToCollection] = useState(true);
   const [importBusy, setImportBusy] = useState(false);
+  const [selectedImportFile, setSelectedImportFile] = useState(null);
+  const [importPreview, setImportPreview] = useState(null);
   const [newPurchase, setNewPurchase] = useState({
     name: "", set: "", platform: "ebay", price: "", shipping: "", seller: "", date: "", notes: "",
   });
@@ -176,11 +178,11 @@ export default function SalesFlow() {
     toast.success(`Purchase logged: ${purchase.name}`);
   };
 
-  const importEbayPurchases = async (file) => {
-    if (!file) return;
+  const importEbayPurchases = async () => {
+    if (!selectedImportFile) return;
     setImportBusy(true);
     try {
-      const csv = await file.text();
+      const csv = await selectedImportFile.text();
       let summary;
       if (useServer) {
         summary = await purchasesAPI.importEbayCsv({
@@ -203,6 +205,8 @@ export default function SalesFlow() {
         }
       }
       setShowImport(false);
+      setSelectedImportFile(null);
+      setImportPreview(null);
       toast.success(
         `Imported ${summary.importedPurchases} purchase${summary.importedPurchases === 1 ? "" : "s"}`
         + (summary.importedItems ? ` and ${summary.importedItems} item${summary.importedItems === 1 ? "" : "s"}` : "")
@@ -212,6 +216,21 @@ export default function SalesFlow() {
       toast.error(error.message || "Failed to import eBay purchases");
     } finally {
       setImportBusy(false);
+    }
+  };
+
+  const previewImportFile = async (file) => {
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = parseEbayPurchaseImport(text);
+      setSelectedImportFile(file);
+      setImportPreview(parsed);
+      if (parsed.normalizedRows.length === 0) {
+        toast.error("No importable purchase rows found in that file");
+      }
+    } catch (error) {
+      toast.error(error.message || "Failed to read import file");
     }
   };
 
@@ -382,14 +401,68 @@ export default function SalesFlow() {
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) {
-                importEbayPurchases(file);
+                previewImportFile(file);
               }
               e.target.value = "";
             }}
           />
           <div className="text-xxs text-dim mt-6">
-            Best results if the CSV includes columns like item title, order number, seller, item subtotal, shipping, total, quantity, and paid date.
+            Best results if the file includes columns like item title, order number, seller, item subtotal, shipping, total, quantity, and paid date.
           </div>
+          {selectedImportFile && (
+            <div className="text-xs mt-8">
+              Selected file: <strong>{selectedImportFile.name}</strong>
+            </div>
+          )}
+          {importPreview && (
+            <div className="mt-8" style={{ background: "var(--s2)", borderRadius: "var(--radius)", padding: 12 }}>
+              <div className="text-xs fw-700 mb-6">Import Preview</div>
+              <div className="text-xxs text-dim">
+                Parsed rows: {importPreview.parsedRows.length}
+                {" · "}
+                Importable rows: {importPreview.normalizedRows.length}
+                {" · "}
+                Skipped invalid: {importPreview.skippedInvalid}
+              </div>
+              {importPreview.normalizedRows.length > 0 && (
+                <div className="mt-8" style={{ display: "grid", gap: 8 }}>
+                  {importPreview.normalizedRows.slice(0, 5).map((row, index) => (
+                    <div key={`${row.externalOrderId || row.title}-${index}`} style={{ padding: 8, background: "var(--s1)", borderRadius: 8 }}>
+                      <div className="text-xs fw-700">{row.title}</div>
+                      <div className="text-xxs text-dim">
+                        {[row.cardSet, row.seller && `from ${row.seller}`, row.externalOrderId, row.date].filter(Boolean).join(" · ")}
+                      </div>
+                      <div className="text-xxs mt-4">
+                        Qty {row.quantity} · Total {fmtShort(row.totalCost)}
+                      </div>
+                    </div>
+                  ))}
+                  {importPreview.normalizedRows.length > 5 && (
+                    <div className="text-xxs text-dim">Showing 5 of {importPreview.normalizedRows.length} importable rows</div>
+                  )}
+                </div>
+              )}
+              <div className="flex gap-8 mt-8">
+                <button
+                  className="btn btn-primary btn-sm"
+                  disabled={importBusy || importPreview.normalizedRows.length === 0}
+                  onClick={importEbayPurchases}
+                >
+                  {importBusy ? <Spinner size={12} /> : <IconUpload size={12} />} Confirm Import
+                </button>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  disabled={importBusy}
+                  onClick={() => {
+                    setSelectedImportFile(null);
+                    setImportPreview(null);
+                  }}
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+          )}
           {importBusy && <div className="text-xs mt-8">Importing...</div>}
         </div>
       )}
