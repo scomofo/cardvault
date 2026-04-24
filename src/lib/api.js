@@ -110,7 +110,10 @@ export const automationAPI = {
 };
 
 export const marketplacesAPI = {
-  list: () => request("/marketplaces"),
+  list: async () => {
+    const payload = await request("/marketplaces");
+    return Array.isArray(payload?.marketplaces) ? payload.marketplaces : [];
+  },
   connections: () => request("/marketplace-connections"),
   connect: (data) => request("/marketplace-connections", { method: "POST", body: data }),
   publish: (data) => request("/marketplaces/publish", { method: "POST", body: data }),

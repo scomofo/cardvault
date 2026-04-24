@@ -1,4 +1,6 @@
 import { all, get, run } from "../database.js";
+import { MARKETPLACE_CONNECTION_FIELD_MAP } from "../mappers/fieldMaps.js";
+import { toCamel, toCamelArray } from "../mappers/recordMappers.js";
 import { requireJsonBody } from "../validation/common.js";
 import { uid } from "./shared.js";
 import { listSupportedMarketplaces } from "../integrations/marketplaces/marketplaceRegistry.js";
@@ -12,13 +14,31 @@ import { syncMarketplaceListings } from "../services/marketplaces/syncService.js
 import { exportListingsForMarketplace } from "../services/exports/marketplaceCsvExporter.js";
 
 export function registerMarketplaceRoutes(app) {
+  const connectionSelect = `
+    SELECT
+      id,
+      marketplace,
+      account_label,
+      auth_status,
+      token_expires_at,
+      metadata,
+      created_at,
+      updated_at
+    FROM marketplace_connections
+  `;
+
   app.get("/api/marketplaces", (_req, res) => {
     res.json({ marketplaces: listSupportedMarketplaces() });
   });
 
   app.get("/api/marketplace-connections", (_req, res) => {
     try {
-      res.json(all(`SELECT * FROM marketplace_connections ORDER BY updated_at DESC, created_at DESC`));
+      res.json(
+        toCamelArray(
+          all(`${connectionSelect} ORDER BY updated_at DESC, created_at DESC`),
+          MARKETPLACE_CONNECTION_FIELD_MAP,
+        ),
+      );
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -26,16 +46,19 @@ export function registerMarketplaceRoutes(app) {
 
   app.post("/api/marketplace-connections", requireJsonBody, (req, res) => {
     try {
-      const { marketplace, accountLabel, authStatus = "connected", metadata } = req.body;
+      const { marketplace, accountLabel, authStatus = "connected", metadata, shopName } = req.body;
       if (!marketplace) return res.status(400).json({ error: "marketplace required" });
+      const resolvedAccountLabel = accountLabel || shopName || marketplace;
       const id = uid();
       run(
         `INSERT INTO marketplace_connections
          (id, marketplace, account_label, auth_status, metadata, created_at, updated_at)
          VALUES (?,?,?,?,?,datetime('now'),datetime('now'))`,
-        [id, marketplace, accountLabel || marketplace, authStatus, JSON.stringify(metadata || {})],
+        [id, marketplace, resolvedAccountLabel, authStatus, JSON.stringify(metadata || {})],
       );
-      res.status(201).json(get(`SELECT * FROM marketplace_connections WHERE id = ?`, [id]));
+      res.status(201).json(
+        toCamel(get(`${connectionSelect} WHERE id = ?`, [id]), MARKETPLACE_CONNECTION_FIELD_MAP),
+      );
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

@@ -11,7 +11,7 @@ export function toCamel(row, map) {
   for (const [key, value] of Object.entries(row)) {
     const camelKey = map[key] || key;
     if (
-      ["listedOn", "priceEstimate", "priceHistory", "itemSpecifics", "shippingProfile"].includes(camelKey) &&
+      ["listedOn", "priceEstimate", "priceHistory", "itemSpecifics", "shippingProfile", "metadata"].includes(camelKey) &&
       typeof value === "string"
     ) {
       try {

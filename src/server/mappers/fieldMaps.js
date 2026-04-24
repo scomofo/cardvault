@@ -69,6 +69,14 @@ export const PURCHASE_FIELD_MAP = {
   created_at: "createdAt",
 };
 
+export const MARKETPLACE_CONNECTION_FIELD_MAP = {
+  account_label: "accountLabel",
+  auth_status: "authStatus",
+  token_expires_at: "tokenExpiresAt",
+  created_at: "createdAt",
+  updated_at: "updatedAt",
+};
+
 export const ORDER_FIELD_MAP = {
   sale_id: "saleId",
   listing_id: "listingId",

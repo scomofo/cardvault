@@ -257,9 +257,11 @@ function MarketplaceConnectionsSection() {
           <div key={conn.id || i} className="flex justify-between items-center mt-6" style={{ padding: "8px 12px", background: "var(--s3)", borderRadius: "var(--radius)" }}>
             <div>
               <span className="text-xs fw-700" style={{ textTransform: "capitalize" }}>{conn.marketplace}</span>
-              {conn.shop_name && <span className="text-xxs text-dim ml-8">{conn.shop_name}</span>}
+              {conn.accountLabel && <span className="text-xxs text-dim ml-8">{conn.accountLabel}</span>}
             </div>
-            <span className="badge badge-grn"><IconCheck size={10} /> Connected</span>
+            <span className={`badge ${conn.authStatus === "connected" ? "badge-grn" : "badge-dim"}`}>
+              <IconCheck size={10} /> {conn.authStatus || "connected"}
+            </span>
           </div>
         ))
       )}
