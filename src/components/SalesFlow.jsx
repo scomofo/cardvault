@@ -4,6 +4,7 @@ import { useData } from "../lib/DataContext";
 import { PLATFORMS } from "../lib/constants";
 import { uid, fmtShort } from "../lib/utils";
 import { actionQueueAPI, marketplacesAPI, ordersAPI, automationAPI, purchasesAPI, itemsAPI } from "../lib/api";
+import { importEbayPurchasesLocal } from "../lib/ebayPurchaseImport";
 import { requestNotificationPermission, canNotify, sendNotification, scheduleAuctionNotification, cancelNotificationTimer } from "../lib/notifications";
 import { IconPlus, IconBell, IconCheck, IconX, Spinner } from "./Icons";
 import EbayExport from "./EbayExport";
@@ -177,24 +178,30 @@ export default function SalesFlow() {
 
   const importEbayPurchases = async (file) => {
     if (!file) return;
-    if (!useServer) {
-      toast.error("eBay CSV import currently requires the backend server mode");
-      return;
-    }
-
     setImportBusy(true);
     try {
       const csv = await file.text();
-      const summary = await purchasesAPI.importEbayCsv({
-        csv,
-        addToInventory: importToCollection,
-      });
-      const [nextPurchases, nextCatalog] = await Promise.all([
-        purchasesAPI.list(),
-        itemsAPI.list(),
-      ]);
-      setPurchases(Array.isArray(nextPurchases) ? nextPurchases : []);
-      setCatalog(Array.isArray(nextCatalog) ? nextCatalog : []);
+      let summary;
+      if (useServer) {
+        summary = await purchasesAPI.importEbayCsv({
+          csv,
+          addToInventory: importToCollection,
+        });
+        const [nextPurchases, nextCatalog] = await Promise.all([
+          purchasesAPI.list(),
+          itemsAPI.list(),
+        ]);
+        setPurchases(Array.isArray(nextPurchases) ? nextPurchases : []);
+        setCatalog(Array.isArray(nextCatalog) ? nextCatalog : []);
+      } else {
+        summary = importEbayPurchasesLocal(csv, purchases, {
+          addToInventory: importToCollection,
+        });
+        setPurchases((prev) => [...summary.purchases, ...prev]);
+        if (importToCollection && summary.items.length > 0) {
+          setCatalog((prev) => [...summary.items, ...prev]);
+        }
+      }
       setShowImport(false);
       toast.success(
         `Imported ${summary.importedPurchases} purchase${summary.importedPurchases === 1 ? "" : "s"}`
@@ -362,11 +369,7 @@ export default function SalesFlow() {
           <div className="text-xs text-dim mt-6">
             Upload a CSV exported from your eBay purchase history. CardVault will import purchases and can also create inventory items from each row.
           </div>
-          {!useServer && (
-            <div className="text-xs mt-8" style={{ color: "var(--red)" }}>
-              Backend server mode is required for CSV import.
-            </div>
-          )}
+          {!useServer && <div className="text-xs mt-8" style={{ color: "var(--acc)" }}>Local mode import is supported too.</div>}
           <label className="flex items-center gap-8 mt-8" style={{ cursor: "pointer" }}>
             <input type="checkbox" checked={importToCollection} onChange={(e) => setImportToCollection(e.target.checked)} />
             <span className="text-xs">Also create inventory items from imported purchases</span>
@@ -375,7 +378,7 @@ export default function SalesFlow() {
             className="inp mt-8"
             type="file"
             accept=".csv,text/csv"
-            disabled={importBusy || !useServer}
+            disabled={importBusy}
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) {
@@ -569,7 +572,7 @@ export default function SalesFlow() {
               <div className="flex justify-between">
                 <div>
                   <strong className="text-sm">{p.name}</strong>
-                  <div className="text-xxs text-dim">{p.set} &middot; {PLATFORMS.find((x) => x.v === p.platform)?.l} {p.seller && `from ${p.seller}`}</div>
+                  <div className="text-xxs text-dim">{p.cardSet || p.set} &middot; {PLATFORMS.find((x) => x.v === p.platform)?.l} {p.seller && `from ${p.seller}`}</div>
                 </div>
                 <div style={{ textAlign: "right" }}>
                   <div className="fw-800 text-acc" style={{ fontSize: 16 }}>{fmtShort(p.totalCost)}</div>
