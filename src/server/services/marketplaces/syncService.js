@@ -2,6 +2,7 @@ import { all, get, run, runInImmediateTransaction } from "../../database.js";
 import { uid } from "../../routes/shared.js";
 import { getMarketplaceAdapter, listSupportedMarketplaces } from "../../integrations/marketplaces/marketplaceRegistry.js";
 import { reconcileSyncResult } from "./syncReconciler.js";
+import { refreshListingAggregateState } from "./listingAggregateState.js";
 
 function validateSyncInputs(marketplace, listingId) {
   if (typeof marketplace !== "string" || !marketplace.trim()) {
@@ -60,6 +61,23 @@ function insertSyncedSale(listing, channel, synced) {
   }
 
   return get(`SELECT * FROM sales WHERE id = ?`, [saleId]);
+}
+
+function markItemSoldFromMarketplaceSync(listing, sale, synced) {
+  if (synced.status !== "sold" || !listing.card_id) return;
+
+  const profitRealized = Number(sale?.net_profit ?? sale?.payout_amount ?? sale?.sale_price ?? 0);
+  run(
+    `UPDATE user_items
+     SET status = 'sold',
+         listing_status = 'ended',
+         sale_status = 'sold',
+         profit_realized = ?,
+         sold_at = ?,
+         updated_at = datetime('now')
+     WHERE id = ?`,
+    [profitRealized, synced.syncedAt, listing.card_id],
+  );
 }
 
 /**
@@ -146,12 +164,16 @@ export async function syncMarketplaceListings(marketplace, listingId = null) {
       );
       run(
         `UPDATE listings
-         SET publish_status = ?, last_sync_at = ?, status = CASE WHEN ? = 'sold' THEN 'sold' ELSE status END
+         SET last_sync_at = ?
          WHERE id = ?`,
-        [synced.status, synced.syncedAt, synced.status, listing.id],
+        [synced.syncedAt, listing.id],
       );
 
-      return insertSyncedSale(listing, channel, synced);
+      refreshListingAggregateState(listing.id, { syncedAt: synced.syncedAt });
+
+      const sale = insertSyncedSale(listing, channel, synced);
+      markItemSoldFromMarketplaceSync(listing, sale, synced);
+      return sale;
     });
     results.push({ channelId: channel.id, synced, sale, reconciliation });
   }

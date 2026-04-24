@@ -74,6 +74,7 @@ export const LISTING_FIELD_MAP = {
   image_count: "imageCount",
   automation_state: "automationState",
   pricing_strategy: "pricingStrategy",
+  publish_status: "publishStatus",
   start_price: "startPrice",
   buy_now_price: "buyNowPrice",
   auction_end_date: "auctionEndDate",

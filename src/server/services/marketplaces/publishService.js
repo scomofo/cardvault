@@ -1,6 +1,7 @@
 import { get, run } from "../../database.js";
 import { uid } from "../../routes/shared.js";
 import { getMarketplaceAdapter } from "../../integrations/marketplaces/marketplaceRegistry.js";
+import { refreshListingAggregateState } from "./listingAggregateState.js";
 
 function upsertChannel({ listingId, marketplace, connectionId, externalListingId, status, payload, publishError }) {
   const existing = get(
@@ -93,19 +94,7 @@ export async function publishListingToMarketplace(listingId, marketplace, option
     payload: result.payload,
   });
   addChannelEvent(channelId, "publish", result.status, result);
-
-  run(
-    `UPDATE listings
-     SET publish_status = ?, external_listing_id = ?, last_sync_at = ?, status = ?, notes = COALESCE(notes, notes)
-     WHERE id = ?`,
-    [
-      result.status,
-      marketplace === listing.platform ? result.externalListingId : listing.external_listing_id,
-      result.syncedAt,
-      "active",
-      listingId,
-    ],
-  );
+  refreshListingAggregateState(listingId, { syncedAt: result.syncedAt });
 
   return get(`SELECT * FROM listing_channels WHERE id = ?`, [channelId]);
 }
@@ -123,13 +112,8 @@ export async function reviseListingOnMarketplace(listingId, marketplace, overrid
     payload: result.payload,
   });
   addChannelEvent(channelId, "revise", result.status, result);
-
-  run(
-    `UPDATE listings
-     SET publish_status = ?, last_sync_at = ?, publish_error = NULL
-     WHERE id = ?`,
-    [result.status, result.syncedAt, listingId],
-  );
+  refreshListingAggregateState(listingId, { syncedAt: result.syncedAt });
+  run(`UPDATE listings SET publish_error = NULL WHERE id = ?`, [listingId]);
 
   return get(`SELECT * FROM listing_channels WHERE id = ?`, [channelId]);
 }
@@ -147,13 +131,7 @@ export async function endListingOnMarketplace(listingId, marketplace) {
     payload: result.payload,
   });
   addChannelEvent(channelId, "end", result.status, result);
-
-  run(
-    `UPDATE listings
-     SET publish_status = ?, status = 'ended', last_sync_at = ?
-     WHERE id = ?`,
-    [result.status, result.syncedAt, listingId],
-  );
+  refreshListingAggregateState(listingId, { syncedAt: result.syncedAt });
 
   return get(`SELECT * FROM listing_channels WHERE id = ?`, [channelId]);
 }

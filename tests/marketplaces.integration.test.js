@@ -279,3 +279,201 @@ test("crossposting does not overwrite the primary marketplace external id", asyn
   assert.equal(channelsPayload.listing.external_listing_id, ebayChannel.external_listing_id);
   assert.notEqual(channelsPayload.listing.external_listing_id, shopifyChannel.external_listing_id);
 });
+
+test("ending one marketplace channel does not mark a still-crossposted listing as ended", async (t) => {
+  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-marketplaces-end-"));
+  const dbPath = join(tempDir, "cardvault-test.db");
+  const port = 4400 + Math.floor(Math.random() * 300);
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  const server = spawn(process.execPath, ["server.js"], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      PORT: String(port),
+      CARDVAULT_DB_PATH: dbPath,
+    },
+    stdio: "ignore",
+  });
+
+  t.after(async () => {
+    if (!server.killed) {
+      server.kill("SIGTERM");
+    }
+    await new Promise((resolve) => server.once("exit", resolve));
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  await waitForServer(baseUrl);
+
+  await fetch(`${baseUrl}/api/items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "channel-end-item",
+      name: "Jarome Iginla",
+      set: "Topps",
+      listedOn: [],
+      priceHistory: [],
+      marketPrice: 25,
+      suggestedListingPrice: 29.99,
+    }),
+  });
+
+  const listingResponse = await fetch(`${baseUrl}/api/listings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "channel-end-listing",
+      cardId: "channel-end-item",
+      cardName: "Jarome Iginla",
+      cardSet: "Topps",
+      platform: "ebay",
+      listingTitle: "Jarome Iginla card",
+      listingDescription: "Crossposted listing should remain active",
+      startPrice: 29.99,
+      status: "draft",
+    }),
+  });
+  assert.equal(listingResponse.status, 201);
+
+  const publishResponse = await fetch(`${baseUrl}/api/marketplaces/publish`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ listingId: "channel-end-listing", marketplace: "ebay" }),
+  });
+  assert.equal(publishResponse.status, 200);
+
+  const crosspostResponse = await fetch(`${baseUrl}/api/marketplaces/crosspost`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ listingId: "channel-end-listing", marketplaces: ["shopify"] }),
+  });
+  assert.equal(crosspostResponse.status, 200);
+
+  const endResponse = await fetch(`${baseUrl}/api/marketplaces/end`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ listingId: "channel-end-listing", marketplace: "ebay" }),
+  });
+  assert.equal(endResponse.status, 200);
+
+  const listingsResponse = await fetch(`${baseUrl}/api/listings`);
+  assert.equal(listingsResponse.status, 200);
+  const listingsPayload = await listingsResponse.json();
+  const listing = listingsPayload.find((entry) => entry.id === "channel-end-listing");
+
+  assert.ok(listing);
+  assert.equal(listing.status, "active");
+  assert.equal(listing.publishStatus, "active");
+
+  const channelsResponse = await fetch(`${baseUrl}/api/marketplaces/listings/channel-end-listing/channels`);
+  assert.equal(channelsResponse.status, 200);
+  const channelsPayload = await channelsResponse.json();
+  const ebayChannel = channelsPayload.channels.find((channel) => channel.marketplace === "ebay");
+  const shopifyChannel = channelsPayload.channels.find((channel) => channel.marketplace === "shopify");
+
+  assert.equal(ebayChannel.status, "ended");
+  assert.equal(shopifyChannel.status, "active");
+});
+
+test("marketplace sold sync updates the underlying item sale state", async (t) => {
+  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-marketplaces-sold-"));
+  const dbPath = join(tempDir, "cardvault-test.db");
+  const port = 4700 + Math.floor(Math.random() * 300);
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  const server = spawn(process.execPath, ["server.js"], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      PORT: String(port),
+      CARDVAULT_DB_PATH: dbPath,
+    },
+    stdio: "ignore",
+  });
+
+  t.after(async () => {
+    if (!server.killed) {
+      server.kill("SIGTERM");
+    }
+    await new Promise((resolve) => server.once("exit", resolve));
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  await waitForServer(baseUrl);
+
+  await fetch(`${baseUrl}/api/items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "sync-sold-item",
+      name: "Connor McDavid",
+      set: "Upper Deck",
+      listedOn: [],
+      priceHistory: [],
+      marketPrice: 150,
+      suggestedListingPrice: 159.99,
+      costBasis: 40,
+    }),
+  });
+
+  const listingResponse = await fetch(`${baseUrl}/api/listings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "sync-sold-listing",
+      cardId: "sync-sold-item",
+      cardName: "Connor McDavid",
+      cardSet: "Upper Deck",
+      platform: "ebay",
+      listingTitle: "Connor McDavid card",
+      listingDescription: "Should sync into sold inventory state",
+      startPrice: 159.99,
+      status: "active",
+    }),
+  });
+  assert.equal(listingResponse.status, 201);
+
+  const publishResponse = await fetch(`${baseUrl}/api/marketplaces/publish`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ listingId: "sync-sold-listing", marketplace: "ebay" }),
+  });
+  assert.equal(publishResponse.status, 200);
+
+  const updateListingResponse = await fetch(`${baseUrl}/api/listings/sync-sold-listing`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "sync-sold-listing",
+      cardId: "sync-sold-item",
+      cardName: "Connor McDavid",
+      cardSet: "Upper Deck",
+      platform: "ebay",
+      listingTitle: "Connor McDavid card",
+      listingDescription: "Should sync into sold inventory state",
+      startPrice: 159.99,
+      soldPrice: 159.99,
+      status: "active",
+    }),
+  });
+  assert.equal(updateListingResponse.status, 200);
+
+  const syncResponse = await fetch(`${baseUrl}/api/marketplaces/sync`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ marketplace: "ebay", listingId: "sync-sold-listing" }),
+  });
+  assert.equal(syncResponse.status, 200);
+
+  const itemsResponse = await fetch(`${baseUrl}/api/items`);
+  assert.equal(itemsResponse.status, 200);
+  const itemsPayload = await itemsResponse.json();
+  const item = itemsPayload.find((entry) => entry.id === "sync-sold-item");
+
+  assert.ok(item);
+  assert.equal(item.status, "sold");
+  assert.equal(item.saleStatus, "sold");
+  assert.equal(item.listingStatus, "ended");
+});
