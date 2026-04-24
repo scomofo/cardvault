@@ -70,6 +70,10 @@ test("marketplace sold sync preserves buyer and destination metadata from the ad
       payload: {
         buyerHandle: "buyer_99",
         externalOrderId: "EBAY-ORDER-123",
+        salePrice: 132.5,
+        shippingCharge: 12,
+        taxCollected: 7.5,
+        payoutAmount: 140,
         shippingAddress: {
           countryCode: "US",
           postalCode: "90210",
@@ -88,8 +92,14 @@ test("marketplace sold sync preserves buyer and destination metadata from the ad
     assert.ok(sale);
     assert.ok(order);
     assert.equal(sale.buyer_handle, "buyer_99");
+    assert.equal(sale.sale_price, 132.5);
+    assert.equal(sale.tax_collected, 7.5);
+    assert.equal(sale.payout_amount, 140);
     assert.equal(order.buyer_handle, "buyer_99");
     assert.equal(order.external_order_id, "EBAY-ORDER-123");
+    assert.equal(order.sale_price, 132.5);
+    assert.equal(order.shipping_charge, 12);
+    assert.equal(order.tax_collected, 7.5);
     assert.equal(order.destination_country, "US");
     assert.equal(order.destination_postal_code, "90210");
   } finally {

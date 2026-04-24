@@ -28,6 +28,12 @@ function firstDefined(...values) {
   return values.find((value) => value != null && value !== "");
 }
 
+function toNumberOrNull(value) {
+  if (value == null || value === "") return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
 function normalizeCountry(value) {
   if (typeof value !== "string" || !value.trim()) return null;
   return value.trim().toUpperCase();
@@ -81,13 +87,38 @@ function extractMarketplaceOrderMetadata(synced) {
       address.postal_code,
       address.zip,
     )),
+    salePrice: toNumberOrNull(firstDefined(
+      payload.salePrice,
+      payload.sale_price,
+      payload.total,
+    )),
+    shippingCharge: toNumberOrNull(firstDefined(
+      payload.shippingCharge,
+      payload.shipping_charge,
+      payload.deliveryCost,
+      payload.delivery_cost,
+    )),
+    taxCollected: toNumberOrNull(firstDefined(
+      payload.taxCollected,
+      payload.tax_collected,
+      payload.tax,
+    )),
+    payoutAmount: toNumberOrNull(firstDefined(
+      payload.payoutAmount,
+      payload.payout_amount,
+      payload.totalDueSeller,
+      payload.total_due_seller,
+    )),
   };
 }
 
 function insertSyncedSale(listing, channel, synced, metadata) {
   if (!listing.sold_price && synced.status !== "sold") return null;
   const saleId = uid();
-  const salePrice = Number(listing.sold_price || listing.start_price || 0);
+  const salePrice = Number(metadata.salePrice ?? listing.sold_price ?? listing.start_price ?? 0);
+  const shippingCost = Number(listing.shipping || 0);
+  const taxCollected = Number(metadata.taxCollected ?? 0);
+  const payoutAmount = Number(metadata.payoutAmount ?? salePrice);
   const inserted = run(
     `INSERT INTO sales
      (id, card_id, order_id, card_name, card_set, sale_price, cost_basis, platform, buyer_handle, fees, shipping_cost, packaging_cost, grading_cost, tax_collected, payout_amount, net_profit, listing_id, date)
@@ -104,12 +135,12 @@ function insertSyncedSale(listing, channel, synced, metadata) {
       channel.marketplace,
       metadata.buyerHandle,
       0,
-      listing.shipping || 0,
+      shippingCost,
       0,
       0,
-      0,
-      salePrice,
-      salePrice - Number(listing.shipping || 0),
+      taxCollected,
+      payoutAmount,
+      payoutAmount - shippingCost,
       listing.id,
       synced.syncedAt,
       listing.id,
@@ -150,10 +181,10 @@ function ensureOrderForSyncedSale(listing, sale, synced, metadata) {
       sale.platform || synced.marketplace || null,
       metadata.externalOrderId,
       metadata.buyerHandle || sale.buyer_handle || null,
-      sale.sale_price || 0,
+      metadata.salePrice ?? sale.sale_price ?? 0,
       sale.fees || 0,
-      sale.shipping_cost || 0,
-      sale.tax_collected || 0,
+      metadata.shippingCharge ?? 0,
+      metadata.taxCollected ?? sale.tax_collected ?? 0,
       metadata.destinationCountry || "CA",
       metadata.destinationPostalCode,
       "paid",

@@ -82,6 +82,12 @@ export class EbayAdapter extends MarketplaceAdapter {
     return `CV-${listing.id}`;
   }
 
+  readAmountValue(amountLike) {
+    const value = amountLike?.value ?? amountLike;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : null;
+  }
+
   findMatchingLineItem(order, listing) {
     const itemId = String(listing.external_listing_id || listing.externalListingId || "");
     const sku = this.buildListingSku(listing);
@@ -97,12 +103,44 @@ export class EbayAdapter extends MarketplaceAdapter {
     return shipTo || buyerAddress || null;
   }
 
+  computeLineItemTax(lineItem) {
+    if (!Array.isArray(lineItem?.taxes)) return null;
+    const values = lineItem.taxes
+      .map((tax) => this.readAmountValue(tax?.amount))
+      .filter((value) => value != null);
+    if (values.length === 0) return null;
+    return values.reduce((sum, value) => sum + value, 0);
+  }
+
+  extractFinancials(order, lineItem) {
+    return {
+      salePrice:
+        this.readAmountValue(lineItem?.total) ??
+        this.readAmountValue(order?.pricingSummary?.total) ??
+        this.readAmountValue(order?.pricingSummary?.priceSubtotal),
+      shippingCharge:
+        this.readAmountValue(lineItem?.deliveryCost?.shippingCost) ??
+        this.readAmountValue(order?.pricingSummary?.deliveryCost),
+      taxCollected:
+        this.computeLineItemTax(lineItem) ??
+        this.readAmountValue(order?.pricingSummary?.tax),
+      payoutAmount:
+        this.readAmountValue(order?.paymentSummary?.totalDueSeller) ??
+        this.readAmountValue(order?.paymentSummary?.payments?.[0]?.amount),
+    };
+  }
+
   buildSoldPayload(order, lineItem) {
     const shippingAddress = this.extractShippingAddress(order);
+    const financials = this.extractFinancials(order, lineItem);
     return {
       orderId: order?.orderId || null,
       externalOrderId: order?.orderId || null,
       buyerHandle: order?.buyer?.username || order?.buyer?.userId || null,
+      salePrice: financials.salePrice,
+      shippingCharge: financials.shippingCharge,
+      taxCollected: financials.taxCollected,
+      payoutAmount: financials.payoutAmount,
       shippingAddress: shippingAddress
         ? {
             countryCode: shippingAddress.countryCode || null,
