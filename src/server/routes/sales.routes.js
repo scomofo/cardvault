@@ -21,11 +21,22 @@ export function registerSalesRoutes(app) {
     try {
       const body = toSnake(req.body);
       const id = body.id || uid();
-      const linkedListingId = body.listing_id || null;
-      const linkedCardId = body.card_id || get(
+      const linkedOrderId = body.order_id || null;
+      const linkedOrder = linkedOrderId
+        ? get(
+          `SELECT id, item_id, listing_id, sale_price, sold_at
+           FROM orders
+           WHERE id = ?`,
+          [linkedOrderId],
+        )
+        : null;
+      const linkedListingId = body.listing_id || linkedOrder?.listing_id || null;
+      const linkedCardId = body.card_id || linkedOrder?.item_id || get(
         "SELECT card_id FROM listings WHERE id = ?",
         [linkedListingId],
       )?.card_id || null;
+      const saleDate = body.date || linkedOrder?.sold_at || new Date().toISOString();
+      const salePrice = body.sale_price ?? linkedOrder?.sale_price ?? 0;
       run(
         `INSERT INTO sales (id, card_id, order_id, card_name, card_set, sale_price,
          cost_basis, platform, buyer_handle, fees, shipping_cost, packaging_cost,
@@ -34,10 +45,10 @@ export function registerSalesRoutes(app) {
         [
           id,
           linkedCardId,
-          body.order_id,
+          linkedOrderId,
           body.card_name,
           body.card_set,
-          body.sale_price,
+          salePrice,
           body.cost_basis || 0,
           body.platform,
           body.buyer_handle,
@@ -48,27 +59,27 @@ export function registerSalesRoutes(app) {
           body.tax_collected || 0,
           body.payout_amount || 0,
           body.net_profit || 0,
-          body.listing_id,
-          body.date || new Date().toISOString(),
+          linkedListingId,
+          saleDate,
         ],
       );
-      if (body.order_id) {
+      if (linkedOrderId) {
         run(
           `UPDATE orders
            SET sale_id = COALESCE(sale_id, ?)
            WHERE id = ?`,
-          [id, body.order_id],
+          [id, linkedOrderId],
         );
       }
-      if (body.listing_id) {
+      if (linkedListingId) {
         run(
           `UPDATE listings
            SET status = 'sold',
                publish_status = 'sold',
-               sold_price = COALESCE(sold_price, ?),
-               sold_date = COALESCE(sold_date, ?)
-           WHERE id = ?`,
-          [body.sale_price || 0, body.date || new Date().toISOString(), body.listing_id],
+                sold_price = COALESCE(sold_price, ?),
+                sold_date = COALESCE(sold_date, ?)
+            WHERE id = ?`,
+          [salePrice, saleDate, linkedListingId],
         );
       }
       if (linkedCardId) {
@@ -82,9 +93,9 @@ export function registerSalesRoutes(app) {
                updated_at = datetime('now')
             WHERE id = ?`,
           [
-            body.listing_id || null,
+            linkedListingId,
             body.net_profit || 0,
-            body.date || new Date().toISOString(),
+            saleDate,
             linkedCardId,
           ],
         );

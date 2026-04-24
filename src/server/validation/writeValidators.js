@@ -106,7 +106,8 @@ export function validateSalePayload(req, res, next) {
       () => validateNumberLike(body.netProfit ?? body.net_profit, "netProfit"),
     ]) || (salePrice == null || salePrice === "" ? "sale_price required" : null)
     || (!body.cardId && !body.card_id && !body.listingId && !body.listing_id
-      ? "card_id or listing_id required"
+      && !body.orderId && !body.order_id
+      ? "card_id, listing_id, or order_id required"
       : null);
 
   if (error) return sendValidationError(res, error);
