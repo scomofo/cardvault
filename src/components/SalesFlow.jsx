@@ -3,7 +3,7 @@ import { useToast } from "./Toast";
 import { useData } from "../lib/DataContext";
 import { PLATFORMS } from "../lib/constants";
 import { uid, fmtShort } from "../lib/utils";
-import { actionQueueAPI, marketplacesAPI, ordersAPI, automationAPI, purchasesAPI, itemsAPI } from "../lib/api";
+import { actionQueueAPI, marketplacesAPI, ordersAPI, listingsAPI, automationAPI, purchasesAPI, itemsAPI } from "../lib/api";
 import { importEbayPurchasesLocal, parseEbayPurchaseImport } from "../lib/ebayPurchaseImport";
 import { requestNotificationPermission, canNotify, sendNotification, scheduleAuctionNotification, cancelNotificationTimer } from "../lib/notifications";
 import { IconPlus, IconBell, IconCheck, IconX, Spinner } from "./Icons";
@@ -253,6 +253,18 @@ export default function SalesFlow() {
     ordersAPI.list().then((data) => setOrders(Array.isArray(data) ? data : [])).catch(() => setOrders([]));
   }, [catalog.length, listings.length, sales.length]);
 
+  const refreshServerSalesState = async () => {
+    if (!useServer) return;
+    const [nextActionQueue, nextOrders, nextListings] = await Promise.all([
+      actionQueueAPI.list().catch(() => []),
+      ordersAPI.list().catch(() => []),
+      listingsAPI.list().catch(() => []),
+    ]);
+    setActionQueue(Array.isArray(nextActionQueue) ? nextActionQueue : []);
+    setOrders(Array.isArray(nextOrders) ? nextOrders : []);
+    setListings(Array.isArray(nextListings) ? nextListings : []);
+  };
+
   const publishListing = async (listingId, marketplace = "ebay") => {
     try {
       setBusyListingId(listingId);
@@ -269,6 +281,7 @@ export default function SalesFlow() {
             : listing,
         ),
       );
+      await refreshServerSalesState();
       toast.success(`Published to ${marketplace}`);
     } catch (error) {
       toast.error(error.message);
@@ -281,6 +294,7 @@ export default function SalesFlow() {
     try {
       setBusyListingId(listingId);
       await marketplacesAPI.sync({ marketplace, listingId });
+      await refreshServerSalesState();
       toast.success(`Synced ${marketplace} status`);
     } catch (error) {
       toast.error(error.message);
@@ -293,6 +307,7 @@ export default function SalesFlow() {
     try {
       setBusyListingId(listingId);
       await marketplacesAPI.crosspost({ listingId, marketplaces: ["ebay", "comc", "shopify"] });
+      await refreshServerSalesState();
       toast.success("Cross-post plan created");
     } catch (error) {
       toast.error(error.message);
@@ -305,9 +320,8 @@ export default function SalesFlow() {
     try {
       setShippingBusy(orderId);
       const result = await automationAPI.automateShipment(orderId, {});
+      await refreshServerSalesState();
       toast.success("Shipping automated: " + (result.trackingNumber || "label created"));
-      // Refresh orders
-      ordersAPI.list().then((data) => setOrders(Array.isArray(data) ? data : [])).catch(() => {});
     } catch (e) {
       toast.error("Shipping failed: " + e.message);
     } finally {
