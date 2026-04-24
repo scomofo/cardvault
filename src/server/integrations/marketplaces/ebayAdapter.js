@@ -82,6 +82,14 @@ export class EbayAdapter extends MarketplaceAdapter {
     return `CV-${listing.id}`;
   }
 
+  buildOrderSearchFilter(listing) {
+    const createdAt = Date.parse(listing.created_at || listing.createdAt || "");
+    const now = Date.now();
+    const fallbackStart = now - (1000 * 60 * 60 * 24 * 90);
+    const startTime = Number.isFinite(createdAt) ? createdAt : fallbackStart;
+    return `creationdate:[${new Date(startTime).toISOString()}..]`;
+  }
+
   readAmountValue(amountLike) {
     const value = amountLike?.value ?? amountLike;
     const numeric = Number(value);
@@ -160,9 +168,10 @@ export class EbayAdapter extends MarketplaceAdapter {
     if (!itemId) return null;
 
     const limit = 200;
+    const filter = this.buildOrderSearchFilter(listing);
     let offset = 0;
     while (true) {
-      const response = await getOrders({ limit, offset });
+      const response = await getOrders({ limit, offset, filter });
       const orders = Array.isArray(response?.orders) ? response.orders : [];
       const match = orders.find((order) => this.findMatchingLineItem(order, listing));
       if (match) return match;

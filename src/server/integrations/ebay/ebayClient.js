@@ -85,10 +85,13 @@ export async function fulfillmentApiCall(method, path) {
 }
 
 /** @returns {Promise<{ orders?: object[], total?: number, next?: string }>} */
-export async function getOrders({ limit = 200, offset = 0 } = {}) {
+export async function getOrders({ limit = 200, offset = 0, filter = null } = {}) {
   const params = new URLSearchParams();
   params.set("limit", String(limit));
   params.set("offset", String(offset));
+  if (filter) {
+    params.set("filter", filter);
+  }
   return fulfillmentApiCall("GET", `/order?${params.toString()}`);
 }
 

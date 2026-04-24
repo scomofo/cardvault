@@ -164,3 +164,26 @@ test("eBay adapter sync keeps paging fulfillment orders until it finds a match",
     adapter.fetchRemoteOrderForListing = originalGetOrders;
   }
 });
+
+test("eBay adapter search filter starts from the listing creation date", () => {
+  const adapter = new EbayAdapter();
+  const filter = adapter.buildOrderSearchFilter({
+    created_at: "2024-01-15T12:34:56.000Z",
+  });
+
+  assert.equal(filter, "creationdate:[2024-01-15T12:34:56.000Z..]");
+});
+
+test("eBay adapter search filter falls back to a recent window when listing date is missing", () => {
+  const adapter = new EbayAdapter();
+  const before = Date.now();
+  const filter = adapter.buildOrderSearchFilter({});
+  const after = Date.now();
+
+  assert.match(filter, /^creationdate:\[[0-9TZ:.\-]+..\]$/);
+  const isoStart = filter.slice("creationdate:[".length, -3);
+  const parsed = Date.parse(isoStart);
+  const ninetyDaysMs = 1000 * 60 * 60 * 24 * 90;
+  assert.ok(parsed >= before - ninetyDaysMs - 2000);
+  assert.ok(parsed <= after - ninetyDaysMs + 2000);
+});
