@@ -4,6 +4,7 @@ import { useData } from "../lib/DataContext";
 import { fmtShort } from "../lib/utils";
 import { automationAPI, marketplacesAPI } from "../lib/api";
 import { genSalesCSV } from "../lib/exports";
+import { clearAllImages, exportAllImages, importAllImages } from "../lib/storage";
 import { IconDownload, IconUpload, IconTrash, IconBarChart, IconCheck, IconEye, IconZap, IconPlus, Spinner } from "./Icons";
 
 function ApiKeySection() {
@@ -338,7 +339,7 @@ export default function Settings() {
     }
   };
 
-  const clearAll = () => {
+  const clearAll = async () => {
     if (!window.confirm("Delete ALL data? This cannot be undone.")) return;
     setCatalog([]);
     setSales([]);
@@ -354,14 +355,12 @@ export default function Settings() {
       if (key && key.startsWith("cv8_")) keysToRemove.push(key);
     }
     keysToRemove.forEach((k) => localStorage.removeItem(k));
-    try {
-      const req = indexedDB.open("cardvault", 1);
-      req.onsuccess = () => { const db = req.result; if (db.objectStoreNames.contains("images")) { const tx = db.transaction("images", "readwrite"); tx.objectStore("images").clear(); } db.close(); };
-    } catch { /* ignore */ }
+    await clearAllImages().catch(() => {});
     toast.info("All data cleared");
   };
 
-  const backupData = () => {
+  const backupData = async () => {
+    const images = await exportAllImages().catch(() => ({}));
     const data = {
       _cardvaultBackup: true,
       _date: new Date().toISOString(),
@@ -375,6 +374,7 @@ export default function Settings() {
       gradings,
       userName,
       shipFrom,
+      images,
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -386,11 +386,12 @@ export default function Settings() {
   const restoreData = (e) => {
     const file = e.target.files?.[0]; if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       try {
         const data = JSON.parse(reader.result);
         if (!data._cardvaultBackup) { toast.error("Not a valid CardVault backup file"); return; }
         if (!window.confirm("Restore backup? This will replace all current data.")) return;
+        await importAllImages(data.images || {}).catch(() => {});
         if (Array.isArray(data.catalog)) setCatalog(data.catalog);
         if (Array.isArray(data.sales)) setSales(data.sales);
         if (Array.isArray(data.orders)) setOrders(data.orders);
@@ -522,7 +523,7 @@ export default function Settings() {
           <button className="btn btn-outline btn-sm" onClick={() => restoreRef.current?.click()}><IconUpload size={12} /> Restore</button>
           <input ref={restoreRef} type="file" accept=".json" style={{ display: "none" }} onChange={restoreData} />
         </div>
-        <div className="text-xxs text-dim mt-6">Backup exports all app data as JSON. Restore replaces current data.</div>
+        <div className="text-xxs text-dim mt-6">Backup exports app data and scanned images as JSON. Restore replaces current data.</div>
       </div>
 
       <div className="card" style={{ borderColor: "var(--red-brd)" }}>

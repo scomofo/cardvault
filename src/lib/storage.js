@@ -84,6 +84,40 @@ export async function clearAllImages() {
   });
 }
 
+export async function exportAllImages() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IMG_STORE, "readonly");
+    const store = tx.objectStore(IMG_STORE);
+    const images = {};
+    const req = store.openCursor();
+    req.onsuccess = () => {
+      const cursor = req.result;
+      if (!cursor) return;
+      images[cursor.key] = cursor.value;
+      cursor.continue();
+    };
+    tx.oncomplete = () => resolve(images);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function importAllImages(images = {}) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IMG_STORE, "readwrite");
+    const store = tx.objectStore(IMG_STORE);
+    store.clear();
+    Object.entries(images).forEach(([id, dataUrl]) => {
+      if (id && dataUrl) {
+        store.put(dataUrl, id);
+      }
+    });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 // Structured data in localStorage with versioning
 const SCHEMA_VERSION = 1;
 
