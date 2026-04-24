@@ -218,11 +218,11 @@ export function registerMigrationRoutes(app) {
             run(
               `INSERT OR IGNORE INTO listings
                (id,card_id,external_listing_id,card_name,card_set,card_number,platform,
-                listing_title,listing_description,category_path,item_specifics,shipping_profile,
+               listing_title,listing_description,category_path,item_specifics,shipping_profile,
                 image_count,automation_state,pricing_strategy,format,start_price,buy_now_price,
-                auction_end_date,shipping,shipping_weight_oz,export_batch_id,current_bid,status,
-                publish_status,sold_price,sold_date,notes,created_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+                auction_end_date,shipping,shipping_weight_oz,export_batch_id,current_bid,quantity,status,
+                publish_status,publish_error,last_sync_at,sold_price,sold_date,notes,created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
               [
                 listing.id,
                 firstDefined(listing.cardId, listing.card_id),
@@ -247,8 +247,11 @@ export function registerMigrationRoutes(app) {
                 firstDefined(listing.shippingWeightOz, listing.shipping_weight_oz, 0),
                 firstDefined(listing.exportBatchId, listing.export_batch_id),
                 firstDefined(listing.currentBid, listing.current_bid),
+                firstDefined(listing.quantity, 1),
                 listing.status ?? "active",
                 firstDefined(listing.publishStatus, listing.publish_status, listing.status ?? "active"),
+                firstDefined(listing.publishError, listing.publish_error),
+                firstDefined(listing.lastSyncAt, listing.last_sync_at),
                 firstDefined(listing.soldPrice, listing.sold_price),
                 firstDefined(listing.soldDate, listing.sold_date),
                 listing.notes,

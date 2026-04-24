@@ -206,7 +206,10 @@ export const LISTING_FIELD_MAP = {
   shipping_weight_oz: "shippingWeightOz",
   export_batch_id: "exportBatchId",
   current_bid: "currentBid",
+  quantity: "quantity",
   sold_price: "soldPrice",
   sold_date: "soldDate",
+  publish_error: "publishError",
+  last_sync_at: "lastSyncAt",
   created_at: "createdAt",
 };

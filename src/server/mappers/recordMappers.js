@@ -241,6 +241,14 @@ export function toSnake(body) {
     output.current_bid = output.currentBid;
     delete output.currentBid;
   }
+  if ("publishError" in output) {
+    output.publish_error = output.publishError;
+    delete output.publishError;
+  }
+  if ("lastSyncAt" in output) {
+    output.last_sync_at = output.lastSyncAt;
+    delete output.lastSyncAt;
+  }
   if ("soldPrice" in output) {
     output.sold_price = output.soldPrice;
     delete output.soldPrice;

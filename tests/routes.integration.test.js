@@ -248,8 +248,11 @@ test("server routes handle validation, migration, and listing side effects", asy
           shippingWeightOz: 4,
           exportBatchId: "batch-rich",
           currentBid: 0,
+          quantity: 3,
           status: "active",
           publishStatus: "revised",
+          publishError: "sync warning",
+          lastSyncAt: "2026-04-24T12:00:00.000Z",
           soldPrice: null,
           soldDate: null,
           notes: "rich listing note",
@@ -292,9 +295,16 @@ test("server routes handle validation, migration, and listing side effects", asy
       format: "fixed",
       startPrice: 12.5,
       shipping: 1.25,
+      quantity: 2,
+      publishError: "pending sync",
+      lastSyncAt: "2026-04-24T13:00:00.000Z",
     }),
   });
   assert.equal(createdListingResponse.status, 201);
+  const createdListingPayload = await createdListingResponse.json();
+  assert.equal(createdListingPayload.quantity, 2);
+  assert.equal(createdListingPayload.publishError, "pending sync");
+  assert.equal(createdListingPayload.lastSyncAt, "2026-04-24T13:00:00.000Z");
 
   const itemResponse = await fetch(`${baseUrl}/api/items/route-item`);
   assert.equal(itemResponse.status, 200);
@@ -349,7 +359,10 @@ test("server routes handle validation, migration, and listing side effects", asy
   assert.equal(migratedRichListing.buyNowPrice, 34.99);
   assert.equal(migratedRichListing.shippingWeightOz, 4);
   assert.equal(migratedRichListing.exportBatchId, "batch-rich");
+  assert.equal(migratedRichListing.quantity, 3);
   assert.equal(migratedRichListing.publishStatus, "revised");
+  assert.equal(migratedRichListing.publishError, "sync warning");
+  assert.equal(migratedRichListing.lastSyncAt, "2026-04-24T12:00:00.000Z");
 
   const draftItemResponse = await fetch(`${baseUrl}/api/items`, {
     method: "POST",

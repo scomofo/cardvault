@@ -116,8 +116,8 @@ export function registerListingRoutes(app) {
         `INSERT INTO listings (id, card_id, external_listing_id, card_name, card_set, card_number,
          platform, listing_title, listing_description, category_path, item_specifics, shipping_profile,
          image_count, automation_state, pricing_strategy, format, start_price, buy_now_price, auction_end_date,
-         shipping, shipping_weight_oz, export_batch_id, current_bid, status, publish_status, sold_price, sold_date, notes)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         shipping, shipping_weight_oz, export_batch_id, current_bid, quantity, status, publish_status, publish_error, last_sync_at, sold_price, sold_date, notes)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           id,
           body.card_id,
@@ -142,8 +142,11 @@ export function registerListingRoutes(app) {
           body.shipping_weight_oz || 0,
           body.export_batch_id,
           body.current_bid,
+          body.quantity ?? 1,
           normalizedStatus || "active",
           derivePublishStatus(normalizedStatus || "active", body.publish_status || "active"),
+          body.publish_error || null,
+          body.last_sync_at || null,
           normalizedStatus === "sold" ? (body.sold_price ?? null) : null,
           normalizedStatus === "sold" ? (body.sold_date || null) : null,
           body.notes,
@@ -179,7 +182,7 @@ export function registerListingRoutes(app) {
         `UPDATE listings SET card_id=?, external_listing_id=?, card_name=?, card_set=?, card_number=?,
          platform=?, listing_title=?, listing_description=?, category_path=?, item_specifics=?, shipping_profile=?,
          image_count=?, automation_state=?, pricing_strategy=?, format=?, start_price=?, buy_now_price=?, auction_end_date=?,
-         shipping=?, shipping_weight_oz=?, export_batch_id=?, current_bid=?, status=?, publish_status=?, sold_price=?, sold_date=?, notes=?
+         shipping=?, shipping_weight_oz=?, export_batch_id=?, current_bid=?, quantity=?, status=?, publish_status=?, publish_error=?, last_sync_at=?, sold_price=?, sold_date=?, notes=?
          WHERE id=?`,
         [
           body.card_id,
@@ -204,8 +207,11 @@ export function registerListingRoutes(app) {
           body.shipping_weight_oz,
           body.export_batch_id,
           body.current_bid,
+          body.quantity,
           normalizedStatus,
           nextPublishStatus,
+          body.publish_error,
+          body.last_sync_at,
           nextSoldPrice,
           nextSoldDate,
           body.notes,
