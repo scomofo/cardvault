@@ -24,7 +24,67 @@ function validateSyncInputs(marketplace, listingId) {
   };
 }
 
-function insertSyncedSale(listing, channel, synced) {
+function firstDefined(...values) {
+  return values.find((value) => value != null && value !== "");
+}
+
+function normalizeCountry(value) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  return value.trim().toUpperCase();
+}
+
+function normalizePostalCode(value) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  return value.trim();
+}
+
+function extractMarketplaceOrderMetadata(synced) {
+  const payload = synced?.payload && typeof synced.payload === "object" ? synced.payload : {};
+  const shippingAddress = payload.shippingAddress && typeof payload.shippingAddress === "object" ? payload.shippingAddress : {};
+  const address = payload.address && typeof payload.address === "object" ? payload.address : {};
+  const buyer = payload.buyer && typeof payload.buyer === "object" ? payload.buyer : {};
+
+  return {
+    externalOrderId: firstDefined(
+      payload.externalOrderId,
+      payload.external_order_id,
+      payload.orderId,
+      payload.order_id,
+      buyer.orderId,
+      buyer.order_id,
+    ) || null,
+    buyerHandle: firstDefined(
+      payload.buyerHandle,
+      payload.buyer_handle,
+      buyer.username,
+      buyer.userId,
+      buyer.user_id,
+      buyer.handle,
+    ) || null,
+    destinationCountry: normalizeCountry(firstDefined(
+      payload.destinationCountry,
+      payload.destination_country,
+      shippingAddress.countryCode,
+      shippingAddress.country_code,
+      shippingAddress.country,
+      address.countryCode,
+      address.country_code,
+      address.country,
+    )),
+    destinationPostalCode: normalizePostalCode(firstDefined(
+      payload.destinationPostalCode,
+      payload.destination_postal_code,
+      shippingAddress.postalCode,
+      shippingAddress.postal_code,
+      shippingAddress.zip,
+      address.postalCode,
+      address.postal_code,
+      address.zip,
+    )),
+  };
+}
+
+function insertSyncedSale(listing, channel, synced, metadata) {
   if (!listing.sold_price && synced.status !== "sold") return null;
   const saleId = uid();
   const salePrice = Number(listing.sold_price || listing.start_price || 0);
@@ -42,7 +102,7 @@ function insertSyncedSale(listing, channel, synced) {
       salePrice,
       0,
       channel.marketplace,
-      null,
+      metadata.buyerHandle,
       0,
       listing.shipping || 0,
       0,
@@ -63,7 +123,7 @@ function insertSyncedSale(listing, channel, synced) {
   return get(`SELECT * FROM sales WHERE id = ?`, [saleId]);
 }
 
-function ensureOrderForSyncedSale(listing, sale, synced) {
+function ensureOrderForSyncedSale(listing, sale, synced, metadata) {
   if (synced.status !== "sold" || !sale) return null;
 
   const existing = get(
@@ -88,14 +148,14 @@ function ensureOrderForSyncedSale(listing, sale, synced) {
       listing.id,
       listing.card_id || null,
       sale.platform || synced.marketplace || null,
-      null,
-      sale.buyer_handle || null,
+      metadata.externalOrderId,
+      metadata.buyerHandle || sale.buyer_handle || null,
       sale.sale_price || 0,
       sale.fees || 0,
       sale.shipping_cost || 0,
       sale.tax_collected || 0,
-      "CA",
-      null,
+      metadata.destinationCountry || "CA",
+      metadata.destinationPostalCode,
       "paid",
       "pending",
       sale.date || synced.syncedAt,
@@ -213,8 +273,9 @@ export async function syncMarketplaceListings(marketplace, listingId = null) {
 
       refreshListingAggregateState(listing.id, { syncedAt: synced.syncedAt });
 
-      const sale = insertSyncedSale(listing, channel, synced);
-      const order = ensureOrderForSyncedSale(listing, sale, synced);
+      const metadata = extractMarketplaceOrderMetadata(synced);
+      const sale = insertSyncedSale(listing, channel, synced, metadata);
+      const order = ensureOrderForSyncedSale(listing, sale, synced, metadata);
       markItemSoldFromMarketplaceSync(listing, sale, synced);
       return { sale, order };
     });
