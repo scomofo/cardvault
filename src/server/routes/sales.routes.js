@@ -21,6 +21,11 @@ export function registerSalesRoutes(app) {
     try {
       const body = toSnake(req.body);
       const id = body.id || uid();
+      const linkedListingId = body.listing_id || null;
+      const linkedCardId = body.card_id || get(
+        "SELECT card_id FROM listings WHERE id = ?",
+        [linkedListingId],
+      )?.card_id || null;
       run(
         `INSERT INTO sales (id, card_id, order_id, card_name, card_set, sale_price,
          cost_basis, platform, buyer_handle, fees, shipping_cost, packaging_cost,
@@ -28,7 +33,7 @@ export function registerSalesRoutes(app) {
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           id,
-          body.card_id,
+          linkedCardId,
           body.order_id,
           body.card_name,
           body.card_set,
@@ -66,7 +71,7 @@ export function registerSalesRoutes(app) {
           [body.sale_price || 0, body.date || new Date().toISOString(), body.listing_id],
         );
       }
-      if (body.card_id) {
+      if (linkedCardId) {
         run(
           `UPDATE user_items
            SET status = 'sold',
@@ -75,8 +80,13 @@ export function registerSalesRoutes(app) {
                profit_realized = ?,
                sold_at = ?,
                updated_at = datetime('now')
-           WHERE id = ?`,
-          [body.listing_id || null, body.net_profit || 0, body.date || new Date().toISOString(), body.card_id],
+            WHERE id = ?`,
+          [
+            body.listing_id || null,
+            body.net_profit || 0,
+            body.date || new Date().toISOString(),
+            linkedCardId,
+          ],
         );
       }
       res

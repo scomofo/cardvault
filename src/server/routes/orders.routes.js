@@ -45,6 +45,11 @@ export function registerOrderRoutes(app) {
         if (err) return sendValidationError(res, err);
       }
       const id = body.id || uid();
+      const linkedListingId = body.listingId || body.listing_id || null;
+      const linkedItemId = body.itemId || body.item_id || get(
+        "SELECT card_id FROM listings WHERE id = ?",
+        [linkedListingId],
+      )?.card_id || null;
       run(
         `INSERT INTO orders
          (id, sale_id, listing_id, item_id, platform, external_order_id, buyer_handle, sale_price, fees, shipping_charge, tax_collected, destination_country, destination_postal_code, payment_status, fulfillment_status, sold_at, created_at)
@@ -52,8 +57,8 @@ export function registerOrderRoutes(app) {
         [
           id,
           body.saleId || body.sale_id || null,
-          body.listingId || body.listing_id || null,
-          body.itemId || body.item_id || null,
+          linkedListingId,
+          linkedItemId,
           body.platform,
           body.externalOrderId || body.external_order_id || null,
           body.buyerHandle || body.buyer_handle || null,
@@ -91,7 +96,7 @@ export function registerOrderRoutes(app) {
           ],
         );
       }
-      if (body.itemId || body.item_id) {
+      if (linkedItemId) {
         run(
           `UPDATE user_items
            SET status = 'sold',
@@ -99,11 +104,11 @@ export function registerOrderRoutes(app) {
                sale_status = 'sold',
                sold_at = COALESCE(?, sold_at),
                updated_at = datetime('now')
-           WHERE id = ?`,
+            WHERE id = ?`,
           [
-            body.listingId || body.listing_id || null,
+            linkedListingId,
             body.soldAt || body.sold_at || new Date().toISOString(),
-            body.itemId || body.item_id,
+            linkedItemId,
           ],
         );
       }
