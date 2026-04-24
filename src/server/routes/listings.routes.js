@@ -39,6 +39,14 @@ function deriveOpenItemState(cardId) {
   };
 }
 
+function derivePublishStatus(status, fallback = null) {
+  const normalized = String(status || "").toLowerCase();
+  if (["draft", "active", "revised", "ended", "sold"].includes(normalized)) {
+    return normalized;
+  }
+  return fallback;
+}
+
 export function registerListingRoutes(app) {
   app.get("/api/listings", (req, res) => {
     try {
@@ -91,7 +99,7 @@ export function registerListingRoutes(app) {
           body.export_batch_id,
           body.current_bid,
           body.status || "active",
-          body.publish_status || body.status || "active",
+          derivePublishStatus(body.status || "active", body.publish_status || "active"),
           body.sold_price ?? null,
           body.sold_date || null,
           body.notes,
@@ -117,6 +125,34 @@ export function registerListingRoutes(app) {
                AND id != ?
                AND status = 'sold'`,
             [body.card_id, id],
+          )?.count || 0;
+          if (siblingSoldCount === 0) {
+            const itemState = deriveOpenItemState(body.card_id);
+            run(
+              `UPDATE user_items
+               SET status = ?,
+                   listing_status = ?,
+                   sale_status = ?,
+                   sold_at = ?,
+                   updated_at = datetime('now')
+               WHERE id = ?`,
+              [
+                itemState.status,
+                itemState.listingStatus,
+                itemState.saleStatus,
+                itemState.soldAt,
+                body.card_id,
+              ],
+            );
+          }
+        } else {
+          const siblingSoldCount = get(
+            `SELECT COUNT(*) AS count
+             FROM listings
+             WHERE card_id = ?
+               AND id != ?
+               AND status = 'sold'`,
+            [body.card_id, req.params.id],
           )?.count || 0;
           if (siblingSoldCount === 0) {
             const itemState = deriveOpenItemState(body.card_id);
@@ -184,7 +220,7 @@ export function registerListingRoutes(app) {
           body.export_batch_id,
           body.current_bid,
           body.status,
-          body.status === "sold" ? "sold" : body.publish_status,
+          derivePublishStatus(body.status, body.publish_status),
           body.sold_price,
           body.sold_date,
           body.notes,

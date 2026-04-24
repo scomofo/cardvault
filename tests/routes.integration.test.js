@@ -156,6 +156,56 @@ test("server routes handle validation, migration, and listing side effects", asy
   assert.equal(draftedItemPayload.listingStatus, "draft");
   assert.equal(draftedItemPayload.saleStatus, "available");
 
+  const activateDraftListingResponse = await fetch(`${baseUrl}/api/listings/draft-route-listing`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "draft-route-listing",
+      cardId: "draft-route-item",
+      cardName: "Draft Route Card",
+      cardSet: "Route Set",
+      cardNumber: "0",
+      platform: "ebay",
+      format: "fixed",
+      startPrice: 10.5,
+      shipping: 1.25,
+      status: "active",
+    }),
+  });
+  assert.equal(activateDraftListingResponse.status, 200);
+
+  const activeDraftItemResponse = await fetch(`${baseUrl}/api/items/draft-route-item`);
+  assert.equal(activeDraftItemResponse.status, 200);
+  const activeDraftItemPayload = await activeDraftItemResponse.json();
+  assert.equal(activeDraftItemPayload.listingStatus, "listed");
+
+  const redraftListingResponse = await fetch(`${baseUrl}/api/listings/draft-route-listing`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "draft-route-listing",
+      cardId: "draft-route-item",
+      cardName: "Draft Route Card",
+      cardSet: "Route Set",
+      cardNumber: "0",
+      platform: "ebay",
+      format: "fixed",
+      startPrice: 10.5,
+      shipping: 1.25,
+      status: "draft",
+    }),
+  });
+  assert.equal(redraftListingResponse.status, 200);
+  const redraftListingPayload = await redraftListingResponse.json();
+  assert.equal(redraftListingPayload.publishStatus, "draft");
+
+  const redraftedItemResponse = await fetch(`${baseUrl}/api/items/draft-route-item`);
+  assert.equal(redraftedItemResponse.status, 200);
+  const redraftedItemPayload = await redraftedItemResponse.json();
+  assert.equal(redraftedItemPayload.status, "listed");
+  assert.equal(redraftedItemPayload.listingStatus, "draft");
+  assert.equal(redraftedItemPayload.saleStatus, "available");
+
   const soldAt = "2026-04-24T18:30:00.000Z";
   const updatedListingResponse = await fetch(`${baseUrl}/api/listings/route-listing`, {
     method: "PUT",
