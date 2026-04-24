@@ -271,3 +271,151 @@ test("marketplace sold sync backfills metadata on existing sale and order rows",
     await rm(tempDir, { recursive: true, force: true });
   }
 });
+
+test("marketplace sold sync repairs stale sale and order platform metadata", async () => {
+  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-sync-platform-update-"));
+  const dbPath = join(tempDir, "cardvault.db");
+  const previousPath = process.env.CARDVAULT_DB_PATH;
+
+  process.env.CARDVAULT_DB_PATH = dbPath;
+
+  const database = await import("../src/server/database.js");
+  const registry = await import("../src/server/integrations/marketplaces/marketplaceRegistry.js");
+  const syncService = await import(`../src/server/services/marketplaces/syncService.js?ts=${Date.now()}`);
+
+  const db = database.initDB();
+  const adapter = registry.getMarketplaceAdapter("shopify");
+  const originalSync = adapter.sync;
+
+  try {
+    database.run(
+      `INSERT INTO user_items
+       (id, name, card_set, cost_basis, listing_status, sale_status, status)
+       VALUES (?,?,?,?,?,?,?)`,
+      ["sync-platform-item", "Mats Sundin", "Upper Deck", 15, "listed", "available", "listed"],
+    );
+
+    database.run(
+      `INSERT INTO listings
+       (id, card_id, card_name, card_set, platform, listing_title, listing_description, start_price, sold_price, shipping, status, publish_status)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        "sync-platform-listing",
+        "sync-platform-item",
+        "Mats Sundin",
+        "Upper Deck",
+        "ebay",
+        "Mats Sundin card",
+        "Marketplace sync platform repair test",
+        60,
+        60,
+        4,
+        "active",
+        "active",
+      ],
+    );
+
+    database.run(
+      `INSERT INTO listing_channels
+       (id, listing_id, marketplace, external_listing_id, status, last_sync_at, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,datetime('now'),datetime('now'))`,
+      [
+        "sync-platform-channel",
+        "sync-platform-listing",
+        "shopify",
+        "shopify-sync-platform",
+        "active",
+        new Date().toISOString(),
+      ],
+    );
+
+    database.run(
+      `INSERT INTO sales
+       (id, card_id, order_id, card_name, card_set, sale_price, cost_basis, platform, buyer_handle, fees, shipping_cost, packaging_cost, grading_cost, tax_collected, payout_amount, net_profit, listing_id, date)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        "existing-shop-sale",
+        "sync-platform-item",
+        "existing-shop-order",
+        "Mats Sundin",
+        "Upper Deck",
+        60,
+        0,
+        "ebay",
+        null,
+        0,
+        4,
+        0,
+        0,
+        0,
+        60,
+        56,
+        "sync-platform-listing",
+        new Date().toISOString(),
+      ],
+    );
+
+    database.run(
+      `INSERT INTO orders
+       (id, sale_id, listing_id, item_id, platform, external_order_id, buyer_handle, sale_price, fees, shipping_charge, tax_collected, destination_country, destination_postal_code, payment_status, fulfillment_status, sold_at, created_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))`,
+      [
+        "existing-shop-order",
+        "existing-shop-sale",
+        "sync-platform-listing",
+        "sync-platform-item",
+        "ebay",
+        null,
+        null,
+        60,
+        0,
+        0,
+        0,
+        "CA",
+        null,
+        "paid",
+        "pending",
+        new Date().toISOString(),
+      ],
+    );
+
+    adapter.sync = async (listing) => ({
+      marketplace: "shopify",
+      externalListingId: listing.external_listing_id,
+      status: "sold",
+      syncedAt: new Date().toISOString(),
+      payload: {
+        buyerHandle: "shopify_buyer",
+        externalOrderId: "SHOPIFY-ORDER-1",
+        salePrice: 65,
+        shippingCharge: 8,
+        taxCollected: 2,
+        payoutAmount: 70,
+        shippingAddress: {
+          countryCode: "US",
+          postalCode: "60601",
+        },
+      },
+    });
+
+    const results = await syncService.syncMarketplaceListings("shopify", "sync-platform-listing");
+    assert.equal(results.length, 1);
+
+    const sale = database.get(`SELECT * FROM sales WHERE id = ?`, ["existing-shop-sale"]);
+    const order = database.get(`SELECT * FROM orders WHERE id = ?`, ["existing-shop-order"]);
+
+    assert.equal(sale.platform, "shopify");
+    assert.equal(order.platform, "shopify");
+    assert.equal(order.external_order_id, "SHOPIFY-ORDER-1");
+    assert.equal(order.buyer_handle, "shopify_buyer");
+  } finally {
+    adapter.sync = originalSync;
+    db.close();
+    if (previousPath === undefined) {
+      delete process.env.CARDVAULT_DB_PATH;
+    } else {
+      process.env.CARDVAULT_DB_PATH = previousPath;
+    }
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});

@@ -116,10 +116,11 @@ function extractMarketplaceOrderMetadata(synced) {
   };
 }
 
-function updateExistingSyncedSale(saleId, metadata, costBasis) {
+function updateExistingSyncedSale(saleId, metadata, costBasis, marketplace) {
   run(
     `UPDATE sales
-     SET buyer_handle = COALESCE(?, buyer_handle),
+     SET platform = COALESCE(?, platform),
+         buyer_handle = COALESCE(?, buyer_handle),
          sale_price = COALESCE(?, sale_price),
          cost_basis = COALESCE(?, cost_basis),
          tax_collected = COALESCE(?, tax_collected),
@@ -127,6 +128,7 @@ function updateExistingSyncedSale(saleId, metadata, costBasis) {
          net_profit = COALESCE(?, net_profit)
      WHERE id = ?`,
     [
+      marketplace,
       metadata.buyerHandle,
       metadata.salePrice,
       costBasis,
@@ -182,7 +184,7 @@ function insertSyncedSale(listing, channel, synced, metadata) {
   if (inserted.changes === 0) {
     const existingSale = get(`SELECT * FROM sales WHERE listing_id = ?`, [listing.id]);
     if (existingSale) {
-      updateExistingSyncedSale(existingSale.id, metadata, costBasis);
+      updateExistingSyncedSale(existingSale.id, metadata, costBasis, channel.marketplace || synced.marketplace || null);
       return get(`SELECT * FROM sales WHERE id = ?`, [existingSale.id]);
     }
     return null;
@@ -191,18 +193,20 @@ function insertSyncedSale(listing, channel, synced, metadata) {
   return get(`SELECT * FROM sales WHERE id = ?`, [saleId]);
 }
 
-function updateExistingSyncedOrder(orderId, metadata, sale) {
+function updateExistingSyncedOrder(orderId, metadata, sale, marketplace) {
   run(
     `UPDATE orders
-     SET external_order_id = COALESCE(?, external_order_id),
+     SET platform = COALESCE(?, platform),
+         external_order_id = COALESCE(?, external_order_id),
          buyer_handle = COALESCE(?, buyer_handle),
          sale_price = COALESCE(?, sale_price),
          shipping_charge = COALESCE(?, shipping_charge),
          tax_collected = COALESCE(?, tax_collected),
          destination_country = COALESCE(?, destination_country),
          destination_postal_code = COALESCE(?, destination_postal_code)
-     WHERE id = ?`,
+    WHERE id = ?`,
     [
+      marketplace,
       metadata.externalOrderId,
       metadata.buyerHandle || sale?.buyer_handle || null,
       metadata.salePrice ?? sale?.sale_price ?? null,
@@ -223,7 +227,7 @@ function ensureOrderForSyncedSale(listing, sale, synced, metadata) {
     [sale.id, listing.id],
   );
   if (existing) {
-    updateExistingSyncedOrder(existing.id, metadata, sale);
+    updateExistingSyncedOrder(existing.id, metadata, sale, sale?.platform || synced.marketplace || null);
     if (!sale.order_id || sale.order_id !== existing.id) {
       run(`UPDATE sales SET order_id = ? WHERE id = ?`, [existing.id, sale.id]);
     }
