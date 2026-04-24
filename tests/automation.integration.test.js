@@ -4,6 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawn } from "node:child_process";
+import Database from "better-sqlite3";
 
 async function waitForServer(baseUrl, timeoutMs = 10000) {
   const start = Date.now();
@@ -137,4 +138,124 @@ test("automation routes handle identify-price, listing generation, aging reprici
   assert.equal(queueResponse.status, 200);
   const queuePayload = await queueResponse.json();
   assert.ok(Array.isArray(queuePayload.queue));
+});
+
+test("shipping automation records tracking against the order marketplace channel", async (t) => {
+  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-automation-shipping-"));
+  const dbPath = join(tempDir, "cardvault-test.db");
+  const port = 4050 + Math.floor(Math.random() * 100);
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  const server = spawn(process.execPath, ["server.js"], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      PORT: String(port),
+      CARDVAULT_DB_PATH: dbPath,
+    },
+    stdio: "ignore",
+  });
+
+  t.after(async () => {
+    if (!server.killed) {
+      server.kill("SIGTERM");
+    }
+    await new Promise((resolve) => server.once("exit", resolve));
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  await waitForServer(baseUrl);
+
+  await fetch(`${baseUrl}/api/items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "ship-channel-item",
+      name: "Nathan MacKinnon",
+      set: "Upper Deck",
+      listedOn: [],
+      priceHistory: [],
+      marketPrice: 80,
+      suggestedListingPrice: 89.99,
+    }),
+  });
+
+  const listingResponse = await fetch(`${baseUrl}/api/listings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "ship-channel-listing",
+      cardId: "ship-channel-item",
+      cardName: "Nathan MacKinnon",
+      cardSet: "Upper Deck",
+      platform: "ebay",
+      listingTitle: "Nathan MacKinnon card",
+      listingDescription: "Shipping should target the ebay channel",
+      startPrice: 89.99,
+      status: "draft",
+    }),
+  });
+  assert.equal(listingResponse.status, 201);
+
+  const publishResponse = await fetch(`${baseUrl}/api/marketplaces/publish`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ listingId: "ship-channel-listing", marketplace: "ebay" }),
+  });
+  assert.equal(publishResponse.status, 200);
+
+  const crosspostResponse = await fetch(`${baseUrl}/api/marketplaces/crosspost`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ listingId: "ship-channel-listing", marketplaces: ["shopify"] }),
+  });
+  assert.equal(crosspostResponse.status, 200);
+
+  const orderResponse = await fetch(`${baseUrl}/api/orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "ship-channel-order",
+      itemId: "ship-channel-item",
+      listingId: "ship-channel-listing",
+      platform: "ebay",
+      salePrice: 89.99,
+      destinationCountry: "CA",
+      paymentStatus: "paid",
+      fulfillmentStatus: "pending",
+    }),
+  });
+  assert.equal(orderResponse.status, 201);
+
+  const shipmentResponse = await fetch(`${baseUrl}/api/automation/shipping/ship-channel-order`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ destinationCountry: "CA", weightOz: 3 }),
+  });
+  assert.equal(shipmentResponse.status, 200);
+
+  const channelsResponse = await fetch(`${baseUrl}/api/marketplaces/listings/ship-channel-listing/channels`);
+  assert.equal(channelsResponse.status, 200);
+  const channelsPayload = await channelsResponse.json();
+  const ebayChannel = channelsPayload.channels.find((channel) => channel.marketplace === "ebay");
+  const shopifyChannel = channelsPayload.channels.find((channel) => channel.marketplace === "shopify");
+
+  assert.ok(ebayChannel);
+  assert.ok(shopifyChannel);
+
+  const db = new Database(dbPath, { readonly: true });
+  try {
+    const trackingEvents = db.prepare(
+      `SELECT listing_channel_id, event_type, status, payload
+       FROM listing_channel_events
+       WHERE event_type = 'tracking_sync'
+       ORDER BY created_at DESC`,
+    ).all();
+
+    assert.equal(trackingEvents.length, 1);
+    assert.equal(trackingEvents[0].listing_channel_id, ebayChannel.id);
+    assert.notEqual(trackingEvents[0].listing_channel_id, shopifyChannel.id);
+  } finally {
+    db.close();
+  }
 });

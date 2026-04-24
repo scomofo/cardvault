@@ -89,7 +89,19 @@ export function automateShipment(orderId, options = {}) {
   );
 
   if (order.listing_id) {
-    const channel = get(`SELECT * FROM listing_channels WHERE listing_id = ? ORDER BY updated_at DESC LIMIT 1`, [order.listing_id]);
+    const channel = get(
+      `SELECT * FROM listing_channels
+       WHERE listing_id = ? AND marketplace = ?
+       ORDER BY updated_at DESC, created_at DESC
+       LIMIT 1`,
+      [order.listing_id, order.platform],
+    ) || get(
+      `SELECT * FROM listing_channels
+       WHERE listing_id = ?
+       ORDER BY updated_at DESC, created_at DESC
+       LIMIT 1`,
+      [order.listing_id],
+    );
     if (channel) {
       run(
         `INSERT INTO listing_channel_events (id, listing_channel_id, event_type, status, payload)
