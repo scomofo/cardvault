@@ -76,10 +76,16 @@ export function registerSalesRoutes(app) {
         return res.status(409).json({ error: "date does not match linked order" });
       }
       const linkedListingId = body.listing_id || linkedOrder?.listing_id || null;
-      const linkedCardId = body.card_id || linkedOrder?.item_id || get(
-        "SELECT card_id FROM listings WHERE id = ?",
-        [linkedListingId],
-      )?.card_id || null;
+      const listingRecord = linkedListingId
+        ? get("SELECT id, card_id FROM listings WHERE id = ?", [linkedListingId])
+        : null;
+      if (linkedListingId && !listingRecord) {
+        return res.status(404).json({ error: "linked listing not found" });
+      }
+      if (body.card_id && listingRecord?.card_id && body.card_id !== listingRecord.card_id) {
+        return res.status(409).json({ error: "item does not match listing" });
+      }
+      const linkedCardId = body.card_id || linkedOrder?.item_id || listingRecord?.card_id || null;
       const saleDate = body.date || linkedOrder?.sold_at || new Date().toISOString();
       const salePrice = body.sale_price ?? linkedOrder?.sale_price ?? 0;
       const resolvedPlatform = body.platform || linkedOrder?.platform || null;

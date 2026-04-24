@@ -672,3 +672,121 @@ test("linked manual sales and orders reject conflicting explicit metadata", asyn
   });
   assert.equal(conflictingSaleDateResponse.status, 409);
 });
+
+test("manual sales and orders reject missing or mismatched direct listing references", async (t) => {
+  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-direct-listing-guard-"));
+  const dbPath = join(tempDir, "cardvault-test.db");
+  const port = 6000 + Math.floor(Math.random() * 400);
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  const server = spawn(process.execPath, ["server.js"], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      PORT: String(port),
+      CARDVAULT_DB_PATH: dbPath,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  t.after(async () => {
+    if (!server.killed) {
+      server.kill("SIGTERM");
+    }
+    await new Promise((resolve) => server.once("exit", resolve));
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  await waitForServer(baseUrl);
+
+  for (const item of [
+    { id: "direct-guard-item-a", name: "Direct Guard A", number: "56A" },
+    { id: "direct-guard-item-b", name: "Direct Guard B", number: "56B" },
+  ]) {
+    const itemResponse = await fetch(`${baseUrl}/api/items`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...item,
+        set: "Route Set",
+        costBasis: 6,
+        listedOn: [],
+        priceHistory: [],
+      }),
+    });
+    assert.equal(itemResponse.status, 201);
+  }
+
+  const listingResponse = await fetch(`${baseUrl}/api/listings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "direct-guard-listing",
+      cardId: "direct-guard-item-a",
+      cardName: "Direct Guard A",
+      cardSet: "Route Set",
+      cardNumber: "56A",
+      platform: "ebay",
+      format: "fixed",
+      startPrice: 16.99,
+      shipping: 1.25,
+      status: "draft",
+    }),
+  });
+  assert.equal(listingResponse.status, 201);
+
+  const missingListingOrderResponse = await fetch(`${baseUrl}/api/orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "direct-guard-order-missing",
+      listingId: "missing-listing-id",
+      platform: "ebay",
+      salePrice: 16.99,
+    }),
+  });
+  assert.equal(missingListingOrderResponse.status, 404);
+
+  const missingListingSaleResponse = await fetch(`${baseUrl}/api/sales`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "direct-guard-sale-missing",
+      listingId: "missing-listing-id",
+      cardName: "Direct Guard",
+      cardSet: "Route Set",
+      platform: "ebay",
+      salePrice: 16.99,
+    }),
+  });
+  assert.equal(missingListingSaleResponse.status, 404);
+
+  const mismatchedOrderResponse = await fetch(`${baseUrl}/api/orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "direct-guard-order-mismatch",
+      listingId: "direct-guard-listing",
+      itemId: "direct-guard-item-b",
+      platform: "ebay",
+      salePrice: 16.99,
+    }),
+  });
+  assert.equal(mismatchedOrderResponse.status, 409);
+
+  const mismatchedSaleResponse = await fetch(`${baseUrl}/api/sales`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "direct-guard-sale-mismatch",
+      listingId: "direct-guard-listing",
+      cardId: "direct-guard-item-b",
+      cardName: "Direct Guard",
+      cardSet: "Route Set",
+      platform: "ebay",
+      salePrice: 16.99,
+      netProfit: 10.99,
+    }),
+  });
+  assert.equal(mismatchedSaleResponse.status, 409);
+});

@@ -105,10 +105,17 @@ export function registerOrderRoutes(app) {
       }
       const id = body.id || uid();
       const linkedListingId = body.listingId || body.listing_id || linkedSale?.listing_id || null;
-      const linkedItemId = body.itemId || body.item_id || linkedSale?.card_id || get(
-        "SELECT card_id FROM listings WHERE id = ?",
-        [linkedListingId],
-      )?.card_id || null;
+      const listingRecord = linkedListingId
+        ? get("SELECT id, card_id FROM listings WHERE id = ?", [linkedListingId])
+        : null;
+      if (linkedListingId && !listingRecord) {
+        return res.status(404).json({ error: "linked listing not found" });
+      }
+      const explicitItemId = body.itemId || body.item_id || null;
+      if (explicitItemId && listingRecord?.card_id && explicitItemId !== listingRecord.card_id) {
+        return res.status(409).json({ error: "item does not match listing" });
+      }
+      const linkedItemId = explicitItemId || linkedSale?.card_id || listingRecord?.card_id || null;
       const soldAt = body.soldAt || body.sold_at || linkedSale?.date || new Date().toISOString();
       run(
         `INSERT INTO orders
