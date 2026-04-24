@@ -302,7 +302,7 @@ function MarketplaceConnectionsSection() {
 
 export default function Settings() {
   const {
-    catalog, setCatalog, sales, setSales, trades, setTrades,
+    catalog, setCatalog, sales, setSales, orders, setOrders, listings, setListings, purchases, setPurchases, trades, setTrades,
     watchlist, setWatchlist, gradings, setGradings,
     userName, setUserName, shipFrom, setShipFrom,
   } = useData();
@@ -337,7 +337,14 @@ export default function Settings() {
 
   const clearAll = () => {
     if (!window.confirm("Delete ALL data? This cannot be undone.")) return;
-    setCatalog([]); setSales([]); setTrades([]); setWatchlist([]); setGradings([]);
+    setCatalog([]);
+    setSales([]);
+    setOrders([]);
+    setListings([]);
+    setPurchases([]);
+    setTrades([]);
+    setWatchlist([]);
+    setGradings([]);
     const keysToRemove = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
@@ -352,7 +359,20 @@ export default function Settings() {
   };
 
   const backupData = () => {
-    const data = { _cardvaultBackup: true, _date: new Date().toISOString(), catalog, sales, trades, watchlist, gradings, userName, shipFrom };
+    const data = {
+      _cardvaultBackup: true,
+      _date: new Date().toISOString(),
+      catalog,
+      sales,
+      orders,
+      listings,
+      purchases,
+      trades,
+      watchlist,
+      gradings,
+      userName,
+      shipFrom,
+    };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url; a.download = `cardvault-backup-${new Date().toISOString().slice(0, 10)}.json`; a.click();
@@ -370,6 +390,9 @@ export default function Settings() {
         if (!window.confirm("Restore backup? This will replace all current data.")) return;
         if (Array.isArray(data.catalog)) setCatalog(data.catalog);
         if (Array.isArray(data.sales)) setSales(data.sales);
+        if (Array.isArray(data.orders)) setOrders(data.orders);
+        if (Array.isArray(data.listings)) setListings(data.listings);
+        if (Array.isArray(data.purchases)) setPurchases(data.purchases);
         if (Array.isArray(data.trades)) setTrades(data.trades);
         if (Array.isArray(data.watchlist)) setWatchlist(data.watchlist);
         if (Array.isArray(data.gradings)) setGradings(data.gradings);
