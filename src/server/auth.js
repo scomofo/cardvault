@@ -1,27 +1,10 @@
-const LOOPBACK_ADDRESSES = new Set(["127.0.0.1", "::1"]);
-
-function normalizeAddress(address) {
-  if (!address) return "";
-  return address.startsWith("::ffff:") ? address.slice(7) : address;
-}
-
-function isPrivateIpv4(address) {
-  if (!/^\d{1,3}(?:\.\d{1,3}){3}$/.test(address)) return false;
-  const [a, b] = address.split(".").map(Number);
-
-  return (
-    a === 10 ||
-    (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168)
-  );
-}
-
-function isTrustedLanAddress(address) {
-  if (!address) return false;
-  if (LOOPBACK_ADDRESSES.has(address)) return true;
-  if (isPrivateIpv4(address)) return true;
-  return address.startsWith("fc") || address.startsWith("fd") || address.startsWith("fe80:");
-}
+import {
+  isAllowedDevOrigin,
+  isLoopbackAddress,
+  isTrustedLanAddressString,
+  normalizeAddress,
+  requestHasTrustedOrigin,
+} from "./networkTrust.js";
 
 function getProxyToken() {
   return process.env.PROXY_TOKEN?.trim() || "";
@@ -35,7 +18,7 @@ export function isLoopbackRequest(req) {
     .map(normalizeAddress)
     .filter(Boolean);
 
-  return candidates.some((value) => LOOPBACK_ADDRESSES.has(value));
+  return candidates.some((value) => isLoopbackAddress(value));
 }
 
 export function isTrustedLanRequest(req) {
@@ -46,7 +29,7 @@ export function isTrustedLanRequest(req) {
     .map(normalizeAddress)
     .filter(Boolean);
 
-  return candidates.some((value) => isTrustedLanAddress(value));
+  return candidates.some((value) => isTrustedLanAddressString(value));
 }
 
 export function authCheck(req, res, next) {
@@ -67,11 +50,15 @@ export function requireProtectedConfigWrite(req, res, next) {
     return authCheck(req, res, next);
   }
 
-  if (isTrustedLanRequest(req)) {
+  if (isLoopbackRequest(req)) {
+    return next();
+  }
+
+  if (isTrustedLanRequest(req) && requestHasTrustedOrigin(req) && isAllowedDevOrigin(req.headers.origin || req.headers.referer || "")) {
     return next();
   }
 
   return res.status(403).json({
-    error: "Protected configuration writes require a trusted local-network request or bearer token",
+    error: "Protected configuration writes require a trusted app origin on the local network or a bearer token",
   });
 }

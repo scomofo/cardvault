@@ -1,14 +1,16 @@
 import { randomBytes } from "node:crypto";
-import { get, run } from "../../database.js";
+import { all, get, run } from "../../database.js";
 
 const SANDBOX = { auth: "https://auth.sandbox.ebay.com/oauth2/authorize", token: "https://api.sandbox.ebay.com/identity/v1/oauth2/token" };
 const PROD = { auth: "https://auth.ebay.com/oauth2/authorize", token: "https://api.ebay.com/identity/v1/oauth2/token" };
 const SCOPES = "https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/api_scope/sell.inventory https://api.ebay.com/oauth/api_scope/sell.account https://api.ebay.com/oauth/api_scope/sell.fulfillment";
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+const OAUTH_STATE_PREFIX = "ebay_oauth_state:";
 const pendingOauthStates = new Map();
 
 function setting(key) { return get("SELECT value FROM settings WHERE key = ?", [key])?.value || null; }
 function saveSetting(key, value) { run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [key, value]); }
+function deleteSetting(key) { run("DELETE FROM settings WHERE key = ?", [key]); }
 function getDefaultCallbackUrl() {
   return process.env.EBAY_CALLBACK_URL || process.env.EBAY_REDIRECT_URI || "http://localhost:3000/api/ebay/callback";
 }
@@ -26,21 +28,31 @@ function pruneExpiredOauthStates() {
       pendingOauthStates.delete(state);
     }
   }
+
+  for (const row of all("SELECT key, value FROM settings WHERE key LIKE ?", [`${OAUTH_STATE_PREFIX}%`])) {
+    if (Number(row.value || 0) <= now) {
+      deleteSetting(row.key);
+    }
+  }
 }
 
 export function issueOAuthState() {
   pruneExpiredOauthStates();
   const state = randomBytes(24).toString("hex");
-  pendingOauthStates.set(state, Date.now() + OAUTH_STATE_TTL_MS);
+  const expiresAt = Date.now() + OAUTH_STATE_TTL_MS;
+  pendingOauthStates.set(state, expiresAt);
+  saveSetting(`${OAUTH_STATE_PREFIX}${state}`, String(expiresAt));
   return state;
 }
 
 export function consumeOAuthState(state) {
   pruneExpiredOauthStates();
   if (!state || typeof state !== "string") return false;
-  const expiresAt = pendingOauthStates.get(state);
+  const key = `${OAUTH_STATE_PREFIX}${state}`;
+  const expiresAt = pendingOauthStates.get(state) ?? Number(setting(key) || 0);
   if (!expiresAt) return false;
   pendingOauthStates.delete(state);
+  deleteSetting(key);
   return expiresAt > Date.now();
 }
 

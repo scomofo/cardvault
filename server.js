@@ -2,11 +2,11 @@ import express from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import { config } from "dotenv";
-import { networkInterfaces } from "node:os";
 import { initDB, get as dbGet, run as dbRun } from "./src/server/database.js";
 import { seedReferenceData } from "./src/server/seed.js";
 import { registerRoutes } from "./src/server/routes/index.js";
 import { authCheck, requireProtectedConfigWrite } from "./src/server/auth.js";
+import { getTrustedDevHosts, isAllowedDevOrigin } from "./src/server/networkTrust.js";
 
 config();
 
@@ -46,46 +46,10 @@ const MAX_TOKENS_CAP = 4000;
 const CV_ANALYZE_TIMEOUT_MS = 30_000;
 const CV_HEALTH_TIMEOUT_MS = 5_000;
 
-function isPrivateIpv4(hostname) {
-  if (!/^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname)) return false;
-  const [a, b] = hostname.split(".").map(Number);
-
-  return (
-    a === 10 ||
-    (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168)
-  );
-}
-
-function isAllowedDevOrigin(origin) {
-  try {
-    const { protocol, hostname } = new URL(origin);
-    if (!["http:", "https:"].includes(protocol)) return false;
-
-    const normalizedHost = hostname.toLowerCase();
-    return (
-      normalizedHost === "localhost" ||
-      normalizedHost === "127.0.0.1" ||
-      normalizedHost === "::1" ||
-      normalizedHost.endsWith(".local") ||
-      isPrivateIpv4(normalizedHost)
-    );
-  } catch {
-    return false;
-  }
-}
-
 function getNetworkUrls(port) {
-  const urls = [];
-
-  for (const entries of Object.values(networkInterfaces())) {
-    for (const entry of entries || []) {
-      if (entry.family !== "IPv4" || entry.internal) continue;
-      urls.push(`http://${entry.address}:${port}`);
-    }
-  }
-
-  return urls;
+  return [...getTrustedDevHosts()]
+    .filter((host) => /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host))
+    .map((host) => `http://${host}:${port}`);
 }
 
 async function fetchWithTimeout(url, options = {}, timeoutMs) {

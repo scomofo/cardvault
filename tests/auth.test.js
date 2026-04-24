@@ -46,7 +46,7 @@ test("requireProtectedConfigWrite blocks remote requests without a token even if
 
   assert.equal(nextCalled, false);
   assert.equal(res.statusCode, 403);
-  assert.match(res.payload.error, /trusted local-network request or bearer token/i);
+  assert.match(res.payload.error, /trusted app origin on the local network or a bearer token/i);
 
   if (originalToken == null) delete process.env.PROXY_TOKEN;
   else process.env.PROXY_TOKEN = originalToken;
@@ -61,14 +61,16 @@ test("isTrustedLanRequest accepts RFC1918 LAN addresses", () => {
   assert.equal(isTrustedLanRequest(req), true);
 });
 
-test("requireProtectedConfigWrite allows trusted local-network requests without a token", () => {
+test("requireProtectedConfigWrite allows trusted local-network requests from the app origin without a token", () => {
   const originalToken = process.env.PROXY_TOKEN;
+  const originalDevHostname = process.env.DEV_HOSTNAME;
   delete process.env.PROXY_TOKEN;
+  process.env.DEV_HOSTNAME = "cardvault.local";
 
   const req = {
     ip: "192.168.1.44",
     socket: { remoteAddress: "192.168.1.44" },
-    headers: {},
+    headers: { origin: "https://cardvault.local:3000" },
   };
   const res = createResponseRecorder();
   let nextCalled = false;
@@ -82,6 +84,35 @@ test("requireProtectedConfigWrite allows trusted local-network requests without 
 
   if (originalToken == null) delete process.env.PROXY_TOKEN;
   else process.env.PROXY_TOKEN = originalToken;
+  if (originalDevHostname == null) delete process.env.DEV_HOSTNAME;
+  else process.env.DEV_HOSTNAME = originalDevHostname;
+});
+
+test("requireProtectedConfigWrite blocks trusted LAN requests from untrusted origins", () => {
+  const originalToken = process.env.PROXY_TOKEN;
+  const originalDevHostname = process.env.DEV_HOSTNAME;
+  delete process.env.PROXY_TOKEN;
+  process.env.DEV_HOSTNAME = "cardvault.local";
+
+  const req = {
+    ip: "192.168.1.44",
+    socket: { remoteAddress: "192.168.1.44" },
+    headers: { origin: "https://evil.local:3000" },
+  };
+  const res = createResponseRecorder();
+  let nextCalled = false;
+
+  requireProtectedConfigWrite(req, res, () => {
+    nextCalled = true;
+  });
+
+  assert.equal(nextCalled, false);
+  assert.equal(res.statusCode, 403);
+
+  if (originalToken == null) delete process.env.PROXY_TOKEN;
+  else process.env.PROXY_TOKEN = originalToken;
+  if (originalDevHostname == null) delete process.env.DEV_HOSTNAME;
+  else process.env.DEV_HOSTNAME = originalDevHostname;
 });
 
 test("requireProtectedConfigWrite allows remote requests with the correct bearer token", () => {
