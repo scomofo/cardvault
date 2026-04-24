@@ -1,6 +1,6 @@
 import { all, get, run } from "../database.js";
 import { ORDER_FIELD_MAP } from "../mappers/fieldMaps.js";
-import { toCamel, toCamelArray } from "../mappers/recordMappers.js";
+import { toCamel, toCamelArray, toSnake } from "../mappers/recordMappers.js";
 import { requireJsonBody, validateNumberLike, sendValidationError } from "../validation/common.js";
 import { uid } from "./shared.js";
 
@@ -196,6 +196,66 @@ export function registerOrderRoutes(app) {
         );
       }
       res.status(201).json(toCamel(get(`SELECT * FROM orders WHERE id = ?`, [id]), ORDER_FIELD_MAP));
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/orders/:id", requireJsonBody, (req, res) => {
+    try {
+      const existing = get("SELECT * FROM orders WHERE id = ?", [req.params.id]);
+      if (!existing) return res.status(404).json({ error: "Order not found" });
+
+      const body = { ...existing, ...toSnake(req.body) };
+      run(
+        `UPDATE orders SET
+          sale_id=?, listing_id=?, item_id=?, platform=?, external_order_id=?,
+          buyer_handle=?, sale_price=?, fees=?, shipping_charge=?, tax_collected=?,
+          destination_country=?, destination_postal_code=?, payment_status=?,
+          fulfillment_status=?, sold_at=?
+         WHERE id=?`,
+        [
+          body.sale_id,
+          body.listing_id,
+          body.item_id,
+          body.platform,
+          body.external_order_id,
+          body.buyer_handle,
+          body.sale_price ?? 0,
+          body.fees ?? 0,
+          body.shipping_charge ?? 0,
+          body.tax_collected ?? 0,
+          body.destination_country ?? "CA",
+          body.destination_postal_code,
+          body.payment_status ?? "paid",
+          body.fulfillment_status ?? "pending",
+          body.sold_at,
+          req.params.id,
+        ],
+      );
+
+      res.json(toCamel(get("SELECT * FROM orders WHERE id = ?", [req.params.id]), ORDER_FIELD_MAP));
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/orders/:id", (req, res) => {
+    try {
+      const existing = get("SELECT * FROM orders WHERE id = ?", [req.params.id]);
+      if (!existing) return res.status(404).json({ error: "Order not found" });
+
+      const result = run("DELETE FROM orders WHERE id = ?", [req.params.id]);
+      if (existing.sale_id) {
+        run(
+          `UPDATE sales
+           SET order_id = NULL
+           WHERE id = ?`,
+          [existing.sale_id],
+        );
+      }
+      if (result.changes === 0) return res.status(404).json({ error: "Order not found" });
+      res.json({ deleted: true });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

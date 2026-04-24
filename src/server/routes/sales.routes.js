@@ -5,6 +5,7 @@ import {
   toCamelArray,
   toSnake,
 } from "../mappers/recordMappers.js";
+import { requireJsonBody } from "../validation/common.js";
 import { validateSalePayload } from "../validation/writeValidators.js";
 import { uid } from "./shared.js";
 
@@ -168,6 +169,69 @@ export function registerSalesRoutes(app) {
       res
         .status(201)
         .json(toCamel(get("SELECT * FROM sales WHERE id = ?", [id]), SALE_FIELD_MAP));
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/sales/:id", requireJsonBody, (req, res) => {
+    try {
+      const existing = get("SELECT * FROM sales WHERE id = ?", [req.params.id]);
+      if (!existing) return res.status(404).json({ error: "Sale not found" });
+
+      const body = { ...existing, ...toSnake(req.body) };
+      run(
+        `UPDATE sales SET
+          card_id=?, order_id=?, card_name=?, card_set=?, sale_price=?, cost_basis=?,
+          platform=?, buyer_handle=?, fees=?, shipping_cost=?, packaging_cost=?,
+          grading_cost=?, tax_collected=?, payout_amount=?, net_profit=?,
+          tracking_number=?, listing_id=?, date=?
+         WHERE id=?`,
+        [
+          body.card_id,
+          body.order_id,
+          body.card_name,
+          body.card_set,
+          body.sale_price ?? 0,
+          body.cost_basis ?? 0,
+          body.platform,
+          body.buyer_handle,
+          body.fees ?? 0,
+          body.shipping_cost ?? 0,
+          body.packaging_cost ?? 0,
+          body.grading_cost ?? 0,
+          body.tax_collected ?? 0,
+          body.payout_amount ?? 0,
+          body.net_profit ?? 0,
+          body.tracking_number ?? null,
+          body.listing_id,
+          body.date,
+          req.params.id,
+        ],
+      );
+
+      res.json(toCamel(get("SELECT * FROM sales WHERE id = ?", [req.params.id]), SALE_FIELD_MAP));
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/sales/:id", (req, res) => {
+    try {
+      const existing = get("SELECT * FROM sales WHERE id = ?", [req.params.id]);
+      if (!existing) return res.status(404).json({ error: "Sale not found" });
+
+      const result = run("DELETE FROM sales WHERE id = ?", [req.params.id]);
+      if (existing.order_id) {
+        run(
+          `UPDATE orders
+           SET sale_id = NULL
+           WHERE id = ?`,
+          [existing.order_id],
+        );
+      }
+      if (result.changes === 0) return res.status(404).json({ error: "Sale not found" });
+      res.json({ deleted: true });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

@@ -39,11 +39,15 @@ export const itemsAPI = {
 export const salesAPI = {
   list: () => request("/sales"),
   create: (data) => request("/sales", { method: "POST", body: data }),
+  update: (id, data) => request(`/sales/${id}`, { method: "PUT", body: data }),
+  delete: (id) => request(`/sales/${id}`, { method: "DELETE" }),
 };
 
 export const ordersAPI = {
   list: () => request("/orders"),
   create: (data) => request("/orders", { method: "POST", body: data }),
+  update: (id, data) => request(`/orders/${id}`, { method: "PUT", body: data }),
+  delete: (id) => request(`/orders/${id}`, { method: "DELETE" }),
 };
 
 // Listings
@@ -156,6 +160,8 @@ export const gradingsAPI = {
 export const purchasesAPI = {
   list: () => request("/purchases"),
   create: (data) => request("/purchases", { method: "POST", body: data }),
+  update: (id, data) => request(`/purchases/${id}`, { method: "PUT", body: data }),
+  delete: (id) => request(`/purchases/${id}`, { method: "DELETE" }),
 };
 
 // Settings

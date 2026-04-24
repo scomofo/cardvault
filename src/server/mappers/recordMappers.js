@@ -273,9 +273,17 @@ export function toSnake(body) {
     output.order_id = output.orderId;
     delete output.orderId;
   }
+  if ("externalOrderId" in output) {
+    output.external_order_id = output.externalOrderId;
+    delete output.externalOrderId;
+  }
   if ("salePrice" in output) {
     output.sale_price = output.salePrice;
     delete output.salePrice;
+  }
+  if ("trackingNumber" in output) {
+    output.tracking_number = output.trackingNumber;
+    delete output.trackingNumber;
   }
   if ("buyerHandle" in output) {
     output.buyer_handle = output.buyerHandle;
@@ -401,6 +409,10 @@ export function toSnake(body) {
     output.shipping_cost = output.shippingCost;
     delete output.shippingCost;
   }
+  if ("shippingCharge" in output) {
+    output.shipping_charge = output.shippingCharge;
+    delete output.shippingCharge;
+  }
   if ("packagingCost" in output) {
     output.packaging_cost = output.packagingCost;
     delete output.packagingCost;
@@ -424,6 +436,22 @@ export function toSnake(body) {
   if ("listingId" in output) {
     output.listing_id = output.listingId;
     delete output.listingId;
+  }
+  if ("destinationCountry" in output) {
+    output.destination_country = output.destinationCountry;
+    delete output.destinationCountry;
+  }
+  if ("destinationPostalCode" in output) {
+    output.destination_postal_code = output.destinationPostalCode;
+    delete output.destinationPostalCode;
+  }
+  if ("paymentStatus" in output) {
+    output.payment_status = output.paymentStatus;
+    delete output.paymentStatus;
+  }
+  if ("fulfillmentStatus" in output) {
+    output.fulfillment_status = output.fulfillmentStatus;
+    delete output.fulfillmentStatus;
   }
 
   return output;

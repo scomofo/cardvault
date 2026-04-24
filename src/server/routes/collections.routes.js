@@ -134,4 +134,53 @@ export function registerCollectionRoutes(app) {
       res.status(500).json({ error: error.message });
     }
   });
+
+  app.put("/api/purchases/:id", requireJsonBody, (req, res) => {
+    try {
+      const existing = get("SELECT * FROM purchases WHERE id = ?", [req.params.id]);
+      if (!existing) return res.status(404).json({ error: "Purchase not found" });
+
+      const body = { ...existing, ...req.body };
+      if (!body.name || body.price == null || isNaN(Number(body.price))) {
+        return res.status(400).json({ error: "name and price required" });
+      }
+      if (body.shipping != null && isNaN(Number(body.shipping))) {
+        return res.status(400).json({ error: "shipping must be numeric" });
+      }
+      if ((body.totalCost ?? body.total_cost) != null && isNaN(Number(body.totalCost ?? body.total_cost))) {
+        return res.status(400).json({ error: "total_cost must be numeric" });
+      }
+
+      run(
+        `UPDATE purchases SET
+          name=?, card_set=?, platform=?, seller=?, price=?, shipping=?, total_cost=?, date=?, notes=?
+         WHERE id=?`,
+        [
+          body.name,
+          body.cardSet ?? body.card_set,
+          body.platform,
+          body.seller,
+          body.price,
+          body.shipping ?? 0,
+          body.totalCost ?? body.total_cost ?? 0,
+          body.date,
+          body.notes,
+          req.params.id,
+        ],
+      );
+      res.json(toCamel(get("SELECT * FROM purchases WHERE id = ?", [req.params.id]), PURCHASE_FIELD_MAP));
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/purchases/:id", (req, res) => {
+    try {
+      const result = run("DELETE FROM purchases WHERE id = ?", [req.params.id]);
+      if (result.changes === 0) return res.status(404).json({ error: "Purchase not found" });
+      res.json({ deleted: true });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
 }

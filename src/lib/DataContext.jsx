@@ -71,13 +71,13 @@ export function DataProvider({ children }) {
     useServerRef,
   });
 
-  const setOrders = (updater) => {
-    _setOrders((previous) => {
-      const next = typeof updater === "function" ? updater(previous) : updater;
-      saveData("orders", next);
-      return next;
-    });
-  };
+  const setOrders = createCollectionSetter({
+    key: "orders",
+    persist: (next) => saveData("orders", next),
+    scheduleSync: (key, next) => scheduleCollectionSync(key, ordersAPI, next),
+    setState: _setOrders,
+    useServerRef,
+  });
 
   const setTrades = createCollectionSetter({
     key: "trades",
