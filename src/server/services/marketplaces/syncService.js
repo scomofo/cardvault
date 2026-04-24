@@ -116,6 +116,28 @@ function extractMarketplaceOrderMetadata(synced) {
   };
 }
 
+function updateExistingSyncedSale(saleId, metadata, costBasis) {
+  run(
+    `UPDATE sales
+     SET buyer_handle = COALESCE(?, buyer_handle),
+         sale_price = COALESCE(?, sale_price),
+         cost_basis = COALESCE(?, cost_basis),
+         tax_collected = COALESCE(?, tax_collected),
+         payout_amount = COALESCE(?, payout_amount),
+         net_profit = COALESCE(?, net_profit)
+     WHERE id = ?`,
+    [
+      metadata.buyerHandle,
+      metadata.salePrice,
+      costBasis,
+      metadata.taxCollected,
+      metadata.payoutAmount,
+      metadata.netProfit,
+      saleId,
+    ],
+  );
+}
+
 function insertSyncedSale(listing, channel, synced, metadata) {
   if (!listing.sold_price && synced.status !== "sold") return null;
   const saleId = uid();
@@ -128,6 +150,7 @@ function insertSyncedSale(listing, channel, synced, metadata) {
   const taxCollected = Number(metadata.taxCollected ?? 0);
   const payoutAmount = Number(metadata.payoutAmount ?? salePrice);
   const netProfit = roundCurrency(payoutAmount - costBasis - shippingCost);
+  metadata.netProfit = netProfit;
   const inserted = run(
     `INSERT INTO sales
      (id, card_id, order_id, card_name, card_set, sale_price, cost_basis, platform, buyer_handle, fees, shipping_cost, packaging_cost, grading_cost, tax_collected, payout_amount, net_profit, listing_id, date)
@@ -157,10 +180,39 @@ function insertSyncedSale(listing, channel, synced, metadata) {
   );
 
   if (inserted.changes === 0) {
-    return get(`SELECT * FROM sales WHERE listing_id = ?`, [listing.id]);
+    const existingSale = get(`SELECT * FROM sales WHERE listing_id = ?`, [listing.id]);
+    if (existingSale) {
+      updateExistingSyncedSale(existingSale.id, metadata, costBasis);
+      return get(`SELECT * FROM sales WHERE id = ?`, [existingSale.id]);
+    }
+    return null;
   }
 
   return get(`SELECT * FROM sales WHERE id = ?`, [saleId]);
+}
+
+function updateExistingSyncedOrder(orderId, metadata, sale) {
+  run(
+    `UPDATE orders
+     SET external_order_id = COALESCE(?, external_order_id),
+         buyer_handle = COALESCE(?, buyer_handle),
+         sale_price = COALESCE(?, sale_price),
+         shipping_charge = COALESCE(?, shipping_charge),
+         tax_collected = COALESCE(?, tax_collected),
+         destination_country = COALESCE(?, destination_country),
+         destination_postal_code = COALESCE(?, destination_postal_code)
+     WHERE id = ?`,
+    [
+      metadata.externalOrderId,
+      metadata.buyerHandle || sale?.buyer_handle || null,
+      metadata.salePrice ?? sale?.sale_price ?? null,
+      metadata.shippingCharge,
+      metadata.taxCollected ?? sale?.tax_collected ?? null,
+      metadata.destinationCountry,
+      metadata.destinationPostalCode,
+      orderId,
+    ],
+  );
 }
 
 function ensureOrderForSyncedSale(listing, sale, synced, metadata) {
@@ -171,10 +223,11 @@ function ensureOrderForSyncedSale(listing, sale, synced, metadata) {
     [sale.id, listing.id],
   );
   if (existing) {
+    updateExistingSyncedOrder(existing.id, metadata, sale);
     if (!sale.order_id || sale.order_id !== existing.id) {
       run(`UPDATE sales SET order_id = ? WHERE id = ?`, [existing.id, sale.id]);
     }
-    return existing;
+    return get(`SELECT * FROM orders WHERE id = ?`, [existing.id]);
   }
 
   const orderId = uid();
