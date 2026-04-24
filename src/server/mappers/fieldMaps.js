@@ -50,6 +50,8 @@ export const SALE_FIELD_MAP = {
   card_set: "cardSet",
   sale_price: "salePrice",
   cost_basis: "costBasis",
+  fees: "fees",
+  platform: "platform",
   buyer_handle: "buyerHandle",
   shipping_cost: "shippingCost",
   packaging_cost: "packagingCost",
@@ -58,6 +60,7 @@ export const SALE_FIELD_MAP = {
   payout_amount: "payoutAmount",
   net_profit: "netProfit",
   listing_id: "listingId",
+  date: "date",
 };
 
 export const ORDER_FIELD_MAP = {

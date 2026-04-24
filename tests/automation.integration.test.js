@@ -680,6 +680,8 @@ test("manual order creation backfills the linked sale order_id", async (t) => {
 
   assert.ok(sale);
   assert.equal(sale.orderId, "sale-link-order");
+  assert.equal(sale.platform, "ebay");
+  assert.equal(sale.salePrice, 59.99);
 });
 
 test("manual sale creation backfills the linked order sale_id", async (t) => {
@@ -860,6 +862,10 @@ test("manual sale creation closes out linked listing and item state", async (t) 
     }),
   });
   assert.equal(saleResponse.status, 201);
+  const salePayload = await saleResponse.json();
+  assert.equal(salePayload.platform, "ebay");
+  assert.equal(salePayload.salePrice, 69.99);
+  assert.equal(salePayload.date, soldAt);
 
   const listingsResponse = await fetch(`${baseUrl}/api/listings`);
   assert.equal(listingsResponse.status, 200);
