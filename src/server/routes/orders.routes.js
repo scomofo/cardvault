@@ -34,9 +34,20 @@ export function registerOrderRoutes(app) {
   app.post("/api/orders", requireJsonBody, (req, res) => {
     try {
       const body = req.body;
-      if (!body.platform) return res.status(400).json({ error: "platform required" });
+      const linkedSaleId = body.saleId || body.sale_id || null;
+      const linkedSale = linkedSaleId
+        ? get(
+          `SELECT id, card_id, listing_id, order_id, sale_price, net_profit, date, platform, buyer_handle
+           FROM sales
+           WHERE id = ?`,
+          [linkedSaleId],
+        )
+        : null;
+      const resolvedPlatform = body.platform || linkedSale?.platform || null;
+      if (!resolvedPlatform) return res.status(400).json({ error: "platform required" });
+      const resolvedSalePrice = body.salePrice ?? body.sale_price ?? linkedSale?.sale_price;
       const numericChecks = [
-        validateNumberLike(body.salePrice ?? body.sale_price, "sale_price"),
+        validateNumberLike(resolvedSalePrice, "sale_price"),
         validateNumberLike(body.fees, "fees"),
         validateNumberLike(body.shippingCharge ?? body.shipping_charge, "shipping_charge"),
         validateNumberLike(body.taxCollected ?? body.tax_collected, "tax_collected"),
@@ -45,15 +56,6 @@ export function registerOrderRoutes(app) {
         if (err) return sendValidationError(res, err);
       }
       const id = body.id || uid();
-      const linkedSaleId = body.saleId || body.sale_id || null;
-      const linkedSale = linkedSaleId
-        ? get(
-          `SELECT id, card_id, listing_id, order_id, sale_price, net_profit, date
-           FROM sales
-           WHERE id = ?`,
-          [linkedSaleId],
-        )
-        : null;
       const linkedListingId = body.listingId || body.listing_id || linkedSale?.listing_id || null;
       const linkedItemId = body.itemId || body.item_id || linkedSale?.card_id || get(
         "SELECT card_id FROM listings WHERE id = ?",
@@ -69,10 +71,10 @@ export function registerOrderRoutes(app) {
           linkedSaleId,
           linkedListingId,
           linkedItemId,
-          body.platform,
+          resolvedPlatform,
           body.externalOrderId || body.external_order_id || null,
-          body.buyerHandle || body.buyer_handle || null,
-          body.salePrice || body.sale_price || linkedSale?.sale_price || 0,
+          body.buyerHandle || body.buyer_handle || linkedSale?.buyer_handle || null,
+          resolvedSalePrice || 0,
           body.fees || 0,
           body.shippingCharge || body.shipping_charge || 0,
           body.taxCollected || body.tax_collected || 0,
@@ -100,7 +102,7 @@ export function registerOrderRoutes(app) {
                sold_date = COALESCE(sold_date, ?)
            WHERE id = ?`,
           [
-            body.salePrice || body.sale_price || linkedSale?.sale_price || 0,
+            resolvedSalePrice || 0,
             soldAt,
             linkedListingId,
           ],

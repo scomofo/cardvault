@@ -24,7 +24,7 @@ export function registerSalesRoutes(app) {
       const linkedOrderId = body.order_id || null;
       const linkedOrder = linkedOrderId
         ? get(
-          `SELECT id, item_id, listing_id, sale_price, sold_at
+          `SELECT id, item_id, listing_id, sale_price, sold_at, platform, buyer_handle
            FROM orders
            WHERE id = ?`,
           [linkedOrderId],
@@ -37,6 +37,8 @@ export function registerSalesRoutes(app) {
       )?.card_id || null;
       const saleDate = body.date || linkedOrder?.sold_at || new Date().toISOString();
       const salePrice = body.sale_price ?? linkedOrder?.sale_price ?? 0;
+      const resolvedPlatform = body.platform || linkedOrder?.platform || null;
+      const resolvedBuyerHandle = body.buyer_handle || linkedOrder?.buyer_handle || null;
       run(
         `INSERT INTO sales (id, card_id, order_id, card_name, card_set, sale_price,
          cost_basis, platform, buyer_handle, fees, shipping_cost, packaging_cost,
@@ -50,8 +52,8 @@ export function registerSalesRoutes(app) {
           body.card_set,
           salePrice,
           body.cost_basis || 0,
-          body.platform,
-          body.buyer_handle,
+          resolvedPlatform,
+          resolvedBuyerHandle,
           body.fees || 0,
           body.shipping_cost || 0,
           body.packaging_cost || 0,
