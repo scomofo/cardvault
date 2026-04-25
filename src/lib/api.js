@@ -1,10 +1,14 @@
 import { API_BASE, apiPath } from "./apiBase";
+import { getToken } from "./authApi.js";
 
 async function request(path, options = {}) {
   const { method = "GET", body } = options;
+  const token = getToken();
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
   const opts = {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers,
   };
   if (body) opts.body = JSON.stringify(body);
 
