@@ -119,6 +119,7 @@ export function useScanWorkflow() {
   const [visualSearching, setVisualSearching] = useState(false);
   const [visualSearchResult, setVisualSearchResult] = useState(null);
   const [identificationResult, setIdentificationResult] = useState(null);
+  const [matchConfidence, setMatchConfidence] = useState(null);
 
   useEffect(() => {
     checkCvHealth().then(setCvOnline);
@@ -220,6 +221,7 @@ export function useScanWorkflow() {
       if (response.priceHistory?.length > 0) {
         setPriceHistory(response.priceHistory);
       }
+      setMatchConfidence(response.confidence || null);
       setStatus(
         `✓ ${response.name} - ${response.results?.length || 0} comps found (${response.confidence})`,
       );
@@ -281,8 +283,10 @@ export function useScanWorkflow() {
           .filter(Boolean)
           .join(" "),
       );
+      setMatchConfidence(response.confidence || null);
       setStatus(`✓ ${response.name} (${response.confidence})`);
     } else {
+      setMatchConfidence(null);
       setStatus("Couldn't ID - enter manually");
       toast.error("Card recognition failed");
     }
@@ -391,6 +395,7 @@ export function useScanWorkflow() {
     setVisualSearching(false);
     setVisualSearchResult(null);
     setIdentificationResult(null);
+    setMatchConfidence(null);
   }
 
   async function copyListing() {
@@ -587,6 +592,7 @@ export function useScanWorkflow() {
       batchQueue,
       batchProcessing,
       batchProcessedCount,
+      matchConfidence,
     },
   };
 }

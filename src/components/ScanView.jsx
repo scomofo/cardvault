@@ -36,6 +36,7 @@ export default function ScanView({ onNavigate }) {
     batchQueue,
     batchProcessing,
     batchProcessedCount,
+    matchConfidence,
   } = state;
 
   const steps = ["Capture", "Identify", "Details", "List"];
@@ -119,6 +120,7 @@ export default function ScanView({ onNavigate }) {
           searching={searching}
           showCvOverlay={showCvOverlay}
           status={status}
+          matchConfidence={matchConfidence}
         />
       )}
 

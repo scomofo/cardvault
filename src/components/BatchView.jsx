@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import Camera from "./Camera";
 import { useToast } from "./Toast";
 import { useData } from "../lib/DataContext";
@@ -29,8 +29,33 @@ export default function BatchView() {
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(null);
   const [dragging, setDragging] = useState(false);
+  const [focusedIdx, setFocusedIdx] = useState(0);
+  const listRef = useRef(null);
 
   const updateItem = (id, patch) => setQueue((p) => p.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+
+  // Keyboard shortcuts: j/k navigate, a approve (remove from queue → save), d delete, p price
+  useEffect(() => {
+    function onKey(e) {
+      const tag = document.activeElement?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (queue.length === 0) return;
+      if (e.key === "j" || e.key === "ArrowDown") {
+        e.preventDefault();
+        setFocusedIdx((i) => Math.min(i + 1, queue.length - 1));
+      } else if (e.key === "k" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setFocusedIdx((i) => Math.max(i - 1, 0));
+      } else if (e.key === "d" || e.key === "Delete") {
+        e.preventDefault();
+        const item = queue[focusedIdx];
+        if (item) setQueue((p) => p.filter((x) => x.id !== item.id));
+        setFocusedIdx((i) => Math.max(0, i - 1));
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [queue, focusedIdx]);
 
   const handleDrop = useCallback(async (e) => {
     e.preventDefault(); setDragging(false);
@@ -41,7 +66,7 @@ export default function BatchView() {
       const dataUrl = await new Promise((resolve) => {
         const r = new FileReader(); r.onload = (ev) => resolve(ev.target.result); r.readAsDataURL(file);
       });
-      newItems.push({ id: uid(), frontImg: dataUrl, backImg: null, name: "", set: "", year: "", number: "", condition: cond, type, costBasis: "", priceEstimate: null, priceHistory: null });
+      newItems.push({ id: uid(), frontImg: dataUrl, backImg: null, name: "", set: "", year: "", number: "", condition: cond, type, costBasis: "", priceEstimate: null, priceHistory: null, confidence: null });
     }
     setQueue((p) => [...p, ...newItems]);
     toast.info(`Added ${newItems.length} photo${newItems.length > 1 ? "s" : ""}`);
@@ -50,7 +75,7 @@ export default function BatchView() {
     for (let i = 0; i < newItems.length; i++) {
       setProgress({ current: i + 1, total: newItems.length, action: "Identifying" });
       const r = await aiRecognize(newItems[i].frontImg);
-      if (r?.name) { setQueue((p) => p.map((x) => (x.id === newItems[i].id ? { ...x, ...r } : x))); identified++; }
+      if (r?.name) { setQueue((p) => p.map((x) => (x.id === newItems[i].id ? { ...x, ...r, confidence: r.confidence || null } : x))); identified++; }
     }
     setProgress(null); setProcessing(false);
     if (identified > 0) toast.success(`Identified ${identified}/${newItems.length} cards`);
@@ -66,7 +91,7 @@ export default function BatchView() {
     for (let i = 0; i < items.length; i++) {
       setProgress({ current: i + 1, total: items.length, action: "Identifying" });
       const r = await aiRecognize(items[i].frontImg);
-      if (r?.name) { updateItem(items[i].id, r); identified++; }
+      if (r?.name) { updateItem(items[i].id, { ...r, confidence: r.confidence || null }); identified++; }
     }
     setProgress(null); toast.success(`Identified ${identified} cards`); setProcessing(false);
   };
@@ -173,6 +198,7 @@ export default function BatchView() {
             <span className="text-sm text-dim">
               Est. net: <strong className="gold">{fmtShort(totalNet)}</strong>
             </span>
+            <div className="text-xxs text-dim mt-2">j/k navigate · d delete</div>
             {progress && (
               <div className="flex items-center gap-6 mt-4">
                 <Spinner size={12} />
@@ -192,8 +218,15 @@ export default function BatchView() {
         const mid = parseFloat(item.priceEstimate?.mid) || 0;
         const net = calcNet(mid);
         const belowFloor = floor > 0 && mid > 0 && mid < floor;
+        const isFocused = idx === focusedIdx;
+        const confColor = { high: "var(--grn)", medium: "var(--orange)", low: "var(--red)" }[item.confidence] || "var(--dim)";
         return (
-          <div key={item.id} className="card fade mb-10" style={{ padding: 14, animationDelay: `${idx * .04}s` }}>
+          <div
+            key={item.id}
+            className="card fade mb-10"
+            onClick={() => setFocusedIdx(idx)}
+            style={{ padding: 14, animationDelay: `${idx * .04}s`, outline: isFocused ? "1px solid var(--acc-brd)" : "none" }}
+          >
             <div className="flex gap-8 mb-8">
               <Camera side="front" image={item.frontImg} onCapture={(img) => updateItem(item.id, { frontImg: img })} onRetake={() => updateItem(item.id, { frontImg: null })} compact />
               <Camera side="back" image={item.backImg} onCapture={(img) => updateItem(item.id, { backImg: img })} onRetake={() => updateItem(item.id, { backImg: null })} compact />
@@ -213,6 +246,9 @@ export default function BatchView() {
                   net {fmtShort(Math.max(net, 0))}
                 </span>
               )}
+              {item.confidence && (
+                <span className="text-xs fw-700" style={{ color: confColor }}>{item.confidence}</span>
+              )}
               {belowFloor && (
                 <span className="text-xs fw-700" style={{ color: "var(--red)" }}>
                   below floor
@@ -227,7 +263,7 @@ export default function BatchView() {
 
       <button className="btn btn-primary btn-full btn-lg" onClick={() => setQueue((p) => [...p, {
         id: uid(), frontImg: null, backImg: null, name: "", set: "", year: "", number: "",
-        condition: cond, type, costBasis: "", priceEstimate: null, priceHistory: null,
+        condition: cond, type, costBasis: "", priceEstimate: null, priceHistory: null, confidence: null,
       }])}><IconPlus size={14} /> Add Card</button>
     </div>
   );
