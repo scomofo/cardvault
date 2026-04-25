@@ -192,6 +192,14 @@ export const refAPI = {
   parallels: (params) => request(`/ref/parallels${toQuery(params)}`),
 };
 
+// Batch presets
+export const presetsAPI = {
+  list: () => request("/batch-presets"),
+  create: (data) => request("/batch-presets", { method: "POST", body: data }),
+  update: (id, data) => request(`/batch-presets/${id}`, { method: "PUT", body: data }),
+  delete: (id) => request(`/batch-presets/${id}`, { method: "DELETE" }),
+};
+
 // Check if backend is available
 export async function checkBackend() {
   try {

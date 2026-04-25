@@ -1,6 +1,7 @@
 import { registerActionQueueRoutes } from "./actionQueue.routes.js";
 import { registerAuthRoutes } from "./auth.routes.js";
 import { registerAutomationRoutes } from "./automation.routes.js";
+import { registerBatchPresetsRoutes } from "./batchPresets.routes.js";
 import { registerCollectionRoutes } from "./collections.routes.js";
 import { registerDecisionRoutes } from "./decisions.routes.js";
 import { registerDashboardRoutes } from "./dashboard.routes.js";
@@ -41,5 +42,6 @@ export function registerRoutes(app) {
   registerReferenceRoutes(app);
   registerMigrationRoutes(app);
   registerEbayRoutes(app);
+  registerBatchPresetsRoutes(app);
 }
 

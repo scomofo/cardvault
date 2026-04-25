@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import Camera from "./Camera";
 import { useToast } from "./Toast";
 import { useData } from "../lib/DataContext";
-import { itemsAPI } from "../lib/api";
+import { itemsAPI, presetsAPI } from "../lib/api";
 import { CONDITIONS, TYPES } from "../lib/constants";
 import { uid, fmtShort } from "../lib/utils";
 import { aiRecognize, aiPrice } from "../lib/ai";
@@ -18,6 +18,24 @@ function calcNet(midPrice) {
   return Math.round((p - p * BATCH_FEE_RATE - BATCH_SHIP) * 100) / 100;
 }
 
+function classifyViability(mid, net, floor) {
+  const m = parseFloat(mid) || 0;
+  if (!m) return null;
+  const n = typeof net === "number" ? net : parseFloat(net) ?? 0;
+  const f = parseFloat(floor) || 0;
+  if (m < 0.5) return "bulk_lot";
+  if (f > 0 && m < f) return "not_worth_listing";
+  if (n < 2.0) return "not_worth_listing";
+  if (n < 5.0) return "review";
+  return null;
+}
+
+const VIABILITY_STYLE = {
+  bulk_lot: { color: "var(--orange)", label: "bulk lot" },
+  not_worth_listing: { color: "var(--red)", label: "not worth listing" },
+  review: { color: "var(--orange)", label: "review" },
+};
+
 export default function BatchView() {
   const toast = useToast();
   const { setCatalog, useServer } = useData();
@@ -30,7 +48,13 @@ export default function BatchView() {
   const [progress, setProgress] = useState(null);
   const [dragging, setDragging] = useState(false);
   const [focusedIdx, setFocusedIdx] = useState(0);
+  const [presets, setPresets] = useState([]);
   const listRef = useRef(null);
+
+  useEffect(() => {
+    if (!useServer) return;
+    presetsAPI.list().then(setPresets).catch(() => {});
+  }, [useServer]);
 
   const updateItem = (id, patch) => setQueue((p) => p.map((x) => (x.id === id ? { ...x, ...patch } : x)));
 
@@ -108,8 +132,20 @@ export default function BatchView() {
     setProgress(null); toast.success(`Priced ${priced} cards`); setProcessing(false);
   };
 
+  const savePreset = async () => {
+    const name = window.prompt("Preset name:");
+    if (!name?.trim()) return;
+    try {
+      const p = await presetsAPI.create({ name: name.trim(), defaults: { condition: cond, type, binder, minPrice } });
+      setPresets((prev) => [p, ...prev]);
+      toast.success("Preset saved");
+    } catch (err) {
+      toast.error(`Failed to save preset: ${err.message}`);
+    }
+  };
+
   const saveAll = async () => {
-    const named = queue.filter((i) => i.name);
+    let named = queue.filter((i) => i.name);
     if (!named.length) return;
 
     const floor = parseFloat(minPrice) || 0;
@@ -119,6 +155,23 @@ export default function BatchView() {
     }) : [];
     if (belowFloor.length > 0 && !window.confirm(`${belowFloor.length} card(s) are priced below your floor of ${fmtShort(floor)}. Save anyway?`)) {
       return;
+    }
+
+    const notWorth = named.filter((i) => {
+      const mid = parseFloat(i.priceEstimate?.mid) || 0;
+      const net = calcNet(mid);
+      return classifyViability(mid, net, minPrice) === "not_worth_listing";
+    });
+    if (notWorth.length > 0) {
+      if (!window.confirm(`${notWorth.length} item(s) are not worth listing and will be skipped. Save the rest?`)) {
+        return;
+      }
+      named = named.filter((i) => {
+        const mid = parseFloat(i.priceEstimate?.mid) || 0;
+        const net = calcNet(mid);
+        return classifyViability(mid, net, minPrice) !== "not_worth_listing";
+      });
+      if (!named.length) return;
     }
 
     const items = [];
@@ -190,6 +243,26 @@ export default function BatchView() {
             title="Minimum price — items below this will require confirmation before saving"
           />
         </div>
+        {useServer && (
+          <div className="flex gap-6 mt-8">
+            <select
+              className="inp flex-1"
+              value=""
+              onChange={(e) => {
+                const p = presets.find((x) => x.id === e.target.value);
+                if (!p?.defaults) return;
+                if (p.defaults.condition) setCond(p.defaults.condition);
+                if (p.defaults.type) setType(p.defaults.type);
+                if (p.defaults.binder !== undefined) setBinder(p.defaults.binder);
+                if (p.defaults.minPrice !== undefined) setMinPrice(p.defaults.minPrice);
+              }}
+            >
+              <option value="">Load preset…</option>
+              {presets.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            <button className="btn btn-ghost btn-sm" onClick={savePreset}>Save preset</button>
+          </div>
+        )}
       </div>
 
       {queue.length > 0 && (
@@ -220,6 +293,8 @@ export default function BatchView() {
         const belowFloor = floor > 0 && mid > 0 && mid < floor;
         const isFocused = idx === focusedIdx;
         const confColor = { high: "var(--grn)", medium: "var(--orange)", low: "var(--red)" }[item.confidence] || "var(--dim)";
+        const viability = classifyViability(mid, net, minPrice);
+        const viabilityStyle = viability ? VIABILITY_STYLE[viability] : null;
         return (
           <div
             key={item.id}
@@ -249,10 +324,11 @@ export default function BatchView() {
               {item.confidence && (
                 <span className="text-xs fw-700" style={{ color: confColor }}>{item.confidence}</span>
               )}
-              {belowFloor && (
-                <span className="text-xs fw-700" style={{ color: "var(--red)" }}>
-                  below floor
-                </span>
+              {viabilityStyle && (
+                <span className="text-xs fw-700" style={{ color: viabilityStyle.color }}>{viabilityStyle.label}</span>
+              )}
+              {belowFloor && !viabilityStyle && (
+                <span className="text-xs fw-700" style={{ color: "var(--red)" }}>below floor</span>
               )}
               <div className="flex-1" />
               <button className="btn btn-ghost btn-sm" style={{ color: "var(--red)" }} onClick={() => setQueue((p) => p.filter((x) => x.id !== item.id))}><IconX size={12} /></button>

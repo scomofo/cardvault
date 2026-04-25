@@ -92,10 +92,13 @@ export function registerSalesRoutes(app) {
       }
       const linkedCardId = body.card_id || linkedOrder?.item_id || listingRecord?.card_id || null;
       const itemRecord = linkedCardId
-        ? get("SELECT id FROM user_items WHERE id = ?", [linkedCardId])
+        ? get("SELECT id, sale_status FROM user_items WHERE id = ?", [linkedCardId])
         : null;
       if (linkedCardId && !itemRecord) {
         return res.status(404).json({ error: "linked item not found" });
+      }
+      if (itemRecord?.sale_status === "sold") {
+        return res.status(409).json({ error: "item already sold" });
       }
       const saleDate = body.date || linkedOrder?.sold_at || new Date().toISOString();
       const salePrice = body.sale_price ?? linkedOrder?.sale_price ?? 0;
