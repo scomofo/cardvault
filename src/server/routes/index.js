@@ -1,8 +1,10 @@
 import { registerActionQueueRoutes } from "./actionQueue.routes.js";
+import { registerAuthRoutes } from "./auth.routes.js";
 import { registerAutomationRoutes } from "./automation.routes.js";
 import { registerCollectionRoutes } from "./collections.routes.js";
 import { registerDecisionRoutes } from "./decisions.routes.js";
 import { registerDashboardRoutes } from "./dashboard.routes.js";
+import { registerEarlyAccessRoutes } from "./earlyAccess.routes.js";
 import { registerIdentificationRoutes } from "./identification.routes.js";
 import { registerItemRoutes } from "./items.routes.js";
 import { registerListingRoutes } from "./listings.routes.js";
@@ -15,6 +17,8 @@ import { registerSettingsRoutes } from "./settings.routes.js";
 import { registerEbayRoutes } from "./ebay.routes.js";
 
 export function registerRoutes(app) {
+  registerAuthRoutes(app);
+  registerEarlyAccessRoutes(app);
   registerItemRoutes(app);
   registerAutomationRoutes(app);
   registerSalesRoutes(app);

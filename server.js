@@ -205,6 +205,19 @@ app.get("/api/cv/health", async (_req, res) => {
   }
 });
 
+app.get('/api/health', (_req, res) => {
+  res.json({
+    status: 'ok',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+    routes: {
+      root: 'ok',
+      api: 'ok',
+      ai: anthropicKey ? 'configured' : 'no_key',
+    }
+  });
+});
+
 registerRoutes(app);
 
 app.listen(PORT, HOST, () => {
