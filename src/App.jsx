@@ -2,8 +2,10 @@ import { useState, useEffect, useMemo } from "react";
 import { ToastProvider } from "./components/Toast";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { DataProvider, useData } from "./lib/DataContext";
-import { IconCamera, IconCards, IconDollar, IconTools, IconSettings, IconBarChart } from "./components/Icons";
+import { IconCamera, IconCards, IconDollar, IconTools, IconSettings, IconBarChart, Spinner } from "./components/Icons";
 import GlobalSearch from "./components/GlobalSearch";
+import LandingView from "./components/LandingView.jsx";
+import { fetchMe, logout, clearToken } from "./lib/authApi.js";
 import DashboardView from "./components/DashboardView";
 import ScanView from "./components/ScanView";
 import BatchView from "./components/BatchView";
@@ -61,7 +63,12 @@ function AppContent() {
   const [view, setView] = useState("dashboard");
   const [toolsTab, setToolsTab] = useState("batch");
   const [online, setOnline] = useState(navigator.onLine);
+  const [authState, setAuthState] = useState(null);
   const { catalog, userName } = useData();
+
+  useEffect(() => {
+    fetchMe().then((r) => setAuthState(r.data));
+  }, []);
 
   const handleNavigate = (target) => {
     if (typeof target === "string") {
@@ -87,6 +94,23 @@ function AppContent() {
 
   const activeCount = useMemo(() => catalog.filter((c) => c.status !== "sold").length, [catalog]);
 
+  if (authState === null) {
+    return (
+      <div className="flex justify-center mt-40">
+        <Spinner size={32} />
+      </div>
+    );
+  }
+
+  if (authState?.authenticated === false) {
+    return (
+      <LandingView
+        setupRequired={authState.setupRequired}
+        onLogin={() => fetchMe().then((r) => setAuthState(r.data))}
+      />
+    );
+  }
+
   return (
     <div className="app-shell">
       {!online && (
@@ -102,6 +126,15 @@ function AppContent() {
         <div className="flex items-center gap-8">
           <GlobalSearch onNavigate={handleNavigate} />
           {userName && <span className="text-xs text-dim" style={{ letterSpacing: ".5px" }}>{userName}</span>}
+          {authState?.mode !== "open" && (
+            <button className="btn btn-ghost btn-sm" onClick={async () => {
+              await logout();
+              clearToken();
+              setAuthState({ authenticated: false });
+            }}>
+              Sign Out
+            </button>
+          )}
           <button className="btn btn-outline btn-sm" onClick={() => setView("cards")}>
             {activeCount} cards
           </button>
