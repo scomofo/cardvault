@@ -239,4 +239,103 @@ export function registerItemRoutes(app) {
       res.status(500).json({ error: error.message });
     }
   });
+
+  app.post("/api/items/bulk", (req, res) => {
+    try {
+      const { items } = req.body;
+      if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ error: "items array required" });
+      }
+      if (items.length > 200) {
+        return res.status(400).json({ error: "max 200 items per bulk request" });
+      }
+      const created = [];
+      for (const raw of items) {
+        if (!raw.name && !raw.card_name) {
+          return res.status(400).json({ error: "name required for each item" });
+        }
+        const body = toSnake(raw);
+        const id = body.id || uid();
+        const values = [
+          id,
+          body.parallel_id || null,
+          body.intake_batch_id || null,
+          body.purchase_id || null,
+          body.name,
+          body.player_name,
+          body.manufacturer,
+          body.sport,
+          body.team,
+          body.card_set,
+          body.year,
+          body.card_number,
+          body.type || "sports",
+          body.rarity,
+          body.condition || "near_mint",
+          body.parallel,
+          body.binder,
+          body.storage_location,
+          body.cost_basis ?? 0,
+          body.acquisition_date,
+          body.acquisition_source,
+          body.status || "inventory",
+          body.listing_status || "not_listed",
+          body.sale_status || "available",
+          json(body.listed_on),
+          body.front_img_id,
+          body.back_img_id,
+          body.front_img_phash,
+          json(body.price_estimate),
+          json(body.price_history),
+          body.market_price ?? 0,
+          body.suggested_listing_price ?? 0,
+          body.min_acceptable_price ?? 0,
+          body.last_comp_price ?? 0,
+          body.average_comp_price ?? 0,
+          body.psa9_price ?? 0,
+          body.psa10_price ?? 0,
+          body.profit_realized ?? 0,
+          body.sold_at || null,
+          body.notes,
+          body.centering || null,
+          body.corners || null,
+          body.edges || null,
+          body.surface || null,
+          body.projected_grade || null,
+          body.grading_candidate || 0,
+          body.grading_decision || null,
+          body.vault_status || null,
+          body.condition_report || null,
+          body.cv_centering_lr || null,
+          body.cv_centering_tb || null,
+          body.cv_centering_score || null,
+          body.cv_processed || 0,
+          body.ebay_centering || null,
+          body.ebay_corner_sharpness || null,
+          body.ebay_edge_chipping || null,
+        ];
+        const placeholders = values.map(() => "?").join(",");
+        run(
+          `INSERT INTO user_items
+           (id, parallel_id, intake_batch_id, purchase_id, name, player_name,
+           manufacturer, sport, team, card_set, year, card_number, type, rarity,
+            condition, parallel, binder, storage_location, cost_basis, acquisition_date,
+            acquisition_source, status, listing_status, sale_status, listed_on,
+            front_img_id, back_img_id, front_img_phash, price_estimate, price_history, market_price,
+            suggested_listing_price, min_acceptable_price, last_comp_price,
+            average_comp_price, psa9_price, psa10_price, profit_realized, sold_at,
+            notes, centering, corners, edges, surface, projected_grade,
+            grading_candidate, grading_decision, vault_status, condition_report, cv_centering_lr,
+            cv_centering_tb, cv_centering_score, cv_processed, ebay_centering,
+            ebay_corner_sharpness, ebay_edge_chipping)
+           VALUES (${placeholders})`,
+          values,
+        );
+        created.push(toCamel(get("SELECT * FROM user_items WHERE id = ?", [id]), ITEM_FIELD_MAP));
+      }
+      res.status(201).json({ created, count: created.length });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
 }
