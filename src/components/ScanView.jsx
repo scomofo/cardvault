@@ -165,6 +165,7 @@ export default function ScanView({ onNavigate }) {
           costBasis={parseFloat(card.costBasis) || 0}
           feeRate={PLATFORM_FEES[listing.platform] || 0}
           comps={results}
+          priceEst={priceEst}
         />
       )}
     </>

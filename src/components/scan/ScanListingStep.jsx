@@ -1,7 +1,25 @@
 import { IconCopy } from "../Icons";
-import ProfitWarning from "../ProfitWarning";
+import NetPanel from "../NetPanel";
 import SoldComps from "../SoldComps";
 import { PLATFORMS, SHIP_CA } from "../../lib/constants";
+
+const STRATEGIES = [
+  { key: "quick", label: "Quick Sale", desc: "Sell fast at or below market" },
+  { key: "market", label: "Market", desc: "Match current asking price" },
+  { key: "premium", label: "Premium", desc: "Hold for higher margin" },
+];
+
+function deriveStrategyPrices(priceEst) {
+  const low = parseFloat(priceEst?.low) || 0;
+  const mid = parseFloat(priceEst?.mid) || 0;
+  const high = parseFloat(priceEst?.high) || 0;
+  if (!mid) return null;
+  return {
+    quick: low || Math.round(mid * 0.9 * 100) / 100,
+    market: mid,
+    premium: high || Math.round(mid * 1.15 * 100) / 100,
+  };
+}
 
 export default function ScanListingStep({
   listing,
@@ -14,7 +32,15 @@ export default function ScanListingStep({
   costBasis = 0,
   feeRate = 0,
   comps = [],
+  priceEst = {},
 }) {
+  const strategyPrices = deriveStrategyPrices(priceEst);
+
+  function applyStrategy(key) {
+    if (!strategyPrices) return;
+    onListingChange("price", String(strategyPrices[key]));
+  }
+
   return (
     <section className="slide-up">
       <div className="card-hero mb-12">
@@ -36,6 +62,28 @@ export default function ScanListingStep({
             ))}
           </div>
         </div>
+
+        {strategyPrices && (
+          <div className="form-section">
+            <div className="lbl">Pricing strategy</div>
+            <div className="chip-row">
+              {STRATEGIES.map(({ key, label }) => {
+                const sp = strategyPrices[key];
+                const active = parseFloat(listing.price) === sp;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => applyStrategy(key)}
+                    className={`chip ${active ? "active" : ""}`}
+                    title={STRATEGIES.find((s) => s.key === key).desc}
+                  >
+                    {label} <span style={{ opacity: 0.7, fontSize: 11 }}>${sp.toFixed(2)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <label className="fld mb-8">
           <span className="lbl">Title</span>
@@ -69,10 +117,17 @@ export default function ScanListingStep({
             />
           </label>
         </div>
-        <SoldComps comps={comps} />
-        <ProfitWarning price={parseFloat(listing.price)} costBasis={costBasis} feeRate={feeRate} shipping={parseFloat(listing.shipping) || 0} />
 
-        <label className="fld mb-10">
+        <NetPanel
+          price={listing.price}
+          shipping={listing.shipping}
+          feeRate={feeRate}
+          costBasis={costBasis}
+        />
+
+        <SoldComps comps={comps} />
+
+        <label className="fld mb-10 mt-8">
           <span className="lbl">Description</span>
           <textarea
             className="inp"

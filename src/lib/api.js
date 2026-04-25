@@ -33,6 +33,7 @@ export const itemsAPI = {
   create: (data) => request("/items", { method: "POST", body: data }),
   update: (id, data) => request(`/items/${id}`, { method: "PUT", body: data }),
   delete: (id) => request(`/items/${id}`, { method: "DELETE" }),
+  bulkCreate: (items) => request("/items/bulk", { method: "POST", body: { items } }),
 };
 
 // Sales
