@@ -3,6 +3,7 @@ import { registerAuthRoutes } from "./auth.routes.js";
 import { registerAutomationRoutes } from "./automation.routes.js";
 import { registerAlertsRoutes } from "./alerts.routes.js";
 import { registerListingTemplatesRoutes } from "./listingTemplates.routes.js";
+import { registerPricingRecommendationsRoutes } from "./pricingRecommendations.routes.js";
 import { registerBatchPresetsRoutes } from "./batchPresets.routes.js";
 import { registerCollectionRoutes } from "./collections.routes.js";
 import { registerFeeModelsRoutes } from "./feeModels.routes.js";
@@ -49,5 +50,6 @@ export function registerRoutes(app) {
   registerFeeModelsRoutes(app);
   registerAlertsRoutes(app);
   registerListingTemplatesRoutes(app);
+  registerPricingRecommendationsRoutes(app);
 }
 

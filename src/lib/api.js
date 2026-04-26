@@ -222,6 +222,13 @@ export const presetsAPI = {
   delete: (id) => request(`/batch-presets/${id}`, { method: "DELETE" }),
 };
 
+// Pricing recommendations
+export const pricingRecsAPI = {
+  list: (strategy) => request(`/pricing-recommendations${strategy ? `?strategy=${encodeURIComponent(strategy)}` : ""}`),
+  apply: (id) => request(`/pricing-recommendations/${id}/apply`, { method: "POST" }),
+  dismiss: (id) => request(`/pricing-recommendations/${id}`, { method: "DELETE" }),
+};
+
 // Check if backend is available
 export async function checkBackend() {
   try {

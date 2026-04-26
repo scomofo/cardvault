@@ -5,6 +5,7 @@ import { fmtShort } from "../lib/utils";
 import { Skeleton, Spinner, IconZap } from "./Icons";
 import AlertQueue from "./AlertQueue";
 import DecisionFeedbackPanel from "./DecisionFeedbackPanel";
+import PricingRecommendationsQueue from "./PricingRecommendationsQueue";
 
 function MiniList({ title, rows, formatter = (value) => value }) {
   return (
@@ -116,6 +117,8 @@ export default function DashboardView() {
       <DecisionFeedbackPanel />
 
       <AlertQueue onRepricingRun={refreshDashboard} />
+
+      <PricingRecommendationsQueue />
 
       <div className="form-grid mb-12">
         <MiniList title="Top Profit Players" rows={performance.topProfitPlayers} formatter={fmtShort} />
