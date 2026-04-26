@@ -7,6 +7,7 @@ import { loadImage, deleteImage } from "../lib/storage";
 import { genCSV, genEbayCSV, genInsurancePDF } from "../lib/exports";
 import { IconSearch, IconDownload, IconChevron } from "./Icons";
 import CardDetail from "./CardDetail";
+import CsvImport from "./CsvImport";
 
 export default function CatalogView() {
   const toast = useToast();
@@ -176,6 +177,8 @@ export default function CatalogView() {
           </div>
         );
       })}
+
+      <CsvImport onImported={() => {}} />
 
       {catalog.length > 0 && (
         <div className="card mt-16">
