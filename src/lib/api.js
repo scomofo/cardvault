@@ -192,6 +192,13 @@ export const refAPI = {
   parallels: (params) => request(`/ref/parallels${toQuery(params)}`),
 };
 
+// Fee models (configurable per-platform fee rates)
+export const feeModelsAPI = {
+  list: () => request("/fee-models"),
+  upsert: (platform, data) => request(`/fee-models/${encodeURIComponent(platform)}`, { method: "PUT", body: data }),
+  delete: (platform) => request(`/fee-models/${encodeURIComponent(platform)}`, { method: "DELETE" }),
+};
+
 // Batch presets
 export const presetsAPI = {
   list: () => request("/batch-presets"),

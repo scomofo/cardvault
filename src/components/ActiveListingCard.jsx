@@ -1,7 +1,7 @@
 import { PLATFORMS } from "../lib/constants";
 import { fmtShort } from "../lib/utils";
 import { IconCheck, IconX, Spinner } from "./Icons";
-import { PLATFORM_FEES } from "./SalesFlow";
+import { useFeeModels } from "../hooks/useFeeModels";
 import ProfitWarning from "./ProfitWarning";
 
 export default function ActiveListingCard({ listing: l, catalog, busyListingId, sellingId, sellPrice, setSellPrice, sellTracking, setSellTracking, repricingId, repriceVal, setRepriceVal, onPublish, onSync, onCrosspost, onSell, onStartSell, onReprice, onStartReprice, onEndListing, onCancelSell, onCancelReprice, timeLeft }) {
@@ -9,7 +9,8 @@ export default function ActiveListingCard({ listing: l, catalog, busyListingId, 
   const isUrgent = tl && !tl.includes("d") && !tl.includes("Ended") && parseInt(tl) < 60;
   const isSelling = sellingId === l.id;
   const isRepricing = repricingId === l.id;
-  const feeRate = PLATFORM_FEES[l.platform] || 0;
+  const { getFeeRate } = useFeeModels();
+  const feeRate = getFeeRate(l.platform);
   const previewNet = sellPrice ? (parseFloat(sellPrice) - (parseFloat(catalog.find((c) => c.id === l.cardId)?.costBasis) || 0) - Math.round(parseFloat(sellPrice) * feeRate * 100) / 100 - (l.shipping || 0)) : null;
 
   return (

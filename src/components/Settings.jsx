@@ -3,7 +3,8 @@ import { useToast } from "./Toast";
 import { useData } from "../lib/DataContext";
 import { apiPath } from "../lib/apiBase";
 import { fmtShort } from "../lib/utils";
-import { automationAPI, marketplacesAPI } from "../lib/api";
+import { automationAPI, marketplacesAPI, feeModelsAPI } from "../lib/api";
+import { PLATFORMS, PLATFORM_FEES } from "../lib/constants";
 import { createBackupPayload, normalizeBackupState } from "../lib/backupState";
 import { genSalesCSV } from "../lib/exports";
 import { clearAllImages, exportAllImages, importAllImages } from "../lib/storage";
@@ -306,6 +307,90 @@ function MarketplaceConnectionsSection() {
   );
 }
 
+function FeeModelsSection() {
+  const toast = useToast();
+  const { useServer } = useData();
+  const [rates, setRates] = useState({ ...PLATFORM_FEES });
+  const [serverRates, setServerRates] = useState({});
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!useServer) return;
+    feeModelsAPI.list()
+      .then((rows) => {
+        const m = {};
+        for (const r of rows) m[r.platform] = r.fee_rate;
+        setServerRates(m);
+        setRates({ ...PLATFORM_FEES, ...m });
+      })
+      .catch(() => {});
+  }, [useServer]);
+
+  const save = async () => {
+    if (!useServer) return;
+    setSaving(true);
+    try {
+      for (const [platform, rate] of Object.entries(rates)) {
+        await feeModelsAPI.upsert(platform, { fee_rate: parseFloat(rate) || 0 });
+      }
+      setServerRates({ ...rates });
+      toast.success("Fee models saved");
+    } catch (err) {
+      toast.error(`Save failed: ${err.message}`);
+    }
+    setSaving(false);
+  };
+
+  const reset = async (platform) => {
+    try {
+      await feeModelsAPI.delete(platform);
+      setServerRates((p) => { const n = { ...p }; delete n[platform]; return n; });
+      setRates((p) => ({ ...p, [platform]: PLATFORM_FEES[platform] ?? 0 }));
+    } catch (err) {
+      toast.error(`Reset failed: ${err.message}`);
+    }
+  };
+
+  return (
+    <div className="card mb-12">
+      <div className="lbl">Platform Fee Models</div>
+      <div className="text-xxs text-dim mt-4 mb-10">Override default fee rates. Used in all net proceeds calculations.</div>
+      {PLATFORMS.map(({ v, l }) => {
+        const isCustom = v in serverRates;
+        const pct = ((rates[v] ?? PLATFORM_FEES[v] ?? 0) * 100);
+        return (
+          <div key={v} className="flex items-center gap-8 mb-6">
+            <span className="text-xs fw-600" style={{ minWidth: 96 }}>{l}</span>
+            <input
+              className="inp"
+              type="number" step="0.01" min="0" max="100"
+              style={{ maxWidth: 72 }}
+              value={pct.toFixed(2)}
+              onChange={(e) => setRates((p) => ({ ...p, [v]: parseFloat(e.target.value) / 100 || 0 }))}
+            />
+            <span className="text-xs text-dim">%</span>
+            {isCustom ? (
+              <>
+                <span className="badge badge-acc" style={{ fontSize: 10 }}>custom</span>
+                <button className="btn btn-ghost btn-sm" style={{ fontSize: 10, padding: "2px 6px" }} onClick={() => reset(v)}>Reset</button>
+              </>
+            ) : (
+              <span className="text-xxs text-dim">default</span>
+            )}
+          </div>
+        );
+      })}
+      {useServer ? (
+        <button className="btn btn-primary btn-sm mt-8" onClick={save} disabled={saving}>
+          {saving ? <Spinner size={12} /> : "Save Fee Models"}
+        </button>
+      ) : (
+        <div className="text-xxs text-dim mt-8">Server mode required to persist custom fee rates.</div>
+      )}
+    </div>
+  );
+}
+
 export default function Settings() {
   const {
     catalog, setCatalog, sales, setSales, orders, setOrders, listings, setListings, purchases, setPurchases, trades, setTrades,
@@ -429,6 +514,8 @@ export default function Settings() {
       <EbayConnectionSection />
 
       <MarketplaceConnectionsSection />
+
+      <FeeModelsSection />
 
       <div className="card mb-12">
         <div className="lbl">User Profile</div>

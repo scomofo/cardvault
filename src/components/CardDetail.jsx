@@ -7,12 +7,13 @@ import { calculateGrade, gradeToTerm, generateConditionReport } from "../lib/gra
 import PriceChart from "./PriceChart";
 import { aiGradePredict } from "../lib/ai";
 import { IconBack, IconTrash, IconCheck, IconSearch, IconPlus, IconZap, IconShield, IconCopy, Spinner, Skeleton } from "./Icons";
-import { PLATFORM_FEES } from "./SalesFlow";
+import { useFeeModels } from "../hooks/useFeeModels";
 import ProfitWarning from "./ProfitWarning";
 import SoldComps from "./SoldComps";
 
 export default function CardDetail({ detail, detailFrontImg, detailBackImg, catalog, setCatalog, sales, setSales, listings, setListings, onBack }) {
   const toast = useToast();
+  const { getFeeRate } = useFeeModels();
   const [gradePred, setGradePred] = useState(null);
   const [predicting, setPredicting] = useState(false);
   const [salePrice, setSalePrice] = useState("");
@@ -265,12 +266,12 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
               </div>
               {quickListPrice && (
                 <div className="text-xxs text-dim mt-6">
-                  Fees: {fmtShort(parseFloat(quickListPrice) * (PLATFORM_FEES[quickListPlatform] || 0))} ({((PLATFORM_FEES[quickListPlatform] || 0) * 100).toFixed(1)}%)
-                  {" "}&middot; Net: {fmtShort(parseFloat(quickListPrice) - parseFloat(quickListPrice) * (PLATFORM_FEES[quickListPlatform] || 0) - 4.99 - (parseFloat(detail.costBasis) || 0))}
+                  Fees: {fmtShort(parseFloat(quickListPrice) * (getFeeRate(quickListPlatform)))} ({((getFeeRate(quickListPlatform)) * 100).toFixed(1)}%)
+                  {" "}&middot; Net: {fmtShort(parseFloat(quickListPrice) - parseFloat(quickListPrice) * (getFeeRate(quickListPlatform)) - 4.99 - (parseFloat(detail.costBasis) || 0))}
                 </div>
               )}
               <SoldComps comps={autoIdResult?.pricing?.recommendations} />
-              <ProfitWarning price={parseFloat(quickListPrice)} costBasis={parseFloat(detail.costBasis) || 0} feeRate={PLATFORM_FEES[quickListPlatform] || 0} shipping={4.99} />
+              <ProfitWarning price={parseFloat(quickListPrice)} costBasis={parseFloat(detail.costBasis) || 0} feeRate={getFeeRate(quickListPlatform)} shipping={4.99} />
               <div className="flex gap-8 mt-8">
                 <button className="btn btn-primary btn-sm flex-1" onClick={() => quickList(detail.id)}>
                   <IconCheck size={12} /> Create Listing

@@ -1,3 +1,8 @@
+export const PLATFORM_FEES = {
+  ebay: 0.1312, tcgplayer: 0.1089, mercari: 0.10, facebook: 0,
+  collx: 0.10, poshmark: 0.20, comc: 0.10, alt: 0.10, goldin: 0.15, shopify: 0.029,
+};
+
 export const CONDITIONS = [
   { v: "gem_mint", l: "Gem Mint 10", s: "GM", c: "#c9a96e" },
   { v: "mint", l: "Mint 9", s: "M", c: "#5a9e6f" },
