@@ -512,5 +512,17 @@ export function createTables(db) {
       updated_at TEXT DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS listing_templates (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      platform TEXT NOT NULL,
+      title_format TEXT NOT NULL DEFAULT '{name} {set} #{number} [{condition_short}]',
+      description_template TEXT NOT NULL DEFAULT '',
+      shipping_default REAL DEFAULT 4.99,
+      format_default TEXT DEFAULT 'fixed',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
   `);
 }

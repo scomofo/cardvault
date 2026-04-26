@@ -1,7 +1,10 @@
+import { useState, useEffect } from "react";
 import { IconCopy } from "../Icons";
 import NetPanel from "../NetPanel";
 import SoldComps from "../SoldComps";
 import { PLATFORMS, SHIP_CA } from "../../lib/constants";
+import { listingTemplatesAPI } from "../../lib/api";
+import { applyListingTemplate, condOf } from "../../lib/utils";
 
 const STRATEGIES = [
   { key: "quick", label: "Quick Sale", desc: "Sell fast at or below market" },
@@ -23,6 +26,7 @@ function deriveStrategyPrices(priceEst) {
 
 export default function ScanListingStep({
   listing,
+  card = {},
   onCopy,
   onListingChange,
   onNewCard,
@@ -35,6 +39,18 @@ export default function ScanListingStep({
   priceEst = {},
 }) {
   const strategyPrices = deriveStrategyPrices(priceEst);
+  const [templates, setTemplates] = useState([]);
+
+  useEffect(() => {
+    listingTemplatesAPI.list().then(setTemplates).catch(() => {});
+  }, []);
+
+  function applyTemplate(tpl) {
+    if (tpl.titleFormat) onListingChange("title", applyListingTemplate(tpl.titleFormat, card, condOf));
+    if (tpl.descriptionTemplate) onListingChange("description", applyListingTemplate(tpl.descriptionTemplate, card, condOf));
+    if (tpl.shippingDefault != null) onListingChange("shipping", String(tpl.shippingDefault));
+    if (tpl.platform) onListingChange("platform", tpl.platform);
+  }
 
   function applyStrategy(key) {
     if (!strategyPrices) return;
@@ -62,6 +78,25 @@ export default function ScanListingStep({
             ))}
           </div>
         </div>
+
+        {templates.length > 0 && (
+          <div className="form-section">
+            <div className="lbl">Listing Template</div>
+            <select
+              className="inp"
+              value=""
+              onChange={(e) => {
+                const tpl = templates.find((t) => t.id === e.target.value);
+                if (tpl) applyTemplate(tpl);
+              }}
+            >
+              <option value="">Apply template…</option>
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>{t.name} ({t.platform})</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {strategyPrices && (
           <div className="form-section">

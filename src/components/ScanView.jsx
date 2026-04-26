@@ -154,6 +154,7 @@ export default function ScanView({ onNavigate }) {
       {step === 3 && (
         <ScanListingStep
           listing={listing}
+          card={card}
           onCopy={actions.copyListing}
           onListingChange={(key, value) =>
             setListing((previous) => ({ ...previous, [key]: value }))

@@ -3,7 +3,7 @@ import { useToast } from "./Toast";
 import { useData } from "../lib/DataContext";
 import { apiPath } from "../lib/apiBase";
 import { fmtShort } from "../lib/utils";
-import { automationAPI, marketplacesAPI, feeModelsAPI } from "../lib/api";
+import { automationAPI, marketplacesAPI, feeModelsAPI, listingTemplatesAPI } from "../lib/api";
 import { PLATFORMS, PLATFORM_FEES } from "../lib/constants";
 import { createBackupPayload, normalizeBackupState } from "../lib/backupState";
 import { genSalesCSV } from "../lib/exports";
@@ -391,6 +391,121 @@ function FeeModelsSection() {
   );
 }
 
+const EMPTY_TPL = { name: "", platform: "ebay", titleFormat: "{name} {set} #{number} [{condition_short}]", descriptionTemplate: "", shippingDefault: "4.99", formatDefault: "fixed" };
+
+function ListingTemplatesSection() {
+  const toast = useToast();
+  const { useServer } = useData();
+  const [templates, setTemplates] = useState([]);
+  const [editing, setEditing] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!useServer) return;
+    listingTemplatesAPI.list().then(setTemplates).catch(() => {});
+  }, [useServer]);
+
+  const save = async () => {
+    if (!editing.name?.trim()) return;
+    setSaving(true);
+    try {
+      if (editing.id) {
+        const updated = await listingTemplatesAPI.update(editing.id, editing);
+        setTemplates((p) => p.map((t) => (t.id === editing.id ? updated : t)));
+      } else {
+        const created = await listingTemplatesAPI.create(editing);
+        setTemplates((p) => [...p, created]);
+      }
+      setEditing(null);
+      toast.success("Template saved");
+    } catch (err) {
+      toast.error(`Save failed: ${err.message}`);
+    }
+    setSaving(false);
+  };
+
+  const remove = async (id) => {
+    if (!window.confirm("Delete this template?")) return;
+    await listingTemplatesAPI.delete(id).catch(() => {});
+    setTemplates((p) => p.filter((t) => t.id !== id));
+  };
+
+  return (
+    <div className="card mb-12">
+      <div className="flex justify-between items-center mb-4">
+        <div className="lbl" style={{ margin: 0 }}>Listing Templates</div>
+        {useServer && !editing && (
+          <button className="btn btn-ghost btn-sm" onClick={() => setEditing({ ...EMPTY_TPL })}>+ New</button>
+        )}
+      </div>
+      <div className="text-xxs text-dim mb-10">
+        Saved templates auto-fill title, description, and shipping when creating listings. Tokens: {"{name} {set} {year} {number} {condition} {condition_short} {parallel}"}
+      </div>
+
+      {!useServer && <div className="text-xxs text-dim">Server mode required.</div>}
+
+      {templates.length === 0 && useServer && !editing && (
+        <div className="text-xs text-dim">No templates yet. Click + New to create one.</div>
+      )}
+
+      {templates.map((t) => (
+        <div key={t.id} className="flex items-center gap-8 mt-8 pb-8" style={{ borderBottom: "1px solid var(--brd)" }}>
+          <div className="flex-1">
+            <div className="text-xs fw-700">{t.name}</div>
+            <div className="text-xxs text-dim">{t.platform} · {t.titleFormat}</div>
+          </div>
+          <button className="btn btn-ghost btn-sm" onClick={() => setEditing({ ...t })}>Edit</button>
+          <button className="btn btn-ghost btn-sm" style={{ color: "var(--red)" }} onClick={() => remove(t.id)}>Delete</button>
+        </div>
+      ))}
+
+      {editing && (
+        <div className="fade mt-10" style={{ padding: 14, background: "var(--acc-bg)", borderRadius: "var(--radius)", border: "1px solid var(--acc-brd)" }}>
+          <div className="form-grid mb-8">
+            <label className="fld">
+              <span className="text-xxs text-dim">Template name</span>
+              <input className="inp" value={editing.name} onChange={(e) => setEditing((p) => ({ ...p, name: e.target.value }))} placeholder="e.g. eBay Sports Standard" />
+            </label>
+            <label className="fld">
+              <span className="text-xxs text-dim">Platform</span>
+              <select className="inp" value={editing.platform} onChange={(e) => setEditing((p) => ({ ...p, platform: e.target.value }))}>
+                {PLATFORMS.map(({ v, l }) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </label>
+          </div>
+          <label className="fld mb-8">
+            <span className="text-xxs text-dim">Title format</span>
+            <input className="inp" value={editing.titleFormat} onChange={(e) => setEditing((p) => ({ ...p, titleFormat: e.target.value }))} placeholder="{name} {set} #{number} [{condition_short}]" />
+          </label>
+          <label className="fld mb-8">
+            <span className="text-xxs text-dim">Description template</span>
+            <textarea className="inp" style={{ minHeight: 60 }} value={editing.descriptionTemplate} onChange={(e) => setEditing((p) => ({ ...p, descriptionTemplate: e.target.value }))} placeholder="Ships tracked from Canada..." />
+          </label>
+          <div className="form-grid mb-8">
+            <label className="fld">
+              <span className="text-xxs text-dim">Default shipping $</span>
+              <input className="inp" type="number" step="0.01" value={editing.shippingDefault} onChange={(e) => setEditing((p) => ({ ...p, shippingDefault: e.target.value }))} />
+            </label>
+            <label className="fld">
+              <span className="text-xxs text-dim">Format</span>
+              <select className="inp" value={editing.formatDefault} onChange={(e) => setEditing((p) => ({ ...p, formatDefault: e.target.value }))}>
+                <option value="fixed">Fixed price</option>
+                <option value="auction">Auction</option>
+              </select>
+            </label>
+          </div>
+          <div className="flex gap-8">
+            <button className="btn btn-primary btn-sm" onClick={save} disabled={saving || !editing.name?.trim()}>
+              {saving ? "..." : "Save Template"}
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setEditing(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Settings() {
   const {
     catalog, setCatalog, sales, setSales, orders, setOrders, listings, setListings, purchases, setPurchases, trades, setTrades,
@@ -516,6 +631,8 @@ export default function Settings() {
       <MarketplaceConnectionsSection />
 
       <FeeModelsSection />
+
+      <ListingTemplatesSection />
 
       <div className="card mb-12">
         <div className="lbl">User Profile</div>

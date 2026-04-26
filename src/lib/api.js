@@ -192,6 +192,14 @@ export const refAPI = {
   parallels: (params) => request(`/ref/parallels${toQuery(params)}`),
 };
 
+// Listing templates
+export const listingTemplatesAPI = {
+  list: (platform) => request(`/listing-templates${platform ? `?platform=${encodeURIComponent(platform)}` : ""}`),
+  create: (data) => request("/listing-templates", { method: "POST", body: data }),
+  update: (id, data) => request(`/listing-templates/${id}`, { method: "PUT", body: data }),
+  delete: (id) => request(`/listing-templates/${id}`, { method: "DELETE" }),
+};
+
 // Market alerts
 export const alertsAPI = {
   list: (status = "open") => request(`/alerts${status !== "open" ? `?status=${status}` : ""}`),
