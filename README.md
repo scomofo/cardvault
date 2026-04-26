@@ -58,6 +58,23 @@ cp .env.example .env           # Add ANTHROPIC_API_KEY
 npm start                      # Server :3001  +  Frontend :3000
 ```
 
+### Mac AirBook Card Studio (native `.app`)
+
+CardVault ships as a native macOS app via Electron. Run it as a single double-clickable `CardVault.app` instead of opening a browser tab.
+
+```bash
+npm install                    # Install (rebuilds better-sqlite3 for your toolchain)
+npm run mac:dev                # Dev: hot-reload Vite UI inside an Electron window
+npm run mac:build              # Build: produces CardVault.app (universal arm64+x64)
+npm run mac:build:arm64        # Apple Silicon only build (smaller, faster)
+```
+
+The packaged app lives in `dist-electron/`. SQLite data and your `.env` are stored in `~/Library/Application Support/CardVault/` so they survive app updates. The first launch copies `.env.example` there as a starting point.
+
+Camera, microphone, photo library, and local-network permission strings are wired into `Info.plist` automatically; macOS will prompt the first time you scan a card. Continuity Camera with iPhone works out of the box.
+
+The Python `cv-service` is **not** bundled — start it separately on `:8000` when you need centering analysis. The Mac app gracefully reports it as offline otherwise.
+
 ### MacBook Air + iPhone 15 Pro
 
 - Run the app on the MacBook Air with `HOST=0.0.0.0` so Vite and Express are reachable over your local network.

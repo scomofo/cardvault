@@ -2,13 +2,16 @@ import express from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import { config } from "dotenv";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve as pathResolve } from "node:path";
 import { initDB, get as dbGet, run as dbRun } from "./src/server/database.js";
 import { seedReferenceData } from "./src/server/seed.js";
 import { registerRoutes } from "./src/server/routes/index.js";
 import { authCheck, requireProtectedConfigWrite } from "./src/server/auth.js";
 import { getTrustedDevHosts, isAllowedDevOrigin } from "./src/server/networkTrust.js";
 
-config();
+config({ path: process.env.CARDVAULT_ENV_FILE || undefined });
 
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
@@ -207,11 +210,40 @@ app.get("/api/cv/health", async (_req, res) => {
 
 registerRoutes(app);
 
-app.listen(PORT, HOST, () => {
-  console.log(`CardVault API running on http://localhost:${PORT}`);
-  for (const url of getNetworkUrls(PORT)) {
-    console.log(`  Network: ${url}`);
+// Serve the built React UI when present (production / Electron `.app` mode).
+const distDir = pathResolve(process.env.CARDVAULT_DIST_DIR || "./dist");
+if (existsSync(distDir)) {
+  app.use(express.static(distDir));
+  app.get(/^\/(?!api\/).*/, (_req, res) => {
+    res.sendFile(pathResolve(distDir, "index.html"));
+  });
+}
+
+export function startServer({ port = PORT, host = HOST } = {}) {
+  return new Promise((resolveStart) => {
+    const server = app.listen(port, host, () => {
+      console.log(`CardVault API running on http://localhost:${port}`);
+      for (const url of getNetworkUrls(port)) {
+        console.log(`  Network: ${url}`);
+      }
+      console.log(`  CV service: ${CV_SERVICE_URL}`);
+      if (!anthropicKey) console.log("  AI features: disabled (no API key - set via Settings UI)");
+      resolveStart(server);
+    });
+  });
+}
+
+const isMainModule = (() => {
+  if (!process.argv[1]) return false;
+  try {
+    return import.meta.url === new URL(`file://${pathResolve(process.argv[1])}`).href;
+  } catch {
+    return false;
   }
-  console.log(`  CV service: ${CV_SERVICE_URL}`);
-  if (!anthropicKey) console.log("  AI features: disabled (no API key - set via Settings UI)");
-});
+})();
+
+if (isMainModule) {
+  startServer();
+}
+
+export { app };

@@ -85,6 +85,11 @@ function AppContent() {
     return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
   }, []);
 
+  useEffect(() => {
+    const off = window.cardvault?.onOpenSettings?.(() => setView("more"));
+    return off;
+  }, []);
+
   const activeCount = useMemo(() => catalog.filter((c) => c.status !== "sold").length, [catalog]);
 
   return (
