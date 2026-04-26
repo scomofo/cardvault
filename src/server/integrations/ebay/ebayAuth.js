@@ -12,7 +12,16 @@ function setting(key) { return get("SELECT value FROM settings WHERE key = ?", [
 function saveSetting(key, value) { run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [key, value]); }
 function deleteSetting(key) { run("DELETE FROM settings WHERE key = ?", [key]); }
 function getDefaultCallbackUrl() {
-  return process.env.EBAY_CALLBACK_URL || process.env.EBAY_REDIRECT_URI || "http://localhost:3000/api/ebay/callback";
+  if (process.env.EBAY_CALLBACK_URL) return process.env.EBAY_CALLBACK_URL;
+  if (process.env.EBAY_REDIRECT_URI) return process.env.EBAY_REDIRECT_URI;
+  // In Electron .app mode the Express server also serves the UI, so eBay
+  // must redirect to its port directly (no Vite proxy). In standalone dev
+  // mode the Vite dev server on :3000 proxies /api/* to Express on :3001.
+  if (process.env.CARDVAULT_APP_MODE === "electron") {
+    const port = process.env.PORT || "3001";
+    return `http://127.0.0.1:${port}/api/ebay/callback`;
+  }
+  return "http://localhost:3000/api/ebay/callback";
 }
 
 function getLegacyRuName() {

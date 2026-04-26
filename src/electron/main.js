@@ -1,5 +1,6 @@
-import { app, BrowserWindow, Menu, shell, dialog, ipcMain } from "electron";
+import { app, BrowserWindow, Menu, shell, dialog, ipcMain, Notification } from "electron";
 import { existsSync, mkdirSync, copyFileSync } from "node:fs";
+import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -28,6 +29,7 @@ if (!existsSync(userEnvPath) && existsSync(bundledEnvExample)) {
 process.env.CARDVAULT_DB_PATH = process.env.CARDVAULT_DB_PATH || userDbPath;
 process.env.CARDVAULT_ENV_FILE = process.env.CARDVAULT_ENV_FILE || userEnvPath;
 process.env.CARDVAULT_DIST_DIR = process.env.CARDVAULT_DIST_DIR || path.join(projectRoot, "dist");
+process.env.CARDVAULT_APP_MODE = "electron";
 process.env.HOST = process.env.HOST || "127.0.0.1";
 process.env.PORT = process.env.PORT || "3001";
 
@@ -37,6 +39,87 @@ const DEV_URL = process.env.CARDVAULT_DEV_URL || null;
 let mainWindow = null;
 let serverPromise = null;
 let pendingDeepLink = null;
+let cvServiceProcess = null;
+
+const CV_SERVICE_DIR = path.join(projectRoot, "cv-service");
+const CV_SERVICE_HEALTH_URL = "http://127.0.0.1:8000/health";
+
+async function isCvServiceUp() {
+  try {
+    const res = await fetch(CV_SERVICE_HEALTH_URL, { signal: AbortSignal.timeout(1500) });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+function notify(title, body) {
+  if (Notification.isSupported()) {
+    new Notification({ title, body }).show();
+  } else {
+    console.log(`[${title}] ${body}`);
+  }
+}
+
+async function startCvService() {
+  if (cvServiceProcess) {
+    notify("Card Detection Service", "Service is already running.");
+    return;
+  }
+  if (await isCvServiceUp()) {
+    notify("Card Detection Service", "Already running on port 8000.");
+    return;
+  }
+  if (!existsSync(path.join(CV_SERVICE_DIR, "main.py"))) {
+    dialog.showErrorBox("Card Detection Service", `cv-service is not bundled with this build. Expected ${CV_SERVICE_DIR}/main.py.`);
+    return;
+  }
+  const candidates = ["python3", "python"];
+  let chosen = null;
+  for (const bin of candidates) {
+    try {
+      const probe = spawn(bin, ["--version"], { stdio: "ignore" });
+      const code = await new Promise((resolveProbe) => probe.on("exit", resolveProbe).on("error", () => resolveProbe(127)));
+      if (code === 0) { chosen = bin; break; }
+    } catch {
+      // try next candidate
+    }
+  }
+  if (!chosen) {
+    dialog.showErrorBox("Card Detection Service", "Python 3 was not found on this Mac. Install python3 (e.g. via Homebrew) and try again.");
+    return;
+  }
+  try {
+    cvServiceProcess = spawn(
+      chosen,
+      ["-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", "8000"],
+      { cwd: CV_SERVICE_DIR, stdio: "ignore", detached: false }
+    );
+    cvServiceProcess.on("exit", () => { cvServiceProcess = null; rebuildMenu(); });
+    cvServiceProcess.on("error", (err) => {
+      cvServiceProcess = null;
+      rebuildMenu();
+      dialog.showErrorBox("Card Detection Service", String(err?.message || err));
+    });
+    notify("Card Detection Service", "Starting on port 8000…");
+    rebuildMenu();
+  } catch (err) {
+    cvServiceProcess = null;
+    dialog.showErrorBox("Card Detection Service", String(err?.message || err));
+  }
+}
+
+function stopCvService() {
+  if (!cvServiceProcess) return;
+  try { cvServiceProcess.kill("SIGTERM"); } catch {}
+  cvServiceProcess = null;
+  notify("Card Detection Service", "Stopped.");
+  rebuildMenu();
+}
+
+function rebuildMenu() {
+  buildMenu();
+}
 
 if (!app.isDefaultProtocolClient("cardvault")) {
   app.setAsDefaultProtocolClient("cardvault");
@@ -147,6 +230,19 @@ function buildMenu() {
       ],
     },
     {
+      label: "Tools",
+      submenu: [
+        {
+          label: cvServiceProcess ? "Stop Card Detection Service" : "Start Card Detection Service",
+          click: () => (cvServiceProcess ? stopCvService() : startCvService()),
+        },
+        {
+          label: "Reveal Card Detection Service folder",
+          click: () => shell.openPath(CV_SERVICE_DIR),
+        },
+      ],
+    },
+    {
       role: "help",
       submenu: [
         {
@@ -222,6 +318,10 @@ app.whenReady().then(async () => {
   app.on("activate", async () => {
     if (BrowserWindow.getAllWindows().length === 0) await createWindow();
   });
+});
+
+app.on("before-quit", () => {
+  stopCvService();
 });
 
 app.on("window-all-closed", () => {
