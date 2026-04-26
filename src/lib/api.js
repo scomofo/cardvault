@@ -192,6 +192,13 @@ export const refAPI = {
   parallels: (params) => request(`/ref/parallels${toQuery(params)}`),
 };
 
+// Market alerts
+export const alertsAPI = {
+  list: (status = "open") => request(`/alerts${status !== "open" ? `?status=${status}` : ""}`),
+  update: (id, data) => request(`/alerts/${id}`, { method: "PATCH", body: data }),
+  dismissAll: (alertType) => request("/alerts/dismiss-all", { method: "POST", body: alertType ? { alertType } : {} }),
+};
+
 // Fee models (configurable per-platform fee rates)
 export const feeModelsAPI = {
   list: () => request("/fee-models"),

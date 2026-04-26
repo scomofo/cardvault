@@ -3,6 +3,7 @@ import { dashboardAPI, automationAPI } from "../lib/api";
 import { loadDashboardState } from "../lib/dashboardState";
 import { fmtShort } from "../lib/utils";
 import { Skeleton, Spinner, IconZap } from "./Icons";
+import AlertQueue from "./AlertQueue";
 import DecisionFeedbackPanel from "./DecisionFeedbackPanel";
 
 function MiniList({ title, rows, formatter = (value) => value }) {
@@ -114,25 +115,7 @@ export default function DashboardView() {
 
       <DecisionFeedbackPanel />
 
-      <div className="card mb-12">
-        <div className="lbl">Action Queue</div>
-        {actionQueue.length === 0 ? (
-          <div className="text-xs text-dim mt-6">No queued actions yet</div>
-        ) : (
-          actionQueue.slice(0, 8).map((entry) => (
-            <div key={`${entry.subjectType}-${entry.subjectId}-${entry.queue}`} className="flex justify-between items-center mt-8">
-              <div>
-                <div className="text-xs fw-700">{entry.queue.replace(/_/g, " ")}</div>
-                <div className="text-xxs text-dim">{entry.reason}</div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <div className="fw-800">{entry.item}</div>
-                <div className="text-xxs text-dim">{entry.priorityScore}</div>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
+      <AlertQueue onRepricingRun={refreshDashboard} />
 
       <div className="form-grid mb-12">
         <MiniList title="Top Profit Players" rows={performance.topProfitPlayers} formatter={fmtShort} />

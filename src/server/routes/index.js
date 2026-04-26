@@ -1,6 +1,7 @@
 import { registerActionQueueRoutes } from "./actionQueue.routes.js";
 import { registerAuthRoutes } from "./auth.routes.js";
 import { registerAutomationRoutes } from "./automation.routes.js";
+import { registerAlertsRoutes } from "./alerts.routes.js";
 import { registerBatchPresetsRoutes } from "./batchPresets.routes.js";
 import { registerCollectionRoutes } from "./collections.routes.js";
 import { registerFeeModelsRoutes } from "./feeModels.routes.js";
@@ -45,5 +46,6 @@ export function registerRoutes(app) {
   registerEbayRoutes(app);
   registerBatchPresetsRoutes(app);
   registerFeeModelsRoutes(app);
+  registerAlertsRoutes(app);
 }
 
