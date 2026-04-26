@@ -68,8 +68,20 @@
         "NSCameraUsageDescription": "CardVault uses the camera to scan trading cards for AI identification and grading.",
         "NSMicrophoneUsageDescription": "CardVault does not use the microphone, but macOS requires this entry when camera access is requested.",
         "NSPhotoLibraryUsageDescription": "CardVault accesses photos when you import card images from your library.",
-        "NSLocalNetworkUsageDescription": "CardVault uses your local network so an iPhone on the same Wi-Fi can connect to your card studio."
-      }
+        "NSLocalNetworkUsageDescription": "CardVault uses your local network so an iPhone on the same Wi-Fi can connect to your card studio.",
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLName": "com.scottmorley.cardvault.deeplink",
+            "CFBundleURLSchemes": ["cardvault"]
+          }
+        ]
+      },
+      "protocols": [
+        {
+          "name": "CardVault deep link",
+          "schemes": ["cardvault"]
+        }
+      ]
     },
     "dmg": {
       "writeUpdateInfo": false

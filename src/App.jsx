@@ -90,6 +90,27 @@ function AppContent() {
     return off;
   }, []);
 
+  useEffect(() => {
+    const off = window.cardvault?.onDeepLink?.((url) => {
+      try {
+        const parsed = new URL(url);
+        const host = parsed.host || parsed.hostname;
+        if (host === "settings") {
+          setView("more");
+        } else if (host === "card") {
+          setView("cards");
+        } else if (host === "scan") {
+          setView("scan");
+        } else if (host === "dashboard") {
+          setView("dashboard");
+        }
+      } catch {
+        // ignore malformed deep links
+      }
+    });
+    return off;
+  }, []);
+
   const activeCount = useMemo(() => catalog.filter((c) => c.status !== "sold").length, [catalog]);
 
   useEffect(() => {

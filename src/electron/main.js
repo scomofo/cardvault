@@ -3,6 +3,14 @@ import { existsSync, mkdirSync, copyFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+app.setName("CardVault");
+
+const singleInstanceLock = app.requestSingleInstanceLock();
+if (!singleInstanceLock) {
+  app.quit();
+  process.exit(0);
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..", "..");
 
@@ -28,6 +36,36 @@ const DEV_URL = process.env.CARDVAULT_DEV_URL || null;
 
 let mainWindow = null;
 let serverPromise = null;
+let pendingDeepLink = null;
+
+if (!app.isDefaultProtocolClient("cardvault")) {
+  app.setAsDefaultProtocolClient("cardvault");
+}
+
+function deliverDeepLink(url) {
+  if (!url || !url.startsWith("cardvault://")) return;
+  if (mainWindow) {
+    mainWindow.webContents.send("cardvault:deep-link", url);
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  } else {
+    pendingDeepLink = url;
+  }
+}
+
+app.on("open-url", (event, url) => {
+  event.preventDefault();
+  deliverDeepLink(url);
+});
+
+app.on("second-instance", (_event, argv) => {
+  const link = argv.find((a) => typeof a === "string" && a.startsWith("cardvault://"));
+  if (link) deliverDeepLink(link);
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+});
 
 async function ensureServer() {
   if (DEV_URL) return DEV_URL;
@@ -128,13 +166,17 @@ async function createWindow() {
     throw err;
   });
 
+  const isMac = process.platform === "darwin";
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 960,
     minHeight: 640,
     titleBarStyle: "hiddenInset",
-    backgroundColor: "#0b0d10",
+    trafficLightPosition: isMac ? { x: 16, y: 16 } : undefined,
+    backgroundColor: isMac ? "#00000000" : "#0b0d10",
+    vibrancy: isMac ? "under-window" : undefined,
+    visualEffectState: isMac ? "active" : undefined,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
@@ -158,6 +200,13 @@ async function createWindow() {
   });
 
   mainWindow.once("ready-to-show", () => mainWindow.show());
+  mainWindow.webContents.once("did-finish-load", () => {
+    if (pendingDeepLink) {
+      const link = pendingDeepLink;
+      pendingDeepLink = null;
+      deliverDeepLink(link);
+    }
+  });
   await mainWindow.loadURL(url);
 }
 

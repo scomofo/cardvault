@@ -7,6 +7,11 @@ contextBridge.exposeInMainWorld("cardvault", {
     ipcRenderer.on("cardvault:open-settings", listener);
     return () => ipcRenderer.removeListener("cardvault:open-settings", listener);
   },
+  onDeepLink: (handler) => {
+    const listener = (_event, url) => handler(url);
+    ipcRenderer.on("cardvault:deep-link", listener);
+    return () => ipcRenderer.removeListener("cardvault:deep-link", listener);
+  },
   setBadgeCount: (count) => {
     ipcRenderer.send("cardvault:set-badge", Number(count) || 0);
   },
