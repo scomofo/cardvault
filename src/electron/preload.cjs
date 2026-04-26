@@ -7,4 +7,7 @@ contextBridge.exposeInMainWorld("cardvault", {
     ipcRenderer.on("cardvault:open-settings", listener);
     return () => ipcRenderer.removeListener("cardvault:open-settings", listener);
   },
+  setBadgeCount: (count) => {
+    ipcRenderer.send("cardvault:set-badge", Number(count) || 0);
+  },
 });

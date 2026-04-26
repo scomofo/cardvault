@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, shell, dialog } from "electron";
+import { app, BrowserWindow, Menu, shell, dialog, ipcMain } from "electron";
 import { existsSync, mkdirSync, copyFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -160,6 +160,12 @@ async function createWindow() {
   mainWindow.once("ready-to-show", () => mainWindow.show());
   await mainWindow.loadURL(url);
 }
+
+ipcMain.on("cardvault:set-badge", (_event, count) => {
+  if (typeof app.setBadgeCount === "function") {
+    app.setBadgeCount(Number.isFinite(count) && count > 0 ? count : 0);
+  }
+});
 
 app.whenReady().then(async () => {
   buildMenu();

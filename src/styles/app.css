@@ -179,6 +179,14 @@ input, select, textarea, button {
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--deco-line);
+  -webkit-app-region: drag;
+}
+.app-header button,
+.app-header input,
+.app-header label,
+.app-header a,
+.app-header [role="button"] {
+  -webkit-app-region: no-drag;
 }
 /* Holographic accent line under header */
 .app-header::after {

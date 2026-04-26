@@ -92,6 +92,10 @@ function AppContent() {
 
   const activeCount = useMemo(() => catalog.filter((c) => c.status !== "sold").length, [catalog]);
 
+  useEffect(() => {
+    window.cardvault?.setBadgeCount?.(activeCount);
+  }, [activeCount]);
+
   return (
     <div className="app-shell">
       {!online && (
