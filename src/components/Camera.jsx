@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { IconCamera, IconUpload, IconRefresh, IconX } from "./Icons";
+import { checkImageQuality } from "../lib/storage";
 
 export default function Camera({ side, image, onCapture, onRetake, compact }) {
   const vRef = useRef(null);
@@ -7,6 +8,12 @@ export default function Camera({ side, image, onCapture, onRetake, compact }) {
   const sRef = useRef(null);
   const [live, setLive] = useState(false);
   const [camError, setCamError] = useState(null);
+  const [qualityWarning, setQualityWarning] = useState(null);
+
+  const captureWithCheck = useCallback((dataUrl) => {
+    onCapture(dataUrl);
+    checkImageQuality(dataUrl).then(({ warning }) => setQualityWarning(warning || null)).catch(() => {});
+  }, [onCapture]);
   const liveCameraSupported =
     typeof window !== "undefined" &&
     window.isSecureContext &&
@@ -45,7 +52,7 @@ export default function Camera({ side, image, onCapture, onRetake, compact }) {
     if (!v || !c) return;
     c.width = v.videoWidth; c.height = v.videoHeight;
     c.getContext("2d").drawImage(v, 0, 0);
-    onCapture(c.toDataURL("image/jpeg", 0.9));
+    captureWithCheck(c.toDataURL("image/jpeg", 0.9));
     stop();
   }, [onCapture, stop]);
 
@@ -53,7 +60,7 @@ export default function Camera({ side, image, onCapture, onRetake, compact }) {
     const f = e.target.files?.[0];
     if (!f) return;
     const r = new FileReader();
-    r.onload = (ev) => onCapture(ev.target.result);
+    r.onload = (ev) => captureWithCheck(ev.target.result);
     r.readAsDataURL(f);
   };
 
@@ -66,7 +73,10 @@ export default function Camera({ side, image, onCapture, onRetake, compact }) {
       <div className="card-elevated" style={{ flex: "1 1 140px", minWidth: 120, textAlign: "center", position: "relative", padding: 10 }}>
         <span className="badge badge-acc" style={{ position: "absolute", top: 8, left: 8, fontSize: 9 }}>{side}</span>
         <img src={image} alt={`${side} of card`} className="img-preview" style={{ width: "100%", maxHeight: mH, marginTop: 8 }} />
-        <button className="btn btn-ghost btn-sm mt-6 w-full" onClick={onRetake}>
+        {qualityWarning && (
+          <div className="text-xxs mt-4" style={{ color: "var(--orange)", lineHeight: 1.3 }}>{qualityWarning}</div>
+        )}
+        <button className="btn btn-ghost btn-sm mt-6 w-full" onClick={() => { setQualityWarning(null); onRetake(); }}>
           <IconRefresh size={12} /> Retake
         </button>
       </div>

@@ -118,6 +118,42 @@ export async function importAllImages(images = {}) {
   });
 }
 
+export function compressImage(dataUrl, maxDim = 1200, quality = 0.85) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const { naturalWidth: w, naturalHeight: h } = img;
+      const scale = Math.min(1, maxDim / Math.max(w, h));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(w * scale);
+      canvas.height = Math.round(h * scale);
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+export function checkImageQuality(dataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const w = img.naturalWidth, h = img.naturalHeight;
+      const minEdge = Math.min(w, h);
+      if (minEdge < 400) {
+        resolve({ ok: false, warning: `Image too small (${w}×${h}). Use a closer shot for better results.` });
+      } else if (minEdge < 600) {
+        resolve({ ok: true, warning: `Low resolution (${w}×${h}). Consider a higher-quality photo.` });
+      } else {
+        resolve({ ok: true, warning: null });
+      }
+    };
+    img.onerror = () => resolve({ ok: false, warning: "Could not read image" });
+    img.src = dataUrl;
+  });
+}
+
 // Structured data in localStorage with versioning
 const SCHEMA_VERSION = 1;
 

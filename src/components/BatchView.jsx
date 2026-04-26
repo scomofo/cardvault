@@ -6,7 +6,7 @@ import { itemsAPI, presetsAPI } from "../lib/api";
 import { CONDITIONS, TYPES } from "../lib/constants";
 import { uid, fmtShort } from "../lib/utils";
 import { aiRecognize, aiPrice } from "../lib/ai";
-import { saveImage } from "../lib/storage";
+import { saveImage, compressImage } from "../lib/storage";
 import { IconPlus, IconZap, IconX, Spinner } from "./Icons";
 
 const BATCH_FEE_RATE = 0.1312; // eBay default for net estimate
@@ -178,8 +178,8 @@ export default function BatchView() {
     for (const item of named) {
       const id = uid();
       let frontImgId = null, backImgId = null;
-      if (item.frontImg) { frontImgId = `img_${id}_front`; await saveImage(frontImgId, item.frontImg); }
-      if (item.backImg) { backImgId = `img_${id}_back`; await saveImage(backImgId, item.backImg); }
+      if (item.frontImg) { frontImgId = `img_${id}_front`; await saveImage(frontImgId, await compressImage(item.frontImg)); }
+      if (item.backImg) { backImgId = `img_${id}_back`; await saveImage(backImgId, await compressImage(item.backImg)); }
       items.push({
         id, name: item.name, cardSet: item.set, year: item.year, cardNumber: item.number,
         condition: item.condition || cond, type: item.type || type, binder,

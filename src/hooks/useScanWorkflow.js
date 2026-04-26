@@ -6,7 +6,7 @@ import { aiPrice, aiRecognize, aiVisualSearch } from "../lib/ai";
 import { identificationAPI, automationAPI } from "../lib/api";
 import { analyzeCentering, checkCvHealth } from "../lib/cvApi";
 import { computeDHash, hammingDistance } from "../lib/phash";
-import { saveImage } from "../lib/storage";
+import { saveImage, compressImage } from "../lib/storage";
 import { condOf, fmtShort, uid } from "../lib/utils";
 
 const DUPLICATE_HAMMING_THRESHOLD = 10;
@@ -304,7 +304,7 @@ export function useScanWorkflow() {
 
       if (frontImg) {
         frontImgId = `img_${id}_front`;
-        await saveImage(frontImgId, frontImg);
+        await saveImage(frontImgId, await compressImage(frontImg));
         frontImgPhash = await computeDHash(frontImg);
         if (frontImgPhash) {
           const duplicate = catalog.find((existing) => {
@@ -319,7 +319,7 @@ export function useScanWorkflow() {
 
       if (backImg) {
         backImgId = `img_${id}_back`;
-        await saveImage(backImgId, backImg);
+        await saveImage(backImgId, await compressImage(backImg));
       }
 
       const entry = buildSavedCard({
@@ -496,10 +496,10 @@ export function useScanWorkflow() {
       const frontImgId = item.front ? `img_${entryId}_front` : null;
       const backImgId = item.back ? `img_${entryId}_back` : null;
       if (frontImgId) {
-        await saveImage(frontImgId, item.front);
+        await saveImage(frontImgId, await compressImage(item.front));
       }
       if (backImgId) {
-        await saveImage(backImgId, item.back);
+        await saveImage(backImgId, await compressImage(item.back));
       }
       entries.push({
         id: entryId,
