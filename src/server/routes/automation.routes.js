@@ -29,7 +29,8 @@ export function registerAutomationRoutes(app) {
       const limit = Number(body.limit) > 0 ? Number(body.limit) : undefined;
       const delayMs = Number(body.delayMs) >= 0 ? Number(body.delayMs) : undefined;
       const source = typeof body.source === "string" ? body.source : undefined;
-      res.json(await refreshPricingForAllOwned({ limit, delayMs, source }));
+      const forceRefresh = body.forceRefresh === true;
+      res.json(await refreshPricingForAllOwned({ limit, delayMs, source, forceRefresh }));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

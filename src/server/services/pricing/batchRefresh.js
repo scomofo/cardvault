@@ -53,6 +53,7 @@ export async function refreshPricingForAllOwned({
   limit = DEFAULT_LIMIT,
   delayMs = DEFAULT_DELAY_MS,
   source,
+  forceRefresh = false,
   refresh = refreshPricingForItem,
   listItems = selectOwnedItems,
 } = {}) {
@@ -64,7 +65,7 @@ export async function refreshPricingForAllOwned({
   for (let i = 0; i < items.length; i += 1) {
     const { id } = items[i];
     try {
-      await refresh(id, source ? { source } : undefined);
+      await refresh(id, { source, forceRefresh });
       refreshed += 1;
     } catch (error) {
       errors.push({ itemId: id, message: error?.message || String(error) });
