@@ -135,6 +135,15 @@ function EbayConnectionSection() {
     toast.info("eBay disconnected");
   };
 
+  const copyCallback = async () => {
+    try {
+      await navigator.clipboard.writeText(callbackUrl);
+      toast.success("Callback URL copied");
+    } catch {
+      toast.error("Could not copy — select the URL manually");
+    }
+  };
+
   return (
     <div className="card mb-12" style={{ borderColor: status.connected ? "var(--grn-brd)" : status.configured ? "var(--acc-brd)" : undefined }}>
       <div className="flex items-center gap-8 mb-8">
@@ -166,6 +175,16 @@ function EbayConnectionSection() {
           </button>
         </div>
       )}
+
+      <div className="mt-10" style={{ padding: 8, background: "var(--s1)", borderRadius: "var(--radius)", border: "1px dashed var(--brd)" }}>
+        <div className="text-xxs text-dim">Accept URL to register in your eBay developer portal</div>
+        <div className="flex items-center gap-8 mt-4">
+          <code style={{ flex: 1, fontSize: 11, wordBreak: "break-all" }}>{callbackUrl}</code>
+          <button className="btn btn-ghost btn-sm" onClick={copyCallback} title="Copy to clipboard">
+            <IconUpload size={12} /> Copy
+          </button>
+        </div>
+      </div>
 
       {showSetup && (
         <div className="fade mt-10" style={{ padding: 12, background: "var(--acc-bg)", borderRadius: "var(--radius)", border: "1px solid var(--acc-brd)" }}>
@@ -204,6 +223,63 @@ function EbayConnectionSection() {
     </div>
   );
 }
+function MacAppSection() {
+  const isMacApp = typeof window !== "undefined" && window.cardvault?.platform === "darwin";
+  const toast = useToast();
+  const [autostartCv, setAutostartCv] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!isMacApp) return;
+    let active = true;
+    fetch(apiPath("/settings"))
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((settings) => {
+        if (!active) return;
+        setAutostartCv(settings?.cv_service_autostart === "true");
+        setLoaded(true);
+      })
+      .catch(() => active && setLoaded(true));
+    return () => { active = false; };
+  }, [isMacApp]);
+
+  const updateAutostart = async (next) => {
+    setAutostartCv(next);
+    try {
+      const res = await fetch(apiPath("/settings"), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cv_service_autostart: next ? "true" : "false" }),
+      });
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      toast.success(next ? "Card detection will auto-start with CardVault" : "Auto-start disabled");
+    } catch (e) {
+      setAutostartCv(!next);
+      toast.error(`Failed to save: ${e.message || e}`);
+    }
+  };
+
+  if (!isMacApp) return null;
+
+  return (
+    <div className="card mb-12">
+      <div className="lbl">Mac App</div>
+      <label className="flex items-center gap-8 mt-8" style={{ cursor: loaded ? "pointer" : "wait" }}>
+        <input
+          type="checkbox"
+          checked={autostartCv}
+          disabled={!loaded}
+          onChange={(e) => updateAutostart(e.target.checked)}
+        />
+        <span>Auto-start card detection service when CardVault opens</span>
+      </label>
+      <div className="text-xxs text-dim mt-4">
+        Spawns the local Python CV service on port 8000. Requires <code>python3</code> on your Mac.
+      </div>
+    </div>
+  );
+}
+
 function MarketplaceConnectionsSection() {
   const toast = useToast();
   const [connections, setConnections] = useState([]);
@@ -429,6 +505,7 @@ export default function Settings() {
       <EbayConnectionSection />
 
       <MarketplaceConnectionsSection />
+      <MacAppSection />
 
       <div className="card mb-12">
         <div className="lbl">User Profile</div>

@@ -160,6 +160,43 @@ async function ensureServer() {
   return `http://127.0.0.1:${APP_PORT}`;
 }
 
+async function getStoredPreference(key) {
+  try {
+    const res = await fetch(`http://127.0.0.1:${APP_PORT}/api/settings`, {
+      signal: AbortSignal.timeout(2000),
+    });
+    if (!res.ok) return null;
+    const settings = await res.json();
+    return settings?.[key] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function maybeAutoStartCvService() {
+  if (DEV_URL) return; // skip in mac:dev to avoid surprising the user
+  const pref = await getStoredPreference("cv_service_autostart");
+  if (pref === "true") {
+    await startCvService();
+  }
+}
+
+async function maybeShowOnboarding() {
+  if (!mainWindow) return;
+  try {
+    const res = await fetch(`http://127.0.0.1:${APP_PORT}/api/ai/status`, {
+      signal: AbortSignal.timeout(2000),
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data?.configured) return;
+    mainWindow.webContents.send("cardvault:open-settings");
+    notify("Welcome to CardVault", "Add your Anthropic API key in Settings to enable card recognition and pricing.");
+  } catch {
+    // server may still be warming up; skip onboarding silently
+  }
+}
+
 function buildMenu() {
   const isMac = process.platform === "darwin";
   const template = [
@@ -302,6 +339,7 @@ async function createWindow() {
       pendingDeepLink = null;
       deliverDeepLink(link);
     }
+    setTimeout(() => maybeShowOnboarding(), 800);
   });
   await mainWindow.loadURL(url);
 }
@@ -315,6 +353,7 @@ ipcMain.on("cardvault:set-badge", (_event, count) => {
 app.whenReady().then(async () => {
   buildMenu();
   await createWindow();
+  maybeAutoStartCvService();
   app.on("activate", async () => {
     if (BrowserWindow.getAllWindows().length === 0) await createWindow();
   });

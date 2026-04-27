@@ -42,6 +42,7 @@ export function registerSettingsRoutes(app) {
       const ALLOWED = new Set([
         "user_name","ship_from","default_platform",
         "currency","theme","notifications","anthropic_key","auto_backup",
+        "cv_service_autostart",
         ...DECISION_SETTING_KEYS,
       ]);
       for (const [key, value] of Object.entries(req.body)) {

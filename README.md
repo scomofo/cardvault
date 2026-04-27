@@ -67,6 +67,7 @@ npm install                    # Install (rebuilds better-sqlite3 for your toolc
 npm run mac:dev                # Dev: hot-reload Vite UI inside an Electron window
 npm run mac:build              # Build: produces CardVault.app (universal arm64+x64)
 npm run mac:build:arm64        # Apple Silicon only build (smaller, faster)
+npm run mac:verify             # Sanity-check the built .app (Info.plist, asar, launch)
 ```
 
 The packaged app lives in `dist-electron/`. SQLite data and your `.env` are stored in `~/Library/Application Support/CardVault/` so they survive app updates. The first launch copies `.env.example` there as a starting point.

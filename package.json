@@ -16,7 +16,8 @@
     "test": "node --test",
     "mac:dev": "npm rebuild better-sqlite3 && concurrently -k -n vite,api,electron -c cyan,magenta,green \"npm:dev\" \"npm:server\" \"wait-on http://127.0.0.1:3000 http://127.0.0.1:3001/api/ai/status && CARDVAULT_DEV_URL=http://127.0.0.1:3000 electron .\"",
     "mac:build": "vite build && electron-builder --mac --universal",
-    "mac:build:arm64": "vite build && electron-builder --mac --arm64"
+    "mac:build:arm64": "vite build && electron-builder --mac --arm64",
+    "mac:verify": "bash ./scripts/verify-mac-app.sh"
   },
   "dependencies": {
     "better-sqlite3": "^12.8.0",
