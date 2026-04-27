@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import BatchCaptureMode from "./BatchCaptureMode";
 import BatchProcessView from "./BatchProcessView";
 import ScanCaptureStep from "./scan/ScanCaptureStep";
@@ -8,8 +9,16 @@ import ScanStepper from "./scan/ScanStepper";
 import { PLATFORM_FEES } from "./SalesFlow";
 import { useScanWorkflow } from "../hooks/useScanWorkflow";
 
-export default function ScanView({ onNavigate }) {
+export default function ScanView({ onNavigate, pendingImage, onPendingImageConsumed }) {
   const { actions, state } = useScanWorkflow();
+
+  useEffect(() => {
+    if (!pendingImage) return;
+    actions.captureFrontImg(pendingImage);
+    actions.setStep?.(0);
+    onPendingImageConsumed?.();
+  }, [pendingImage]);
+
   const { setCard, setListing, setShowCvOverlay, setShowGrading, setStep } = actions;
   const {
     backImg,

@@ -1,8 +1,10 @@
 import { app, BrowserWindow, Menu, shell, dialog, ipcMain, Notification } from "electron";
-import { existsSync, mkdirSync, copyFileSync } from "node:fs";
+import { existsSync, mkdirSync, copyFileSync, readFile, statSync } from "node:fs";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { setupTray, refreshTray, setTrayBadge, destroyTray } from "./tray.js";
+import { syncSpotlightIndex, readCardvaultFile } from "./spotlight.js";
 
 app.setName("CardVault");
 
@@ -119,6 +121,91 @@ function stopCvService() {
 
 function rebuildMenu() {
   buildMenu();
+  refreshTray({
+    onOpenWindow: openMainWindow,
+    onStartCv: startCvService,
+    onStopCv: stopCvService,
+    isCvRunning: () => !!cvServiceProcess,
+    onQuit: () => app.quit(),
+  });
+}
+
+function openMainWindow() {
+  if (!mainWindow) {
+    createWindow();
+    return;
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+const SCAN_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"]);
+
+function readImageAsDataUrl(filePath) {
+  return new Promise((resolveRead, rejectRead) => {
+    readFile(filePath, (err, buf) => {
+      if (err) return rejectRead(err);
+      const ext = path.extname(filePath).toLowerCase();
+      const mime = ext === ".png" ? "image/png"
+        : ext === ".webp" ? "image/webp"
+        : ext === ".heic" || ext === ".heif" ? "image/heic"
+        : "image/jpeg";
+      resolveRead(`data:${mime};base64,${buf.toString("base64")}`);
+    });
+  });
+}
+
+async function deliverScanImage(filePath) {
+  if (!filePath) return;
+  try {
+    const stat = statSync(filePath);
+    if (!stat.isFile() || stat.size > 25 * 1024 * 1024) return;
+  } catch {
+    return;
+  }
+  if (!SCAN_EXTENSIONS.has(path.extname(filePath).toLowerCase())) return;
+  try {
+    const dataUrl = await readImageAsDataUrl(filePath);
+    if (!mainWindow) {
+      pendingScanImage = dataUrl;
+      return;
+    }
+    openMainWindow();
+    mainWindow.webContents.send("cardvault:scan-image", dataUrl);
+  } catch (err) {
+    dialog.showErrorBox("Could not open card image", String(err?.message || err));
+  }
+}
+
+let pendingScanImage = null;
+
+app.on("open-file", (event, filePath) => {
+  event.preventDefault();
+  if (path.extname(filePath).toLowerCase() === ".cardvault") {
+    const link = readCardvaultFile(filePath);
+    if (link) {
+      deliverDeepLink(link);
+    } else {
+      dialog.showErrorBox("CardVault", "That .cardvault index file is unreadable.");
+    }
+    return;
+  }
+  deliverScanImage(filePath);
+});
+
+async function rebuildSpotlightIndex() {
+  try {
+    const res = await fetch(`http://127.0.0.1:${APP_PORT}/api/items`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) throw new Error(`API returned ${res.status}`);
+    const items = await res.json();
+    const summary = syncSpotlightIndex(items || []);
+    notify("Spotlight index updated", `${summary.written} cards indexed in ${summary.dir}`);
+  } catch (err) {
+    dialog.showErrorBox("Spotlight index failed", String(err?.message || err));
+  }
 }
 
 if (!app.isDefaultProtocolClient("cardvault")) {
@@ -277,6 +364,11 @@ function buildMenu() {
           label: "Reveal Card Detection Service folder",
           click: () => shell.openPath(CV_SERVICE_DIR),
         },
+        { type: "separator" },
+        {
+          label: "Update Spotlight Index",
+          click: () => rebuildSpotlightIndex(),
+        },
       ],
     },
     {
@@ -339,6 +431,11 @@ async function createWindow() {
       pendingDeepLink = null;
       deliverDeepLink(link);
     }
+    if (pendingScanImage) {
+      const img = pendingScanImage;
+      pendingScanImage = null;
+      mainWindow.webContents.send("cardvault:scan-image", img);
+    }
     setTimeout(() => maybeShowOnboarding(), 800);
   });
   await mainWindow.loadURL(url);
@@ -348,10 +445,19 @@ ipcMain.on("cardvault:set-badge", (_event, count) => {
   if (typeof app.setBadgeCount === "function") {
     app.setBadgeCount(Number.isFinite(count) && count > 0 ? count : 0);
   }
+  setTrayBadge(count);
 });
 
 app.whenReady().then(async () => {
   buildMenu();
+  setupTray({
+    buildResourcesDir: path.join(projectRoot, "build"),
+    onOpenWindow: openMainWindow,
+    onStartCv: startCvService,
+    onStopCv: stopCvService,
+    isCvRunning: () => !!cvServiceProcess,
+    onQuit: () => app.quit(),
+  });
   await createWindow();
   maybeAutoStartCvService();
   app.on("activate", async () => {
@@ -361,6 +467,7 @@ app.whenReady().then(async () => {
 
 app.on("before-quit", () => {
   stopCvService();
+  destroyTray();
 });
 
 app.on("window-all-closed", () => {

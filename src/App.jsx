@@ -117,6 +117,16 @@ function AppContent() {
     window.cardvault?.setBadgeCount?.(activeCount);
   }, [activeCount]);
 
+  const [pendingScanImage, setPendingScanImage] = useState(null);
+
+  useEffect(() => {
+    const off = window.cardvault?.onScanImage?.((dataUrl) => {
+      setPendingScanImage(dataUrl);
+      setView("scan");
+    });
+    return off;
+  }, []);
+
   return (
     <div className="app-shell">
       {!online && (
@@ -140,7 +150,13 @@ function AppContent() {
 
       <main>
         {view === "dashboard" && <DashboardView />}
-        {view === "scan" && <ScanView onNavigate={setView} />}
+        {view === "scan" && (
+          <ScanView
+            onNavigate={setView}
+            pendingImage={pendingScanImage}
+            onPendingImageConsumed={() => setPendingScanImage(null)}
+          />
+        )}
         {view === "cards" && <CatalogView />}
         {view === "sales" && <SalesFlow />}
         {view === "tools" && <ToolsView tab={toolsTab} setTab={setToolsTab} />}

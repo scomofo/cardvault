@@ -75,6 +75,26 @@
             "CFBundleURLName": "com.scottmorley.cardvault.deeplink",
             "CFBundleURLSchemes": ["cardvault"]
           }
+        ],
+        "CFBundleDocumentTypes": [
+          {
+            "CFBundleTypeName": "Card image",
+            "CFBundleTypeRole": "Viewer",
+            "LSHandlerRank": "Alternate",
+            "LSItemContentTypes": [
+              "public.jpeg",
+              "public.png",
+              "public.heic",
+              "public.heif",
+              "org.webmproject.webp"
+            ]
+          },
+          {
+            "CFBundleTypeName": "CardVault index",
+            "CFBundleTypeExtensions": ["cardvault"],
+            "CFBundleTypeRole": "Viewer",
+            "LSHandlerRank": "Owner"
+          }
         ]
       },
       "protocols": [

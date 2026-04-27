@@ -15,4 +15,9 @@ contextBridge.exposeInMainWorld("cardvault", {
   setBadgeCount: (count) => {
     ipcRenderer.send("cardvault:set-badge", Number(count) || 0);
   },
+  onScanImage: (handler) => {
+    const listener = (_event, dataUrl) => handler(dataUrl);
+    ipcRenderer.on("cardvault:scan-image", listener);
+    return () => ipcRenderer.removeListener("cardvault:scan-image", listener);
+  },
 });
