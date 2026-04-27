@@ -3,6 +3,7 @@
   "version": "8.0.0",
   "private": true,
   "type": "module",
+  "main": "src/electron/main.js",
   "scripts": {
     "dev": "vite",
     "dev:secure": "vite",
@@ -12,7 +13,11 @@
     "start": "concurrently \"npm run server\" \"npm run dev\"",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test"
+    "test": "node --test",
+    "mac:dev": "npm rebuild better-sqlite3 && concurrently -k -n vite,api,electron -c cyan,magenta,green \"npm:dev\" \"npm:server\" \"wait-on http://127.0.0.1:3000 http://127.0.0.1:3001/api/ai/status && CARDVAULT_DEV_URL=http://127.0.0.1:3000 electron .\"",
+    "mac:build": "vite build && electron-builder --mac --universal",
+    "mac:build:arm64": "vite build && electron-builder --mac --arm64",
+    "mac:verify": "bash ./scripts/verify-mac-app.sh"
   },
   "dependencies": {
     "better-sqlite3": "^12.8.0",
@@ -27,6 +32,80 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
-    "vite": "^6.0.0"
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "vite": "^6.0.0",
+    "wait-on": "^8.0.0"
+  },
+  "build": {
+    "appId": "com.scottmorley.cardvault",
+    "productName": "CardVault",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**"
+    ],
+    "files": [
+      "src/electron/**",
+      "src/server/**",
+      "server.js",
+      "dist/**",
+      ".env.example",
+      "package.json"
+    ],
+    "directories": {
+      "buildResources": "build",
+      "output": "dist-electron"
+    },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        { "target": "dmg", "arch": ["arm64", "x64"] },
+        { "target": "zip", "arch": ["arm64", "x64"] }
+      ],
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "identity": null,
+      "extendInfo": {
+        "NSCameraUsageDescription": "CardVault uses the camera to scan trading cards for AI identification and grading.",
+        "NSMicrophoneUsageDescription": "CardVault does not use the microphone, but macOS requires this entry when camera access is requested.",
+        "NSPhotoLibraryUsageDescription": "CardVault accesses photos when you import card images from your library.",
+        "NSLocalNetworkUsageDescription": "CardVault uses your local network so an iPhone on the same Wi-Fi can connect to your card studio.",
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLName": "com.scottmorley.cardvault.deeplink",
+            "CFBundleURLSchemes": ["cardvault"]
+          }
+        ],
+        "CFBundleDocumentTypes": [
+          {
+            "CFBundleTypeName": "Card image",
+            "CFBundleTypeRole": "Viewer",
+            "LSHandlerRank": "Alternate",
+            "LSItemContentTypes": [
+              "public.jpeg",
+              "public.png",
+              "public.heic",
+              "public.heif",
+              "org.webmproject.webp"
+            ]
+          },
+          {
+            "CFBundleTypeName": "CardVault index",
+            "CFBundleTypeExtensions": ["cardvault"],
+            "CFBundleTypeRole": "Viewer",
+            "LSHandlerRank": "Owner"
+          }
+        ]
+      },
+      "protocols": [
+        {
+          "name": "CardVault deep link",
+          "schemes": ["cardvault"]
+        }
+      ]
+    },
+    "dmg": {
+      "writeUpdateInfo": false
+    }
   }
 }

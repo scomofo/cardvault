@@ -85,7 +85,47 @@ function AppContent() {
     return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
   }, []);
 
+  useEffect(() => {
+    const off = window.cardvault?.onOpenSettings?.(() => setView("more"));
+    return off;
+  }, []);
+
+  useEffect(() => {
+    const off = window.cardvault?.onDeepLink?.((url) => {
+      try {
+        const parsed = new URL(url);
+        const host = parsed.host || parsed.hostname;
+        if (host === "settings") {
+          setView("more");
+        } else if (host === "card") {
+          setView("cards");
+        } else if (host === "scan") {
+          setView("scan");
+        } else if (host === "dashboard") {
+          setView("dashboard");
+        }
+      } catch {
+        // ignore malformed deep links
+      }
+    });
+    return off;
+  }, []);
+
   const activeCount = useMemo(() => catalog.filter((c) => c.status !== "sold").length, [catalog]);
+
+  useEffect(() => {
+    window.cardvault?.setBadgeCount?.(activeCount);
+  }, [activeCount]);
+
+  const [pendingScanImage, setPendingScanImage] = useState(null);
+
+  useEffect(() => {
+    const off = window.cardvault?.onScanImage?.((dataUrl) => {
+      setPendingScanImage(dataUrl);
+      setView("scan");
+    });
+    return off;
+  }, []);
 
   return (
     <div className="app-shell">
@@ -110,7 +150,13 @@ function AppContent() {
 
       <main>
         {view === "dashboard" && <DashboardView />}
-        {view === "scan" && <ScanView onNavigate={setView} />}
+        {view === "scan" && (
+          <ScanView
+            onNavigate={setView}
+            pendingImage={pendingScanImage}
+            onPendingImageConsumed={() => setPendingScanImage(null)}
+          />
+        )}
         {view === "cards" && <CatalogView />}
         {view === "sales" && <SalesFlow />}
         {view === "tools" && <ToolsView tab={toolsTab} setTab={setToolsTab} />}

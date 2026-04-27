@@ -58,13 +58,21 @@ function normalizeRuName(value) {
   return candidate;
 }
 
+function defaultCallbackUrl() {
+  if (process.env.CARDVAULT_APP_MODE === "electron") {
+    const port = process.env.PORT || "3001";
+    return `http://127.0.0.1:${port}/api/ebay/callback`;
+  }
+  return "http://localhost:3000/api/ebay/callback";
+}
+
 function normalizeCallbackUrl(value) {
   const candidate = typeof value === "string" && value.trim()
     ? value.trim()
     : (process.env.EBAY_CALLBACK_URL?.trim() || process.env.EBAY_REDIRECT_URI?.trim());
 
   if (!candidate) {
-    return "http://localhost:3000/api/ebay/callback";
+    return defaultCallbackUrl();
   }
 
   let parsed;
