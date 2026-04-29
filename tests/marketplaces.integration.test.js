@@ -1,47 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { spawn } from "node:child_process";
-
-async function waitForServer(baseUrl, timeoutMs = 10000) {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    try {
-      const response = await fetch(`${baseUrl}/api/settings`);
-      if (response.ok) return;
-    } catch {}
-    await new Promise((resolve) => setTimeout(resolve, 150));
-  }
-  throw new Error(`Server did not become ready within ${timeoutMs}ms`);
-}
+import { startTestServer } from "./helpers/testServer.js";
 
 test("marketplace ecosystem routes publish crosspost sync and export listings", async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-marketplaces-"));
-  const dbPath = join(tempDir, "cardvault-test.db");
-  const port = 3500 + Math.floor(Math.random() * 300);
-  const baseUrl = `http://127.0.0.1:${port}`;
-
-  const server = spawn(process.execPath, ["server.js"], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      PORT: String(port),
-      CARDVAULT_DB_PATH: dbPath,
-    },
-    stdio: "ignore",
+  const { baseUrl } = await startTestServer(t, {
+    dirPrefix: "cardvault-marketplaces-",
+    portBase: 3500,
+    portSpan: 300,
   });
-
-  t.after(async () => {
-    if (!server.killed) {
-      server.kill("SIGTERM");
-    }
-    await new Promise((resolve) => server.once("exit", resolve));
-    await rm(tempDir, { recursive: true, force: true });
-  });
-
-  await waitForServer(baseUrl);
 
   await fetch(`${baseUrl}/api/items`, {
     method: "POST",
@@ -121,30 +87,11 @@ test("marketplace ecosystem routes publish crosspost sync and export listings", 
 });
 
 test("marketplace export includes crossposted listings when no ids are supplied", async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-marketplaces-export-"));
-  const dbPath = join(tempDir, "cardvault-test.db");
-  const port = 3800 + Math.floor(Math.random() * 300);
-  const baseUrl = `http://127.0.0.1:${port}`;
-
-  const server = spawn(process.execPath, ["server.js"], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      PORT: String(port),
-      CARDVAULT_DB_PATH: dbPath,
-    },
-    stdio: "ignore",
+  const { baseUrl } = await startTestServer(t, {
+    dirPrefix: "cardvault-marketplaces-export-",
+    portBase: 3800,
+    portSpan: 300,
   });
-
-  t.after(async () => {
-    if (!server.killed) {
-      server.kill("SIGTERM");
-    }
-    await new Promise((resolve) => server.once("exit", resolve));
-    await rm(tempDir, { recursive: true, force: true });
-  });
-
-  await waitForServer(baseUrl);
 
   await fetch(`${baseUrl}/api/items`, {
     method: "POST",
@@ -196,30 +143,11 @@ test("marketplace export includes crossposted listings when no ids are supplied"
 });
 
 test("crossposting does not overwrite the primary marketplace external id", async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-marketplaces-revise-"));
-  const dbPath = join(tempDir, "cardvault-test.db");
-  const port = 4100 + Math.floor(Math.random() * 300);
-  const baseUrl = `http://127.0.0.1:${port}`;
-
-  const server = spawn(process.execPath, ["server.js"], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      PORT: String(port),
-      CARDVAULT_DB_PATH: dbPath,
-    },
-    stdio: "ignore",
+  const { baseUrl } = await startTestServer(t, {
+    dirPrefix: "cardvault-marketplaces-revise-",
+    portBase: 4100,
+    portSpan: 300,
   });
-
-  t.after(async () => {
-    if (!server.killed) {
-      server.kill("SIGTERM");
-    }
-    await new Promise((resolve) => server.once("exit", resolve));
-    await rm(tempDir, { recursive: true, force: true });
-  });
-
-  await waitForServer(baseUrl);
 
   await fetch(`${baseUrl}/api/items`, {
     method: "POST",
@@ -281,30 +209,11 @@ test("crossposting does not overwrite the primary marketplace external id", asyn
 });
 
 test("ending one marketplace channel does not mark a still-crossposted listing as ended", async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-marketplaces-end-"));
-  const dbPath = join(tempDir, "cardvault-test.db");
-  const port = 4400 + Math.floor(Math.random() * 300);
-  const baseUrl = `http://127.0.0.1:${port}`;
-
-  const server = spawn(process.execPath, ["server.js"], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      PORT: String(port),
-      CARDVAULT_DB_PATH: dbPath,
-    },
-    stdio: "ignore",
+  const { baseUrl } = await startTestServer(t, {
+    dirPrefix: "cardvault-marketplaces-end-",
+    portBase: 4400,
+    portSpan: 300,
   });
-
-  t.after(async () => {
-    if (!server.killed) {
-      server.kill("SIGTERM");
-    }
-    await new Promise((resolve) => server.once("exit", resolve));
-    await rm(tempDir, { recursive: true, force: true });
-  });
-
-  await waitForServer(baseUrl);
 
   await fetch(`${baseUrl}/api/items`, {
     method: "POST",
@@ -378,30 +287,11 @@ test("ending one marketplace channel does not mark a still-crossposted listing a
 });
 
 test("marketplace sold sync updates the underlying item sale state and creates an order", async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-marketplaces-sold-"));
-  const dbPath = join(tempDir, "cardvault-test.db");
-  const port = 4700 + Math.floor(Math.random() * 300);
-  const baseUrl = `http://127.0.0.1:${port}`;
-
-  const server = spawn(process.execPath, ["server.js"], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      PORT: String(port),
-      CARDVAULT_DB_PATH: dbPath,
-    },
-    stdio: "ignore",
+  const { baseUrl } = await startTestServer(t, {
+    dirPrefix: "cardvault-marketplaces-sold-",
+    portBase: 4700,
+    portSpan: 300,
   });
-
-  t.after(async () => {
-    if (!server.killed) {
-      server.kill("SIGTERM");
-    }
-    await new Promise((resolve) => server.once("exit", resolve));
-    await rm(tempDir, { recursive: true, force: true });
-  });
-
-  await waitForServer(baseUrl);
 
   await fetch(`${baseUrl}/api/items`, {
     method: "POST",
@@ -455,7 +345,7 @@ test("marketplace sold sync updates the underlying item sale state and creates a
       listingDescription: "Should sync into sold inventory state",
       startPrice: 159.99,
       soldPrice: 159.99,
-      status: "active",
+      status: "sold",
     }),
   });
   assert.equal(updateListingResponse.status, 200);
@@ -494,10 +384,10 @@ test("marketplace sold sync updates the underlying item sale state and creates a
   const ordersResponse = await fetch(`${baseUrl}/api/orders`);
   assert.equal(ordersResponse.status, 200);
   const ordersPayload = await ordersResponse.json();
-  const order = ordersPayload.find((entry) => entry.listing_id === "sync-sold-listing");
+  const order = ordersPayload.find((entry) => entry.listingId === "sync-sold-listing");
 
   assert.ok(order);
-  assert.equal(order.sale_id, sale.id);
-  assert.equal(order.fulfillment_status, "pending");
-  assert.equal(order.payment_status, "paid");
+  assert.equal(order.saleId, sale.id);
+  assert.equal(order.fulfillmentStatus, "pending");
+  assert.equal(order.paymentStatus, "paid");
 });
