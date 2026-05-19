@@ -114,7 +114,8 @@ export default function BatchView() {
 
     if (useServer) {
       try {
-        await itemsAPI.bulkCreate(items);
+        const result = await itemsAPI.bulkCreate(items);
+        setCatalog((p) => [...(result.created || items), ...p]);
         toast.success(`Saved ${items.length} cards to server`);
       } catch (err) {
         toast.error(`Server save failed: ${err.message} — saved locally`);

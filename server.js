@@ -91,7 +91,9 @@ app.use(
   })
 );
 
-// Body parser with reduced limit
+// Card photos are sent to these local analysis routes as base64 JSON payloads.
+app.use("/api/ai", express.json({ limit: "25mb" }));
+app.use("/api/cv/analyze", express.json({ limit: "5mb" }));
 app.use(express.json({ limit: "2mb" }));
 
 // Rate limiting on AI endpoint
@@ -181,7 +183,7 @@ app.post("/api/ai", aiLimiter, authCheck, validateBody, async (req, res) => {
 });
 
 // CV service proxy for production builds without the Vite proxy.
-app.post("/api/cv/analyze", express.json({ limit: "5mb" }), async (req, res) => {
+app.post("/api/cv/analyze", async (req, res) => {
   try {
     const response = await fetchWithTimeout(`${CV_SERVICE_URL}/analyze-json`, {
       method: "POST",
