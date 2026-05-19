@@ -1,4 +1,6 @@
 // All AI calls go through the local proxy to keep the API key server-side
+import { prepareImageForAi } from "./imageForAi.js";
+
 const API_BASE = "/api/ai";
 
 function parseMediaType(dataUrl) {
@@ -96,8 +98,9 @@ function validateGradeResult(data) {
 }
 
 export async function aiRecognize(imageDataUrl) {
-  const mt = parseMediaType(imageDataUrl);
-  const b64 = imageDataUrl.split(",")[1];
+  const preparedImage = await prepareImageForAi(imageDataUrl);
+  const mt = parseMediaType(preparedImage);
+  const b64 = preparedImage.split(",")[1];
   const data = await aiCall({
     model: "claude-sonnet-4-20250514",
     max_tokens: 800,
@@ -131,8 +134,9 @@ export async function aiPrice(query) {
  * sold prices — combining recognition + pricing in one call.
  */
 export async function aiVisualSearch(imageDataUrl) {
-  const mt = parseMediaType(imageDataUrl);
-  const b64 = imageDataUrl.split(",")[1];
+  const preparedImage = await prepareImageForAi(imageDataUrl);
+  const mt = parseMediaType(preparedImage);
+  const b64 = preparedImage.split(",")[1];
   const data = await aiCall({
     model: "claude-sonnet-4-20250514",
     max_tokens: 2000,
@@ -216,8 +220,9 @@ export function getGoogleLensUrl(searchQuery) {
 }
 
 export async function aiGradePredict(imageDataUrl) {
-  const mt = parseMediaType(imageDataUrl);
-  const b64 = imageDataUrl.split(",")[1];
+  const preparedImage = await prepareImageForAi(imageDataUrl);
+  const mt = parseMediaType(preparedImage);
+  const b64 = preparedImage.split(",")[1];
   const data = await aiCall({
     model: "claude-sonnet-4-20250514",
     max_tokens: 1000,

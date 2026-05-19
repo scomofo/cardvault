@@ -5,6 +5,9 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { setupTray, refreshTray, setTrayBadge, destroyTray } from "./tray.js";
 import { syncSpotlightIndex, readCardvaultFile } from "./spotlight.js";
+import { canGrantRendererPermission, getOrigin } from "./permissions.js";
+import { buildCvServiceDependencyMessage, buildCvServiceProbeArgs } from "./cvService.js";
+import { getScanImageRejection, isScanImageExtension } from "./scanImage.js";
 
 app.setName("CardVault");
 
@@ -55,6 +58,21 @@ async function isCvServiceUp() {
   }
 }
 
+function waitForProcessExit(proc) {
+  return new Promise((resolveProcess) => {
+    proc.on("exit", (code) => resolveProcess(code));
+    proc.on("error", () => resolveProcess(127));
+  });
+}
+
+async function probeCvServiceDependencies(pythonBin) {
+  const probe = spawn(pythonBin, buildCvServiceProbeArgs(), {
+    cwd: CV_SERVICE_DIR,
+    stdio: "ignore",
+  });
+  return (await waitForProcessExit(probe)) === 0;
+}
+
 function notify(title, body) {
   if (Notification.isSupported()) {
     new Notification({ title, body }).show();
@@ -89,6 +107,10 @@ async function startCvService() {
   }
   if (!chosen) {
     dialog.showErrorBox("Card Detection Service", "Python 3 was not found on this Mac. Install python3 (e.g. via Homebrew) and try again.");
+    return;
+  }
+  if (!(await probeCvServiceDependencies(chosen))) {
+    dialog.showErrorBox("Card Detection Service", buildCvServiceDependencyMessage(chosen));
     return;
   }
   try {
@@ -140,8 +162,6 @@ function openMainWindow() {
   mainWindow.focus();
 }
 
-const SCAN_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"]);
-
 function readImageAsDataUrl(filePath) {
   return new Promise((resolveRead, rejectRead) => {
     readFile(filePath, (err, buf) => {
@@ -158,13 +178,18 @@ function readImageAsDataUrl(filePath) {
 
 async function deliverScanImage(filePath) {
   if (!filePath) return;
+  let fileStat;
   try {
-    const stat = statSync(filePath);
-    if (!stat.isFile() || stat.size > 25 * 1024 * 1024) return;
+    fileStat = statSync(filePath);
   } catch {
     return;
   }
-  if (!SCAN_EXTENSIONS.has(path.extname(filePath).toLowerCase())) return;
+  const rejection = getScanImageRejection(fileStat);
+  if (rejection) {
+    dialog.showErrorBox("Could not open card image", rejection);
+    return;
+  }
+  if (!isScanImageExtension(filePath)) return;
   try {
     const dataUrl = await readImageAsDataUrl(filePath);
     if (!mainWindow) {
@@ -407,16 +432,25 @@ async function createWindow() {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
     },
   });
 
   const session = mainWindow.webContents.session;
-  session.setPermissionRequestHandler((_wc, permission, callback) => {
-    callback(["media", "clipboard-read", "clipboard-sanitized-write", "fullscreen"].includes(permission));
+  const allowedRendererOrigins = new Set([getOrigin(url)].filter(Boolean));
+  session.setPermissionRequestHandler((wc, permission, callback, details) => {
+    callback(canGrantRendererPermission({
+      permission,
+      requestingUrl: details?.requestingUrl || wc.getURL(),
+      allowedOrigins: allowedRendererOrigins,
+    }));
   });
-  session.setPermissionCheckHandler((_wc, permission) => {
-    return ["media", "clipboard-read", "clipboard-sanitized-write", "fullscreen"].includes(permission);
+  session.setPermissionCheckHandler((wc, permission, requestingOrigin, details) => {
+    return canGrantRendererPermission({
+      permission,
+      requestingUrl: details?.requestingUrl || requestingOrigin || wc.getURL(),
+      allowedOrigins: allowedRendererOrigins,
+    });
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url: target }) => {
