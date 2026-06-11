@@ -1,3 +1,6 @@
+const DEFAULT_LABEL_PURCHASE_TIMEOUT_MS = 10000;
+const PROVIDER_ERROR_TEXT_LIMIT = 200;
+
 function firstDefined(...values) {
   return values.find((value) => value != null && value !== "");
 }
@@ -31,14 +34,33 @@ function failedPurchase(error) {
   };
 }
 
+function truncateProviderError(text) {
+  return text.length > PROVIDER_ERROR_TEXT_LIMIT
+    ? `${text.slice(0, PROVIDER_ERROR_TEXT_LIMIT)}...`
+    : text;
+}
+
 async function readJson(response) {
   const text = await response.text();
   if (!text) return {};
   try {
     return JSON.parse(text);
   } catch {
-    return { error: text };
+    return { error: truncateProviderError(text) };
   }
+}
+
+function labelPurchaseTimeoutMs(metadata = {}, rate = {}) {
+  const configuredTimeout = firstDefined(
+    rate.labelPurchaseTimeoutMs,
+    rate.label_purchase_timeout_ms,
+    metadata.labelPurchaseTimeoutMs,
+    metadata.label_purchase_timeout_ms,
+  );
+  const timeoutMs = Number(configuredTimeout);
+  return Number.isFinite(timeoutMs) && timeoutMs > 0
+    ? timeoutMs
+    : DEFAULT_LABEL_PURCHASE_TIMEOUT_MS;
 }
 
 function purchasePayload({ connection, service, shipment }) {
@@ -76,15 +98,20 @@ async function purchaseLabelViaHttp({ connection, metadata, rate, service, shipm
   const headers = { "Content-Type": "application/json" };
   if (connection.api_key) {
     const headerName = String(firstDefined(rate.apiKeyHeader, metadata.apiKeyHeader, "Authorization"));
-    const headerPrefix = String(firstDefined(rate.apiKeyPrefix, metadata.apiKeyPrefix, "Bearer "));
+    const rawPrefix = rate.apiKeyPrefix ?? metadata.apiKeyPrefix;
+    const headerPrefix = rawPrefix != null ? String(rawPrefix) : "Bearer ";
     headers[headerName] = `${headerPrefix}${connection.api_key}`;
   }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), labelPurchaseTimeoutMs(metadata, rate));
 
   try {
     const response = await fetch(endpoint, {
       method: "POST",
       headers,
       body: JSON.stringify(purchasePayload({ connection, service, shipment })),
+      signal: controller.signal,
     });
     const payload = await readJson(response);
     if (!response.ok) {
@@ -92,7 +119,12 @@ async function purchaseLabelViaHttp({ connection, metadata, rate, service, shipm
     }
     return payload;
   } catch (error) {
-    return failedPurchase(error.message);
+    if (error?.name === "AbortError") {
+      return failedPurchase("Provider label purchase timed out");
+    }
+    return failedPurchase(error?.message);
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 

@@ -116,6 +116,8 @@ test("shipping automation purchases provider labels through a live HTTP client",
   const { baseUrl, dbPath } = await startTestServer(t, { dirPrefix: "cardvault-live-label-purchased-" });
   insertShippingProvider(dbPath, {
     labelPurchaseUrl: labelEndpoint.url,
+    apiKeyHeader: "X-API-KEY",
+    apiKeyPrefix: "",
     rates: [{
       service: "Canada Post Expedited Parcel",
       serviceCode: "DOM.EP",
@@ -135,7 +137,8 @@ test("shipping automation purchases provider labels through a live HTTP client",
   const shipment = await response.json();
 
   assert.equal(labelEndpoint.requests.length, 1);
-  assert.equal(labelEndpoint.requests[0].headers.authorization, "Bearer secret-provider-key");
+  assert.equal(labelEndpoint.requests[0].headers["x-api-key"], "secret-provider-key");
+  assert.equal(labelEndpoint.requests[0].headers.authorization, undefined);
   assert.ok(labelEndpoint.requests[0].payload.shipmentId);
   assert.equal(labelEndpoint.requests[0].payload.serviceCode, "DOM.EP");
   assert.equal(labelEndpoint.requests[0].payload.destination.country, "CA");
@@ -159,6 +162,60 @@ test("shipping automation purchases provider labels through a live HTTP client",
     assert.ok(event);
     assert.match(event.payload, /"labelStatus":"purchased"/);
     assert.doesNotMatch(event.payload, /secret-provider-key|apiKey|api_key/);
+  } finally {
+    db.close();
+  }
+});
+
+test("shipping automation times out slow live provider label purchases", async (t) => {
+  const labelEndpoint = await startLabelEndpoint(({ res }) => {
+    setTimeout(() => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        labelStatus: "purchased",
+        trackingNumber: "SLOW-TRACK-123",
+      }));
+    }, 100);
+  });
+  t.after(labelEndpoint.close);
+
+  const { baseUrl, dbPath } = await startTestServer(t, { dirPrefix: "cardvault-live-label-timeout-" });
+  insertShippingProvider(dbPath, {
+    labelPurchaseUrl: labelEndpoint.url,
+    labelPurchaseTimeoutMs: 25,
+    rates: [{
+      service: "Canada Post Expedited Parcel",
+      serviceCode: "DOM.EP",
+      countries: ["CA"],
+      maxWeightOz: 8,
+      cost: 9.75,
+      tracking: true,
+    }],
+  });
+  const { orderId } = await createOrderFixture(baseUrl, "live-timeout");
+
+  const response = await postJson(baseUrl, `/api/automation/shipping/${orderId}`, {
+    destinationCountry: "CA",
+    weightOz: 6,
+  });
+  assert.equal(response.status, 200);
+  const shipment = await response.json();
+
+  assert.equal(shipment.label_status, "failed");
+  assert.equal(shipment.status, "exception");
+  assert.equal(shipment.tracking_number, null);
+
+  const db = new Database(dbPath, { readonly: true });
+  try {
+    const event = db.prepare(
+      `SELECT status, payload
+       FROM listing_channel_events
+       WHERE event_type = 'shipping_exception'
+       ORDER BY created_at DESC
+       LIMIT 1`,
+    ).get();
+    assert.equal(event.status, "failed");
+    assert.match(event.payload, /Provider label purchase timed out/);
   } finally {
     db.close();
   }
@@ -215,6 +272,57 @@ test("shipping automation records live provider label failures for retry", async
     assert.equal(event.status, "failed");
     assert.match(event.payload, /Carrier purchase endpoint unavailable/);
     assert.doesNotMatch(event.payload, /secret-provider-key|apiKey|api_key/);
+  } finally {
+    db.close();
+  }
+});
+
+test("shipping automation truncates non-json live provider label errors", async (t) => {
+  const longProxyError = `<html>${"x".repeat(220)}END-OF-LONG-PROXY-PAGE</html>`;
+  const labelEndpoint = await startLabelEndpoint(({ res }) => {
+    res.writeHead(502, { "Content-Type": "text/html" });
+    res.end(longProxyError);
+  });
+  t.after(labelEndpoint.close);
+
+  const { baseUrl, dbPath } = await startTestServer(t, { dirPrefix: "cardvault-live-label-html-error-" });
+  insertShippingProvider(dbPath, {
+    labelPurchaseUrl: labelEndpoint.url,
+    rates: [{
+      service: "Canada Post Expedited Parcel",
+      serviceCode: "DOM.EP",
+      countries: ["CA"],
+      maxWeightOz: 8,
+      cost: 9.75,
+      tracking: true,
+    }],
+  });
+  const { orderId } = await createOrderFixture(baseUrl, "live-html-error");
+
+  const response = await postJson(baseUrl, `/api/automation/shipping/${orderId}`, {
+    destinationCountry: "CA",
+    weightOz: 6,
+  });
+  assert.equal(response.status, 200);
+  const shipment = await response.json();
+
+  assert.equal(labelEndpoint.requests.length, 1);
+  assert.equal(shipment.label_status, "failed");
+  assert.equal(shipment.status, "exception");
+
+  const db = new Database(dbPath, { readonly: true });
+  try {
+    const event = db.prepare(
+      `SELECT status, payload
+       FROM listing_channel_events
+       WHERE event_type = 'shipping_exception'
+       ORDER BY created_at DESC
+       LIMIT 1`,
+    ).get();
+    assert.equal(event.status, "failed");
+    assert.match(event.payload, /<html>/);
+    assert.match(event.payload, /\.\.\./);
+    assert.doesNotMatch(event.payload, /END-OF-LONG-PROXY-PAGE/);
   } finally {
     db.close();
   }
