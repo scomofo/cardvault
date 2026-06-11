@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useData } from "../lib/DataContext";
 import { useToast } from "./Toast";
-import { CONDITIONS, PLATFORMS, TYPES } from "../lib/constants";
+import { CONDITIONS, DEALER_EXPORT_PLATFORMS, TYPES } from "../lib/constants";
 import { fmtShort, condOf } from "../lib/utils";
 import { automationAPI, marketplacesAPI } from "../lib/api";
 
@@ -50,7 +50,6 @@ const STATUS_FILTERS = [
   { v: "sold", l: "Sold" },
 ];
 
-const EXPORT_PLATFORMS = PLATFORMS.filter((platform) => ["ebay", "comc", "shopify"].includes(platform.v));
 const EXPORTABLE_LISTING_STATUSES = new Set(["draft", "active", "revised"]);
 
 function daysSince(dateStr) {
@@ -131,7 +130,7 @@ export default function DealerModeView() {
       .map((listing) => listing.id);
   }, [listings, selectedCards]);
 
-  const exportPlatformLabel = EXPORT_PLATFORMS.find((platform) => platform.v === exportPlatform)?.l || exportPlatform;
+  const exportPlatformLabel = DEALER_EXPORT_PLATFORMS.find((platform) => platform.v === exportPlatform)?.l || exportPlatform;
 
   // Actions
   function toggleSelect(id) {
@@ -312,7 +311,7 @@ export default function DealerModeView() {
         </button>
         {useServer && (
           <select style={s.select} value={exportPlatform} onChange={(e) => setExportPlatform(e.target.value)} disabled={exporting}>
-            {EXPORT_PLATFORMS.map((platform) => <option key={platform.v} value={platform.v}>{platform.l}</option>)}
+            {DEALER_EXPORT_PLATFORMS.map((platform) => <option key={platform.v} value={platform.v}>{platform.l}</option>)}
           </select>
         )}
         <button style={s.btnOutline} onClick={exportSelected} disabled={selected.size === 0 || exporting}>

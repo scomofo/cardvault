@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { CONDITIONS } from "../src/lib/constants.js";
+import { CONDITIONS, DEALER_EXPORT_PLATFORMS, PLATFORM_FEES, PLATFORMS } from "../src/lib/constants.js";
 import { condOf, download, escapeHtml, fmt$, fmtShort, uid } from "../src/lib/utils.js";
 
 test("fmt$ formats values as CAD currency with two decimals", () => {
@@ -25,6 +25,15 @@ test("condOf returns the matched condition when found", () => {
 test("condOf falls back to near_mint for unknown values", () => {
   const condition = condOf("not-a-real-condition");
   assert.deepEqual(condition, CONDITIONS[2]);
+});
+
+test("platform metadata includes consignment dealer export support", () => {
+  assert.ok(PLATFORMS.some((platform) => platform.v === "consignment"));
+  assert.equal(PLATFORM_FEES.consignment, 0.20);
+  assert.deepEqual(
+    DEALER_EXPORT_PLATFORMS.map((platform) => platform.v),
+    ["ebay", "comc", "consignment", "shopify"],
+  );
 });
 
 test("uid returns a non-empty string identifier", () => {
