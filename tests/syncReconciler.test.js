@@ -93,6 +93,37 @@ test("missing remote state is a blocking error", () => {
   assert.equal(result.hasBlockingConflict, true);
 });
 
+test("remote state can be read from marketplace-native payload fields", () => {
+  const result = reconcileSyncResult(listing, channel, {
+    payload: {
+      listingId: "ebay-abc123",
+      listingStatus: "active",
+      pricingSummary: {
+        price: { value: "55.00", currency: "CAD" },
+      },
+    },
+  });
+
+  assert.equal(result.conflicts.length, 1);
+  assert.equal(result.conflicts[0].type, "price_mismatch");
+  assert.equal(result.conflicts[0].remoteValue, "55.00");
+  assert.equal(result.hasBlockingConflict, false);
+  assert.equal(result.safeToApply, true);
+});
+
+test("payload-only remote id and status prevent false missing remote conflicts", () => {
+  const result = reconcileSyncResult(listing, channel, {
+    payload: {
+      itemId: "ebay-abc123",
+      status: "active",
+    },
+  });
+
+  assert.equal(result.conflicts.length, 0);
+  assert.equal(result.hasBlockingConflict, false);
+  assert.equal(result.safeToApply, true);
+});
+
 test("multiple conflicts are all reported", () => {
   const result = reconcileSyncResult(listing, channel, {
     externalListingId: "ebay-xyz999",

@@ -333,6 +333,12 @@ export async function syncMarketplaceListings(marketplace, listingId = null) {
     }
 
     const reconciliation = reconcileSyncResult(listing, channel, synced);
+    const normalizedSynced = {
+      ...synced,
+      externalListingId: synced.externalListingId || reconciliation.remoteState.externalListingId,
+      status: synced.status || reconciliation.remoteState.status,
+      syncedAt: synced.syncedAt || new Date().toISOString(),
+    };
 
     if (reconciliation.conflicts.length > 0) {
       run(
@@ -343,13 +349,13 @@ export async function syncMarketplaceListings(marketplace, listingId = null) {
           channel.id,
           "reconciliation_conflict",
           reconciliation.hasBlockingConflict ? "blocked" : "warning",
-          JSON.stringify({ conflicts: reconciliation.conflicts, remote: synced }),
+          JSON.stringify({ conflicts: reconciliation.conflicts, remote: normalizedSynced }),
         ],
       );
     }
 
     if (!reconciliation.safeToApply) {
-      results.push({ channelId: channel.id, synced, sale: null, reconciliation });
+      results.push({ channelId: channel.id, synced: normalizedSynced, sale: null, reconciliation });
       continue;
     }
 
@@ -358,29 +364,29 @@ export async function syncMarketplaceListings(marketplace, listingId = null) {
         `UPDATE listing_channels
          SET status = ?, last_sync_at = ?, publish_error = NULL, updated_at = datetime('now')
          WHERE id = ?`,
-        [synced.status, synced.syncedAt, channel.id],
+        [normalizedSynced.status, normalizedSynced.syncedAt, channel.id],
       );
       run(
         `INSERT INTO listing_channel_events (id, listing_channel_id, event_type, status, payload)
          VALUES (?,?,?,?,?)`,
-        [uid(), channel.id, "sync", synced.status, JSON.stringify(synced)],
+        [uid(), channel.id, "sync", normalizedSynced.status, JSON.stringify(normalizedSynced)],
       );
       run(
         `UPDATE listings
          SET last_sync_at = ?
          WHERE id = ?`,
-        [synced.syncedAt, listing.id],
+        [normalizedSynced.syncedAt, listing.id],
       );
 
-      refreshListingAggregateState(listing.id, { syncedAt: synced.syncedAt });
+      refreshListingAggregateState(listing.id, { syncedAt: normalizedSynced.syncedAt });
 
-      const metadata = extractMarketplaceOrderMetadata(synced);
-      const sale = insertSyncedSale(listing, channel, synced, metadata);
-      const order = ensureOrderForSyncedSale(listing, sale, synced, metadata);
-      markItemSoldFromMarketplaceSync(listing, sale, synced);
+      const metadata = extractMarketplaceOrderMetadata(normalizedSynced);
+      const sale = insertSyncedSale(listing, channel, normalizedSynced, metadata);
+      const order = ensureOrderForSyncedSale(listing, sale, normalizedSynced, metadata);
+      markItemSoldFromMarketplaceSync(listing, sale, normalizedSynced);
       return { sale, order };
     });
-    results.push({ channelId: channel.id, synced, sale: result.sale, order: result.order, reconciliation });
+    results.push({ channelId: channel.id, synced: normalizedSynced, sale: result.sale, order: result.order, reconciliation });
   }
 
   return results;

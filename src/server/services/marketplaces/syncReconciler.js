@@ -27,6 +27,10 @@
 
 const PRICE_TOLERANCE_CENTS = 1;
 
+function firstDefined(...values) {
+  return values.find((value) => value != null && value !== "");
+}
+
 function toCents(value) {
   if (value == null) return null;
   const n = Number(value);
@@ -34,8 +38,71 @@ function toCents(value) {
   return Math.round(n * 100);
 }
 
-function comparePrice(localListing, remotePayload) {
-  const remotePayloadPrice = remotePayload?.price ?? remotePayload?.buy_now_price ?? remotePayload?.start_price;
+function amountValue(value) {
+  if (value && typeof value === "object" && "value" in value) return value.value;
+  return value;
+}
+
+function readPayloadPrice(payload = {}) {
+  const firstOffer = Array.isArray(payload.offers) ? payload.offers[0] : null;
+  return firstDefined(
+    amountValue(payload.price),
+    amountValue(payload.currentPrice),
+    amountValue(payload.current_price),
+    amountValue(payload.buyNowPrice),
+    amountValue(payload.buy_now_price),
+    amountValue(payload.startPrice),
+    amountValue(payload.start_price),
+    amountValue(payload.pricingSummary?.price),
+    amountValue(payload.pricingSummary?.currentPrice),
+    amountValue(payload.pricing_summary?.price),
+    amountValue(payload.pricing_summary?.current_price),
+    amountValue(firstOffer?.price),
+  );
+}
+
+function normalizeRemoteState(synced = {}) {
+  const payload = synced.payload && typeof synced.payload === "object" ? synced.payload : {};
+  const status = firstDefined(
+    synced.status,
+    synced.listingStatus,
+    synced.listing_status,
+    payload.status,
+    payload.listingStatus,
+    payload.listing_status,
+    payload.marketplaceStatus,
+    payload.marketplace_status,
+  );
+
+  return {
+    externalListingId: firstDefined(
+      synced.externalListingId,
+      synced.external_listing_id,
+      synced.listingId,
+      synced.listing_id,
+      synced.itemId,
+      synced.item_id,
+      payload.externalListingId,
+      payload.external_listing_id,
+      payload.listingId,
+      payload.listing_id,
+      payload.itemId,
+      payload.item_id,
+      payload.legacyItemId,
+      payload.legacy_item_id,
+    ) || null,
+    status: status == null ? null : String(status).toLowerCase(),
+    price: firstDefined(
+      amountValue(synced.price),
+      amountValue(synced.currentPrice),
+      amountValue(synced.current_price),
+      readPayloadPrice(payload),
+    ),
+  };
+}
+
+function comparePrice(localListing, remoteState) {
+  const remotePayloadPrice = remoteState.price;
   if (remotePayloadPrice == null) return null;
   const localPrice = localListing.buy_now_price ?? localListing.start_price;
   const localCents = toCents(localPrice);
@@ -52,9 +119,9 @@ function comparePrice(localListing, remotePayload) {
   };
 }
 
-function compareExternalId(channel, synced) {
+function compareExternalId(channel, remoteState) {
   const local = channel.external_listing_id || null;
-  const remote = synced.externalListingId || null;
+  const remote = remoteState.externalListingId || null;
   if (!local || !remote) return null;
   if (local === remote) return null;
   return {
@@ -67,9 +134,9 @@ function compareExternalId(channel, synced) {
   };
 }
 
-function compareStatus(channel, synced) {
+function compareStatus(channel, remoteState) {
   const local = channel.status || null;
-  const remote = synced.status || null;
+  const remote = remoteState.status || null;
   if (!remote) return null;
   if (!local) return null;
   if (local === remote) return null;
@@ -86,8 +153,8 @@ function compareStatus(channel, synced) {
   };
 }
 
-function detectMissingRemote(synced) {
-  if (synced.externalListingId || synced.status) return null;
+function detectMissingRemote(remoteState) {
+  if (remoteState.externalListingId || remoteState.status) return null;
   return {
     type: "missing_remote",
     severity: "error",
@@ -103,15 +170,16 @@ function detectMissingRemote(synced) {
  */
 export function reconcileSyncResult(listing, channel, synced) {
   const conflicts = [];
-  const missing = detectMissingRemote(synced);
+  const remoteState = normalizeRemoteState(synced);
+  const missing = detectMissingRemote(remoteState);
   if (missing) {
     conflicts.push(missing);
   } else {
-    const idConflict = compareExternalId(channel, synced);
+    const idConflict = compareExternalId(channel, remoteState);
     if (idConflict) conflicts.push(idConflict);
-    const statusConflict = compareStatus(channel, synced);
+    const statusConflict = compareStatus(channel, remoteState);
     if (statusConflict) conflicts.push(statusConflict);
-    const priceConflict = comparePrice(listing, synced.payload);
+    const priceConflict = comparePrice(listing, remoteState);
     if (priceConflict) conflicts.push(priceConflict);
   }
 
@@ -120,5 +188,6 @@ export function reconcileSyncResult(listing, channel, synced) {
     conflicts,
     hasBlockingConflict,
     safeToApply: !hasBlockingConflict,
+    remoteState,
   };
 }

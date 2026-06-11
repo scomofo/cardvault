@@ -566,3 +566,99 @@ test("marketplace sold sync relinks an existing order to the reused sale", async
     await rm(tempDir, { recursive: true, force: true });
   }
 });
+
+test("marketplace sync applies payload-native remote state", async () => {
+  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-sync-payload-state-"));
+  const dbPath = join(tempDir, "cardvault.db");
+  const previousPath = process.env.CARDVAULT_DB_PATH;
+
+  process.env.CARDVAULT_DB_PATH = dbPath;
+
+  const database = await import("../src/server/database.js");
+  const registry = await import("../src/server/integrations/marketplaces/marketplaceRegistry.js");
+  const syncService = await import(`../src/server/services/marketplaces/syncService.js?ts=${Date.now()}`);
+
+  const db = database.initDB();
+  const adapter = registry.getMarketplaceAdapter("ebay");
+  const originalSync = adapter.sync;
+
+  try {
+    database.run(
+      `INSERT INTO user_items
+       (id, name, card_set, listing_status, sale_status, status)
+       VALUES (?,?,?,?,?,?)`,
+      ["sync-payload-state-item", "Mark Messier", "Upper Deck", "listed", "available", "listed"],
+    );
+
+    database.run(
+      `INSERT INTO listings
+       (id, card_id, card_name, card_set, platform, listing_title, listing_description, start_price, shipping, status, publish_status)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        "sync-payload-state-listing",
+        "sync-payload-state-item",
+        "Mark Messier",
+        "Upper Deck",
+        "ebay",
+        "Mark Messier card",
+        "Payload-native remote state test",
+        49.99,
+        4.99,
+        "active",
+        "active",
+      ],
+    );
+
+    database.run(
+      `INSERT INTO listing_channels
+       (id, listing_id, marketplace, external_listing_id, status, last_sync_at, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,datetime('now'),datetime('now'))`,
+      [
+        "sync-payload-state-channel",
+        "sync-payload-state-listing",
+        "ebay",
+        "ebay-payload-state",
+        "active",
+        new Date().toISOString(),
+      ],
+    );
+
+    adapter.sync = async (listing) => ({
+      marketplace: "ebay",
+      syncedAt: "2026-06-11T03:00:00.000Z",
+      payload: {
+        listingId: listing.external_listing_id,
+        listingStatus: "active",
+        pricingSummary: {
+          price: { value: "49.99", currency: "CAD" },
+        },
+      },
+    });
+
+    const results = await syncService.syncMarketplaceListings("ebay", "sync-payload-state-listing");
+    assert.equal(results.length, 1);
+    assert.deepEqual(results[0].reconciliation.conflicts, []);
+
+    const channel = database.get(`SELECT * FROM listing_channels WHERE id = ?`, ["sync-payload-state-channel"]);
+    const event = database.get(
+      `SELECT * FROM listing_channel_events
+       WHERE listing_channel_id = ? AND event_type = 'sync'
+       ORDER BY rowid DESC LIMIT 1`,
+      ["sync-payload-state-channel"],
+    );
+
+    assert.equal(channel.status, "active");
+    assert.equal(channel.last_sync_at, "2026-06-11T03:00:00.000Z");
+    assert.ok(event);
+    assert.equal(event.status, "active");
+  } finally {
+    adapter.sync = originalSync;
+    db.close();
+    if (previousPath === undefined) {
+      delete process.env.CARDVAULT_DB_PATH;
+    } else {
+      process.env.CARDVAULT_DB_PATH = previousPath;
+    }
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
