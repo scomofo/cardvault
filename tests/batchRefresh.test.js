@@ -65,3 +65,20 @@ test("batch refresh forwards the source option to each refresh call", async () =
   });
   assert.deepEqual(received, [{ source: "ebay-browse" }, { source: "ebay-browse" }]);
 });
+
+test("batch refresh forwards forceRefresh to each refresh call", async () => {
+  const received = [];
+  await refreshPricingForAllOwned({
+    delayMs: 0,
+    source: "ebay-browse",
+    forceRefresh: true,
+    listItems: () => fakeItems(2),
+    refresh: async (itemId, options) => {
+      received.push(options);
+    },
+  });
+  assert.deepEqual(received, [
+    { source: "ebay-browse", forceRefresh: true },
+    { source: "ebay-browse", forceRefresh: true },
+  ]);
+});

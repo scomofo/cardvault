@@ -11,6 +11,12 @@ export default function ActiveListingCard({ listing: l, catalog, busyListingId, 
   const isRepricing = repricingId === l.id;
   const feeRate = PLATFORM_FEES[l.platform] || 0;
   const previewNet = sellPrice ? (parseFloat(sellPrice) - (parseFloat(catalog.find((c) => c.id === l.cardId)?.costBasis) || 0) - Math.round(parseFloat(sellPrice) * feeRate * 100) / 100 - (l.shipping || 0)) : null;
+  const publishStatus = String(l.publishStatus || "").toLowerCase();
+  const isPublished = ["active", "revised", "sold"].includes(publishStatus) || Boolean(l.externalListingId || l.external_listing_id);
+  const lastSyncAt = l.lastSyncAt || l.last_sync_at;
+  const lastSyncLabel = lastSyncAt && !Number.isNaN(new Date(lastSyncAt).getTime())
+    ? `Synced ${new Date(lastSyncAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`
+    : null;
 
   return (
               <div key={l.id} className="card mb-8" style={{ borderColor: isSelling ? "var(--grn-brd)" : isUrgent ? "var(--red-brd)" : tl === "Ended" ? "var(--acc-brd)" : undefined }}>
@@ -37,14 +43,17 @@ export default function ActiveListingCard({ listing: l, catalog, busyListingId, 
                   {l.publishStatus && (
                     <span className="badge badge-dim">{l.publishStatus}</span>
                   )}
+                  {lastSyncLabel && (
+                    <span className="text-xxs text-dim">{lastSyncLabel}</span>
+                  )}
                   {l.priceChanges?.length > 0 && (
                     <span className="text-xxs text-dim">{l.priceChanges.length} reprice{l.priceChanges.length > 1 ? "s" : ""}</span>
                   )}
                   <div className="flex-1" />
                   {!isSelling && !isRepricing && (
                     <>
-                      <button className="btn btn-ghost btn-sm" disabled={busyListingId === l.id} onClick={() => onPublish(l.id, l.platform || "ebay")}>
-                        {busyListingId === l.id ? <Spinner size={12} /> : "Publish"}
+                      <button className="btn btn-ghost btn-sm" disabled={busyListingId === l.id || isPublished} onClick={() => onPublish(l.id, l.platform || "ebay")}>
+                        {busyListingId === l.id ? <Spinner size={12} /> : isPublished ? "Published" : "Publish"}
                       </button>
                       <button className="btn btn-ghost btn-sm" disabled={busyListingId === l.id} onClick={() => onSync(l.id, l.platform || "ebay")}>
                         Sync

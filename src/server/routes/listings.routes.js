@@ -105,14 +105,16 @@ export function registerListingRoutes(app) {
     try {
       const existing = get("SELECT * FROM listings WHERE id = ?", [req.params.id]);
       if (!existing) return res.status(404).json({ error: "Listing not found" });
-      const body = { ...existing, ...toSnake(req.body) };
+      const updates = toSnake(req.body);
+      const body = { ...existing, ...updates };
       if (body.card_id && !get("SELECT id FROM user_items WHERE id = ?", [body.card_id])) {
         return res.status(404).json({ error: "linked item not found" });
       }
       const normalizedStatus = normalizeStatus(body.status);
       const nextPublishStatus = derivePublishStatus(normalizedStatus, body.publish_status);
-      const nextSoldPrice = normalizedStatus === "sold" ? body.sold_price : null;
-      const nextSoldDate = normalizedStatus === "sold" ? body.sold_date : null;
+      const hasSoldSignal = updates.sold_price != null || updates.sold_date != null;
+      const nextSoldPrice = normalizedStatus === "sold" || hasSoldSignal ? body.sold_price : null;
+      const nextSoldDate = normalizedStatus === "sold" || hasSoldSignal ? body.sold_date : null;
       run(
         `UPDATE listings SET card_id=?, external_listing_id=?, card_name=?, card_set=?, card_number=?,
          platform=?, listing_title=?, listing_description=?, category_path=?, item_specifics=?, shipping_profile=?,

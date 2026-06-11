@@ -28,6 +28,7 @@ export function ToastProvider({ children }) {
     fn.success = (msg) => addToast(msg, "success");
     fn.error = (msg) => addToast(msg, "error", 5000);
     fn.info = (msg) => addToast(msg, "info");
+    fn.warning = (msg) => addToast(msg, "warning", 5000);
     return fn;
   }, [addToast]);
 

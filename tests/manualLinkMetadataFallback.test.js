@@ -1,47 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { spawn } from "node:child_process";
-
-async function waitForServer(baseUrl, timeoutMs = 10000) {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    try {
-      const response = await fetch(`${baseUrl}/api/settings`);
-      if (response.ok) return;
-    } catch {}
-    await new Promise((resolve) => setTimeout(resolve, 150));
-  }
-  throw new Error(`Server did not become ready within ${timeoutMs}ms`);
-}
+import { startTestServer } from "./helpers/testServer.js";
 
 test("linked manual sales and orders inherit platform and buyer metadata", async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-link-metadata-"));
-  const dbPath = join(tempDir, "cardvault-test.db");
-  const port = 4000 + Math.floor(Math.random() * 400);
-  const baseUrl = `http://127.0.0.1:${port}`;
-
-  const server = spawn(process.execPath, ["server.js"], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      PORT: String(port),
-      CARDVAULT_DB_PATH: dbPath,
-    },
+  const { baseUrl } = await startTestServer(t, {
+    dirPrefix: "cardvault-link-metadata-",
+    portBase: 4000,
     stdio: ["ignore", "pipe", "pipe"],
   });
-
-  t.after(async () => {
-    if (!server.killed) {
-      server.kill("SIGTERM");
-    }
-    await new Promise((resolve) => server.once("exit", resolve));
-    await rm(tempDir, { recursive: true, force: true });
-  });
-
-  await waitForServer(baseUrl);
 
   const itemResponse = await fetch(`${baseUrl}/api/items`, {
     method: "POST",
@@ -169,35 +135,16 @@ test("linked manual sales and orders inherit platform and buyer metadata", async
   assert.equal(linkedOrderResponse.status, 201);
   const linkedOrderPayload = await linkedOrderResponse.json();
   assert.equal(linkedOrderPayload.platform, "ebay");
-  assert.equal(linkedOrderPayload.buyer_handle, "buyer_meta_2");
-  assert.equal(linkedOrderPayload.sale_price, 32.99);
+  assert.equal(linkedOrderPayload.buyerHandle, "buyer_meta_2");
+  assert.equal(linkedOrderPayload.salePrice, 32.99);
 });
 
 test("linked manual sales and orders reject duplicate one-to-one pairings", async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-link-duplicate-"));
-  const dbPath = join(tempDir, "cardvault-test.db");
-  const port = 4400 + Math.floor(Math.random() * 400);
-  const baseUrl = `http://127.0.0.1:${port}`;
-
-  const server = spawn(process.execPath, ["server.js"], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      PORT: String(port),
-      CARDVAULT_DB_PATH: dbPath,
-    },
+  const { baseUrl } = await startTestServer(t, {
+    dirPrefix: "cardvault-link-duplicate-",
+    portBase: 4400,
     stdio: ["ignore", "pipe", "pipe"],
   });
-
-  t.after(async () => {
-    if (!server.killed) {
-      server.kill("SIGTERM");
-    }
-    await new Promise((resolve) => server.once("exit", resolve));
-    await rm(tempDir, { recursive: true, force: true });
-  });
-
-  await waitForServer(baseUrl);
 
   const itemResponse = await fetch(`${baseUrl}/api/items`, {
     method: "POST",
@@ -311,30 +258,11 @@ test("linked manual sales and orders reject duplicate one-to-one pairings", asyn
 });
 
 test("linked manual sales and orders reject dangling link ids", async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-link-missing-"));
-  const dbPath = join(tempDir, "cardvault-test.db");
-  const port = 4800 + Math.floor(Math.random() * 400);
-  const baseUrl = `http://127.0.0.1:${port}`;
-
-  const server = spawn(process.execPath, ["server.js"], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      PORT: String(port),
-      CARDVAULT_DB_PATH: dbPath,
-    },
+  const { baseUrl } = await startTestServer(t, {
+    dirPrefix: "cardvault-link-missing-",
+    portBase: 4800,
     stdio: ["ignore", "pipe", "pipe"],
   });
-
-  t.after(async () => {
-    if (!server.killed) {
-      server.kill("SIGTERM");
-    }
-    await new Promise((resolve) => server.once("exit", resolve));
-    await rm(tempDir, { recursive: true, force: true });
-  });
-
-  await waitForServer(baseUrl);
 
   const missingSaleOrderResponse = await fetch(`${baseUrl}/api/orders`, {
     method: "POST",
@@ -364,30 +292,11 @@ test("linked manual sales and orders reject dangling link ids", async (t) => {
 });
 
 test("linked manual sales and orders reject conflicting explicit ids", async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-link-conflict-"));
-  const dbPath = join(tempDir, "cardvault-test.db");
-  const port = 5200 + Math.floor(Math.random() * 400);
-  const baseUrl = `http://127.0.0.1:${port}`;
-
-  const server = spawn(process.execPath, ["server.js"], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      PORT: String(port),
-      CARDVAULT_DB_PATH: dbPath,
-    },
+  const { baseUrl } = await startTestServer(t, {
+    dirPrefix: "cardvault-link-conflict-",
+    portBase: 5200,
     stdio: ["ignore", "pipe", "pipe"],
   });
-
-  t.after(async () => {
-    if (!server.killed) {
-      server.kill("SIGTERM");
-    }
-    await new Promise((resolve) => server.once("exit", resolve));
-    await rm(tempDir, { recursive: true, force: true });
-  });
-
-  await waitForServer(baseUrl);
 
   for (const item of [
     { id: "conflict-item-a", name: "Conflict Card A", number: "54A" },
@@ -485,30 +394,11 @@ test("linked manual sales and orders reject conflicting explicit ids", async (t)
 });
 
 test("linked manual sales and orders reject conflicting explicit metadata", async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-link-meta-conflict-"));
-  const dbPath = join(tempDir, "cardvault-test.db");
-  const port = 5600 + Math.floor(Math.random() * 400);
-  const baseUrl = `http://127.0.0.1:${port}`;
-
-  const server = spawn(process.execPath, ["server.js"], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      PORT: String(port),
-      CARDVAULT_DB_PATH: dbPath,
-    },
+  const { baseUrl } = await startTestServer(t, {
+    dirPrefix: "cardvault-link-meta-conflict-",
+    portBase: 5600,
     stdio: ["ignore", "pipe", "pipe"],
   });
-
-  t.after(async () => {
-    if (!server.killed) {
-      server.kill("SIGTERM");
-    }
-    await new Promise((resolve) => server.once("exit", resolve));
-    await rm(tempDir, { recursive: true, force: true });
-  });
-
-  await waitForServer(baseUrl);
 
   const itemResponse = await fetch(`${baseUrl}/api/items`, {
     method: "POST",
@@ -674,30 +564,11 @@ test("linked manual sales and orders reject conflicting explicit metadata", asyn
 });
 
 test("manual sales and orders reject missing or mismatched direct listing references", async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-direct-listing-guard-"));
-  const dbPath = join(tempDir, "cardvault-test.db");
-  const port = 6000 + Math.floor(Math.random() * 400);
-  const baseUrl = `http://127.0.0.1:${port}`;
-
-  const server = spawn(process.execPath, ["server.js"], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      PORT: String(port),
-      CARDVAULT_DB_PATH: dbPath,
-    },
+  const { baseUrl } = await startTestServer(t, {
+    dirPrefix: "cardvault-direct-listing-guard-",
+    portBase: 6000,
     stdio: ["ignore", "pipe", "pipe"],
   });
-
-  t.after(async () => {
-    if (!server.killed) {
-      server.kill("SIGTERM");
-    }
-    await new Promise((resolve) => server.once("exit", resolve));
-    await rm(tempDir, { recursive: true, force: true });
-  });
-
-  await waitForServer(baseUrl);
 
   for (const item of [
     { id: "direct-guard-item-a", name: "Direct Guard A", number: "56A" },
@@ -792,30 +663,11 @@ test("manual sales and orders reject missing or mismatched direct listing refere
 });
 
 test("linked manual sales and orders reject stale item-listing mismatches", async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-stale-link-guard-"));
-  const dbPath = join(tempDir, "cardvault-test.db");
-  const port = 6400 + Math.floor(Math.random() * 400);
-  const baseUrl = `http://127.0.0.1:${port}`;
-
-  const server = spawn(process.execPath, ["server.js"], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      PORT: String(port),
-      CARDVAULT_DB_PATH: dbPath,
-    },
+  const { baseUrl } = await startTestServer(t, {
+    dirPrefix: "cardvault-stale-link-guard-",
+    portBase: 6400,
     stdio: ["ignore", "pipe", "pipe"],
   });
-
-  t.after(async () => {
-    if (!server.killed) {
-      server.kill("SIGTERM");
-    }
-    await new Promise((resolve) => server.once("exit", resolve));
-    await rm(tempDir, { recursive: true, force: true });
-  });
-
-  await waitForServer(baseUrl);
 
   for (const item of [
     { id: "stale-link-item-a", name: "Stale Link A", number: "57A" },
@@ -925,30 +777,11 @@ test("linked manual sales and orders reject stale item-listing mismatches", asyn
 });
 
 test("manual sales and orders reject missing direct or linked items", async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-missing-item-guard-"));
-  const dbPath = join(tempDir, "cardvault-test.db");
-  const port = 6800 + Math.floor(Math.random() * 400);
-  const baseUrl = `http://127.0.0.1:${port}`;
-
-  const server = spawn(process.execPath, ["server.js"], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      PORT: String(port),
-      CARDVAULT_DB_PATH: dbPath,
-    },
+  const { baseUrl } = await startTestServer(t, {
+    dirPrefix: "cardvault-missing-item-guard-",
+    portBase: 6800,
     stdio: ["ignore", "pipe", "pipe"],
   });
-
-  t.after(async () => {
-    if (!server.killed) {
-      server.kill("SIGTERM");
-    }
-    await new Promise((resolve) => server.once("exit", resolve));
-    await rm(tempDir, { recursive: true, force: true });
-  });
-
-  await waitForServer(baseUrl);
 
   const missingOrderResponse = await fetch(`${baseUrl}/api/orders`, {
     method: "POST",

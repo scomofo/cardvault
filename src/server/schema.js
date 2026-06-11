@@ -201,6 +201,14 @@ export function createTables(db) {
       notes TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS batch_presets (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      defaults_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS orders (
       id TEXT PRIMARY KEY,
       sale_id TEXT REFERENCES sales(id),

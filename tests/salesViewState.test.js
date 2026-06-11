@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { loadServerSalesState } from "../src/lib/salesViewState.js";
+import {
+  loadServerSalesState,
+  summarizeMarketplaceSyncResults,
+} from "../src/lib/salesViewState.js";
 
 test("loadServerSalesState normalizes each collection independently", async () => {
   const state = await loadServerSalesState({
@@ -31,4 +34,54 @@ test("loadServerSalesState normalizes each collection independently", async () =
     sales: [],
     catalog: [{ id: "item-1" }],
   });
+});
+
+test("summarizeMarketplaceSyncResults reports sold listings with created orders", () => {
+  assert.deepEqual(
+    summarizeMarketplaceSyncResults([
+      {
+        synced: { status: "sold" },
+        sale: { id: "sale-1" },
+        order: { id: "order-1" },
+      },
+    ], "ebay"),
+    {
+      type: "success",
+      message: "Synced ebay sale and created order",
+    },
+  );
+});
+
+test("summarizeMarketplaceSyncResults reports sync conflicts as warnings", () => {
+  assert.deepEqual(
+    summarizeMarketplaceSyncResults([
+      {
+        synced: { status: "active" },
+        reconciliation: {
+          conflicts: [
+            { message: "Local status differs from remote sold" },
+          ],
+        },
+      },
+    ], "ebay"),
+    {
+      type: "warning",
+      message: "Sync needs review: Local status differs from remote sold",
+    },
+  );
+});
+
+test("summarizeMarketplaceSyncResults reports clean status refreshes", () => {
+  assert.deepEqual(
+    summarizeMarketplaceSyncResults([
+      {
+        synced: { status: "active" },
+        reconciliation: { conflicts: [] },
+      },
+    ], "ebay"),
+    {
+      type: "info",
+      message: "Refreshed ebay status: active",
+    },
+  );
 });

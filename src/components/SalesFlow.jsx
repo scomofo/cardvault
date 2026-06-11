@@ -5,7 +5,7 @@ import { PLATFORMS } from "../lib/constants";
 import { uid, fmtShort } from "../lib/utils";
 import { actionQueueAPI, marketplacesAPI, ordersAPI, listingsAPI, salesAPI, automationAPI, purchasesAPI, itemsAPI } from "../lib/api";
 import { importEbayPurchasesLocal, parseEbayPurchaseImport } from "../lib/ebayPurchaseImport";
-import { loadServerSalesState } from "../lib/salesViewState";
+import { loadServerSalesState, summarizeMarketplaceSyncResults } from "../lib/salesViewState";
 import { requestNotificationPermission, canNotify, sendNotification, scheduleAuctionNotification, cancelNotificationTimer } from "../lib/notifications";
 import { IconPlus, IconBell, IconCheck, IconX, Spinner } from "./Icons";
 import EbayExport from "./EbayExport";
@@ -297,8 +297,8 @@ export default function SalesFlow() {
             ? {
                 ...listing,
                 publishStatus: channel.status,
-                externalListingId: channel.external_listing_id,
-                lastSyncAt: channel.last_sync_at,
+                externalListingId: channel.externalListingId || channel.external_listing_id,
+                lastSyncAt: channel.lastSyncAt || channel.last_sync_at,
               }
             : listing,
         ),
@@ -315,9 +315,10 @@ export default function SalesFlow() {
   const syncListing = async (listingId, marketplace = "ebay") => {
     try {
       setBusyListingId(listingId);
-      await marketplacesAPI.sync({ marketplace, listingId });
+      const syncResults = await marketplacesAPI.sync({ marketplace, listingId });
       await refreshServerSalesState();
-      toast.success(`Synced ${marketplace} status`);
+      const summary = summarizeMarketplaceSyncResults(syncResults, marketplace);
+      (toast[summary.type] || toast.info)(summary.message);
     } catch (error) {
       toast.error(error.message);
     } finally {

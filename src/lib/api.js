@@ -71,6 +71,25 @@ export const actionQueueAPI = {
   list: () => request("/action-queue"),
 };
 
+export const alertsAPI = {
+  list: (params) => request(`/alerts${toQuery(params)}`),
+  update: (id, data) => request(`/alerts/${id}`, { method: "PATCH", body: data }),
+  dismissAll: (data = {}) => request("/alerts/dismiss-all", { method: "POST", body: data }),
+};
+
+export const pricingRecommendationsAPI = {
+  list: (params) => request(`/pricing-recommendations${toQuery(params)}`),
+  apply: (id) => request(`/pricing-recommendations/${id}/apply`, { method: "POST" }),
+  dismiss: (id) => request(`/pricing-recommendations/${id}`, { method: "DELETE" }),
+};
+
+export const presetsAPI = {
+  list: () => request("/batch-presets"),
+  create: (data) => request("/batch-presets", { method: "POST", body: data }),
+  update: (id, data) => request(`/batch-presets/${id}`, { method: "PUT", body: data }),
+  delete: (id) => request(`/batch-presets/${id}`, { method: "DELETE" }),
+};
+
 export const dashboardAPI = {
   get: () => request("/dashboard"),
 };
