@@ -6,6 +6,7 @@ import { refreshListingAggregateState } from "../marketplaces/listingAggregateSt
 const SUPPORTED_EXPORT_TYPES = new Set(["csv"]);
 const SAFE_PATH_SEGMENT = /^[A-Za-z0-9_-]+$/;
 const HANDOFF_MARKETPLACES = new Set(["comc", "consignment"]);
+const EXPORTABLE_HANDOFF_STATUSES = new Set(["handoff_ready", "handoff_exception"]);
 
 function normalizeMarketplace(marketplace) {
   if (typeof marketplace !== "string" || !marketplace.trim()) {
@@ -73,6 +74,10 @@ function attachChannelHandoff(listings, channels) {
       handoff: overrides.handoff || null,
     };
   });
+}
+
+function isExportableHandoffChannel(channel) {
+  return EXPORTABLE_HANDOFF_STATUSES.has(String(channel?.status || "").toLowerCase());
 }
 
 function markHandoffExported({ channels, exportId, marketplace, filePath }) {
@@ -151,6 +156,7 @@ export function exportListingsForMarketplace({ marketplace, listingIds = [], exp
   const csv = toCsv(rows);
   const exportId = uid();
   const filePath = `exports/${normalizedMarketplace}_${new Date().toISOString().slice(0, 10)}.${exportType}`;
+  const supportsHandoff = HANDOFF_MARKETPLACES.has(normalizedMarketplace);
 
   run(
     `INSERT INTO listing_exports (id, listing_batch_id, export_type, export_status, file_path, item_count, exported_at)
@@ -158,8 +164,13 @@ export function exportListingsForMarketplace({ marketplace, listingIds = [], exp
     [exportId, null, `${normalizedMarketplace}_${exportType}`, "completed", filePath, listings.length],
   );
 
-  const exportedListingIds = HANDOFF_MARKETPLACES.has(normalizedMarketplace)
-    ? markHandoffExported({ channels, exportId, marketplace: normalizedMarketplace, filePath })
+  const exportedListingIds = supportsHandoff
+    ? markHandoffExported({
+        channels: channels.filter(isExportableHandoffChannel),
+        exportId,
+        marketplace: normalizedMarketplace,
+        filePath,
+      })
     : [];
 
   return {
@@ -169,7 +180,7 @@ export function exportListingsForMarketplace({ marketplace, listingIds = [], exp
     itemCount: listings.length,
     filePath,
     content: csv,
-    handoff: HANDOFF_MARKETPLACES.has(normalizedMarketplace)
+    handoff: supportsHandoff
       ? { status: "handoff_exported", listingIds: exportedListingIds }
       : undefined,
   };

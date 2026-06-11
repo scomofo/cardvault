@@ -101,6 +101,75 @@ test("external handoff export advances COMC channel lifecycle and records audit 
   }
 });
 
+test("external handoff export skips submitted channels and retries exceptions", async (t) => {
+  const { baseUrl, dbPath } = await startTestServer(t, { dirPrefix: "cardvault-comc-handoff-export-filter-" });
+  const submittedListing = await createHandoffListing(baseUrl, {
+    idPrefix: "comc-submitted-filter",
+    marketplace: "comc",
+    cardName: "Wayne Gretzky",
+    marketPrice: 150,
+  });
+  const exceptionListing = await createHandoffListing(baseUrl, {
+    idPrefix: "comc-exception-filter",
+    marketplace: "comc",
+    cardName: "Patrick Roy",
+    marketPrice: 88,
+  });
+
+  assert.equal((await postJson(baseUrl, "/api/marketplaces/handoff/status", {
+    listingId: submittedListing.listingId,
+    marketplace: "comc",
+    status: "submitted",
+    submissionReference: "comc-submission-99",
+  })).status, 200);
+
+  assert.equal((await postJson(baseUrl, "/api/marketplaces/handoff/status", {
+    listingId: exceptionListing.listingId,
+    marketplace: "comc",
+    status: "exception",
+    note: "Corrected grade label needed",
+    submissionReference: "comc-submission-100",
+  })).status, 200);
+
+  const exportResponse = await postJson(baseUrl, "/api/marketplaces/export", {
+    marketplace: "comc",
+    listingIds: [submittedListing.listingId, exceptionListing.listingId],
+  });
+  assert.equal(exportResponse.status, 200);
+  const exportPayload = await exportResponse.json();
+  assert.equal(exportPayload.itemCount, 2);
+  assert.deepEqual(exportPayload.handoff.listingIds, [exceptionListing.listingId]);
+
+  const submittedChannel = await getMarketplaceChannel(baseUrl, submittedListing.listingId, "comc");
+  assert.equal(submittedChannel.status, "handoff_submitted");
+  const submittedOverrides = JSON.parse(submittedChannel.overrides);
+  assert.equal(submittedOverrides.handoff.submissionStatus, "submitted");
+  assert.equal(submittedOverrides.handoff.submissionReference, "comc-submission-99");
+  assert.equal(submittedOverrides.handoff.exportId, undefined);
+  assert.equal(submittedOverrides.handoff.exportedAt, undefined);
+
+  const exceptionChannel = await getMarketplaceChannel(baseUrl, exceptionListing.listingId, "comc");
+  assert.equal(exceptionChannel.status, "handoff_exported");
+  const exceptionOverrides = JSON.parse(exceptionChannel.overrides);
+  assert.equal(exceptionOverrides.handoff.submissionStatus, "exported");
+  assert.equal(exceptionOverrides.handoff.submissionReference, "comc-submission-100");
+  assert.equal(exceptionOverrides.handoff.note, "Corrected grade label needed");
+  assert.equal(exceptionOverrides.handoff.exportId, exportPayload.exportId);
+
+  const db = new Database(dbPath, { readonly: true });
+  try {
+    const submittedExportEvents = db.prepare(
+      `SELECT COUNT(*) AS count
+       FROM listing_channel_events
+       WHERE listing_channel_id = ?
+         AND event_type = 'handoff_export'`,
+    ).get(submittedChannel.id);
+    assert.equal(submittedExportEvents.count, 0);
+  } finally {
+    db.close();
+  }
+});
+
 test("external handoff status updates persist partner outcomes and queue exceptions", async (t) => {
   const { baseUrl, dbPath } = await startTestServer(t, { dirPrefix: "cardvault-consignment-handoff-status-" });
   const { listingId } = await createHandoffListing(baseUrl, {
