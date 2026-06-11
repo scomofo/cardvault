@@ -1,7 +1,14 @@
 import { all, get, run } from "../../database.js";
 
 const ACTIVE_CHANNEL_STATUSES = new Set(["draft", "active", "revised"]);
-const HANDOFF_CHANNEL_STATUSES = new Set(["handoff_ready"]);
+const HANDOFF_CHANNEL_STATUSES = new Set([
+  "handoff_ready",
+  "handoff_exported",
+  "handoff_submitted",
+  "handoff_accepted",
+  "handoff_settled",
+  "handoff_exception",
+]);
 
 function deriveAggregateState(channels) {
   const statuses = channels
@@ -22,8 +29,19 @@ function deriveAggregateState(channels) {
     return { status: "active", publishStatus: "draft" };
   }
 
+  if (statuses.includes("handoff_exception")) {
+    return { status: "active", publishStatus: "handoff_exception" };
+  }
+
   if (statuses.some((status) => HANDOFF_CHANNEL_STATUSES.has(status))) {
-    return { status: "active", publishStatus: "handoff_ready" };
+    const publishStatus = [
+      "handoff_settled",
+      "handoff_accepted",
+      "handoff_submitted",
+      "handoff_exported",
+      "handoff_ready",
+    ].find((status) => statuses.includes(status));
+    return { status: "active", publishStatus };
   }
 
   if (statuses.includes("ended")) {

@@ -23,6 +23,7 @@ export class ConsignmentAdapter extends MarketplaceAdapter {
 
   mapForExport(listing) {
     const mapped = super.mapForExport(listing);
+    const submissionStatus = listing.handoff?.submissionStatus || "ready_for_review";
     return {
       Card: mapped.title,
       DeclaredValue: mapped.price,
@@ -32,7 +33,7 @@ export class ConsignmentAdapter extends MarketplaceAdapter {
       Marketplace: "Consignment",
       CardVaultListingId: listing.id,
       SubmissionType: "broker_consignment",
-      SubmissionStatus: "ready_for_review",
+      SubmissionStatus: submissionStatus,
     };
   }
 }
