@@ -32,6 +32,19 @@ export const PLATFORMS = [
   { v: "shopify", l: "Shopify" },
 ];
 
+export const PLATFORM_FEES = {
+  ebay: 0.1312,
+  tcgplayer: 0.1089,
+  mercari: 0.10,
+  facebook: 0,
+  collx: 0.10,
+  poshmark: 0.20,
+  comc: 0.10,
+  alt: 0.10,
+  goldin: 0.15,
+  shopify: 0.029,
+};
+
 export const SHIP_CA = [
   { l: "Canada Post Lettermail", p: "$1.44", w: "\u226430g", t: "2-4 days", track: false },
   { l: "Canada Post Tracked Packet", p: "~$13", w: "\u22642kg", t: "4-7 days", track: true },

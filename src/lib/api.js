@@ -90,6 +90,12 @@ export const presetsAPI = {
   delete: (id) => request(`/batch-presets/${id}`, { method: "DELETE" }),
 };
 
+export const feeModelsAPI = {
+  list: () => request("/fee-models"),
+  upsert: (platform, data) => request(`/fee-models/${platform}`, { method: "PUT", body: data }),
+  delete: (platform) => request(`/fee-models/${platform}`, { method: "DELETE" }),
+};
+
 export const dashboardAPI = {
   get: () => request("/dashboard"),
 };

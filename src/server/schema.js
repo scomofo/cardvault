@@ -209,6 +209,15 @@ export function createTables(db) {
       updated_at TEXT DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS fee_models (
+      id TEXT PRIMARY KEY,
+      platform TEXT NOT NULL UNIQUE,
+      fee_rate REAL NOT NULL DEFAULT 0,
+      label TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS orders (
       id TEXT PRIMARY KEY,
       sale_id TEXT REFERENCES sales(id),

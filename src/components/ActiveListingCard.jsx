@@ -1,15 +1,14 @@
-import { PLATFORMS } from "../lib/constants";
+import { PLATFORMS, PLATFORM_FEES } from "../lib/constants";
 import { fmtShort } from "../lib/utils";
 import { IconCheck, IconX, Spinner } from "./Icons";
-import { PLATFORM_FEES } from "./SalesFlow";
 import ProfitWarning from "./ProfitWarning";
 
-export default function ActiveListingCard({ listing: l, catalog, busyListingId, sellingId, sellPrice, setSellPrice, sellTracking, setSellTracking, repricingId, repriceVal, setRepriceVal, onPublish, onSync, onCrosspost, onSell, onStartSell, onReprice, onStartReprice, onEndListing, onCancelSell, onCancelReprice, timeLeft }) {
+export default function ActiveListingCard({ listing: l, catalog, busyListingId, sellingId, sellPrice, setSellPrice, sellTracking, setSellTracking, repricingId, repriceVal, setRepriceVal, onPublish, onSync, onCrosspost, onSell, onStartSell, onReprice, onStartReprice, onEndListing, onCancelSell, onCancelReprice, getFeeRate = (platform) => PLATFORM_FEES[platform] || 0, timeLeft }) {
   const tl = l.format === "auction" ? timeLeft(l.auctionEndDate) : null;
   const isUrgent = tl && !tl.includes("d") && !tl.includes("Ended") && parseInt(tl) < 60;
   const isSelling = sellingId === l.id;
   const isRepricing = repricingId === l.id;
-  const feeRate = PLATFORM_FEES[l.platform] || 0;
+  const feeRate = getFeeRate(l.platform);
   const previewNet = sellPrice ? (parseFloat(sellPrice) - (parseFloat(catalog.find((c) => c.id === l.cardId)?.costBasis) || 0) - Math.round(parseFloat(sellPrice) * feeRate * 100) / 100 - (l.shipping || 0)) : null;
   const publishStatus = String(l.publishStatus || "").toLowerCase();
   const isPublished = ["active", "revised", "sold"].includes(publishStatus) || Boolean(l.externalListingId || l.external_listing_id);

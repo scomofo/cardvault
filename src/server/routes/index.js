@@ -5,6 +5,7 @@ import { registerBatchPresetsRoutes } from "./batchPresets.routes.js";
 import { registerCollectionRoutes } from "./collections.routes.js";
 import { registerDecisionRoutes } from "./decisions.routes.js";
 import { registerDashboardRoutes } from "./dashboard.routes.js";
+import { registerFeeModelsRoutes } from "./feeModels.routes.js";
 import { registerIdentificationRoutes } from "./identification.routes.js";
 import { registerItemRoutes } from "./items.routes.js";
 import { registerListingRoutes } from "./listings.routes.js";
@@ -27,6 +28,7 @@ export function registerRoutes(app) {
   registerPricingRecommendationsRoutes(app);
   registerListingRoutes(app);
   registerMarketplaceRoutes(app);
+  registerFeeModelsRoutes(app);
   registerIdentificationRoutes(app);
   registerDecisionRoutes(app);
   registerDashboardRoutes(app);

@@ -6,11 +6,12 @@ import ScanDetailsStep from "./scan/ScanDetailsStep";
 import ScanIdentifyStep from "./scan/ScanIdentifyStep";
 import ScanListingStep from "./scan/ScanListingStep";
 import ScanStepper from "./scan/ScanStepper";
-import { PLATFORM_FEES } from "./SalesFlow";
+import { useFeeModels } from "../hooks/useFeeModels";
 import { useScanWorkflow } from "../hooks/useScanWorkflow";
 
 export default function ScanView({ onNavigate, pendingImage, onPendingImageConsumed }) {
   const { actions, state } = useScanWorkflow();
+  const { getFeeRate } = useFeeModels();
 
   useEffect(() => {
     if (!pendingImage) return;
@@ -172,7 +173,7 @@ export default function ScanView({ onNavigate, pendingImage, onPendingImageConsu
           }}
           saving={saving}
           costBasis={parseFloat(card.costBasis) || 0}
-          feeRate={PLATFORM_FEES[listing.platform] || 0}
+          feeRate={getFeeRate(listing.platform)}
           comps={results}
           priceEst={priceEst}
         />
