@@ -101,6 +101,20 @@ test("summarizeMarketplaceCrosspostResults names ready handoff channels", () => 
   );
 });
 
+test("summarizeMarketplaceCrosspostResults deduplicates marketplace names", () => {
+  assert.deepEqual(
+    summarizeMarketplaceCrosspostResults([
+      { marketplace: "shopify", status: "active" },
+      { marketplace: "shopify", status: "revised" },
+      { marketplace: "comc", status: "handoff_ready" },
+    ]),
+    {
+      type: "success",
+      message: "Crosspost ready: shopify, comc",
+    },
+  );
+});
+
 test("summarizeMarketplaceCrosspostResults explains empty plans", () => {
   assert.deepEqual(
     summarizeMarketplaceCrosspostResults([]),
@@ -109,6 +123,54 @@ test("summarizeMarketplaceCrosspostResults explains empty plans", () => {
       message: "No additional marketplaces were added",
     },
   );
+});
+
+test("buildManualSaleFulfillment preserves explicit zero sale price", () => {
+  const result = buildManualSaleFulfillment({
+    idFactory: () => "fixed-id",
+    listing: {
+      id: "listing-free",
+      cardId: "item-free",
+      cardName: "Promo Giveaway",
+      set: "Upper Deck",
+      platform: "shopify",
+      shipping: 0,
+      startPrice: 19.99,
+    },
+    card: { id: "item-free", costBasis: 0 },
+    feeRate: 0.029,
+    salePrice: "0",
+    trackingNumber: "",
+    soldAt: "2026-06-11T06:40:00.000Z",
+  });
+
+  assert.equal(result.sale.salePrice, 0);
+  assert.equal(result.order.salePrice, 0);
+  assert.equal(result.sale.netProfit, 0);
+});
+
+test("buildManualSaleFulfillment falls back to start price for invalid sale price", () => {
+  const result = buildManualSaleFulfillment({
+    idFactory: () => "fixed-id",
+    listing: {
+      id: "listing-invalid",
+      cardId: "item-invalid",
+      cardName: "Invalid Price Fallback",
+      set: "Upper Deck",
+      platform: "ebay",
+      shipping: 0,
+      startPrice: 10,
+    },
+    card: { id: "item-invalid", costBasis: 0 },
+    feeRate: 0.1,
+    salePrice: "abc",
+    trackingNumber: "",
+    soldAt: "2026-06-11T06:40:00.000Z",
+  });
+
+  assert.equal(result.sale.salePrice, 10);
+  assert.equal(result.order.salePrice, 10);
+  assert.equal(result.sale.netProfit, 9);
 });
 
 test("buildManualSaleFulfillment creates a pending shipment task for a confirmed sale", () => {

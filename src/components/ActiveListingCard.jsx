@@ -98,8 +98,8 @@ export default function ActiveListingCard({ listing: l, catalog, busyListingId, 
                     )}
                     {previewNet != null && previewNet < 0 && <ProfitWarning price={parseFloat(sellPrice)} costBasis={parseFloat(catalog.find((c) => c.id === l.cardId)?.costBasis) || 0} feeRate={feeRate} shipping={l.shipping || 0} />}
                     <div className="flex gap-8 mt-8">
-                      <button className="btn btn-success btn-sm flex-1" onClick={() => onSell(l.id, sellPrice, sellTracking)}>
-                        <IconCheck size={12} /> Confirm Sale
+                      <button className="btn btn-success btn-sm flex-1" disabled={busyListingId === l.id} onClick={() => onSell(l.id, sellPrice, sellTracking)}>
+                        {busyListingId === l.id ? <Spinner size={12} /> : <IconCheck size={12} />} Confirm Sale
                       </button>
                       <button className="btn btn-ghost btn-sm" onClick={onCancelSell}>Cancel</button>
                     </div>

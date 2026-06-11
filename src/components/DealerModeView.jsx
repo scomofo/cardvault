@@ -130,6 +130,11 @@ export default function DealerModeView() {
       .map((listing) => listing.id);
   }, [listings, selectedCards]);
 
+  const allFilteredSelected = useMemo(
+    () => filtered.length > 0 && filtered.every((c) => selected.has(c.id)),
+    [filtered, selected],
+  );
+
   const exportPlatformLabel = DEALER_EXPORT_PLATFORMS.find((platform) => platform.v === exportPlatform)?.l || exportPlatform;
 
   // Actions
@@ -142,10 +147,19 @@ export default function DealerModeView() {
   }
 
   function selectAll() {
-    if (filtered.length === 0) {
-      setSelected(new Set());
-    } else if (selected.size === filtered.length) setSelected(new Set());
-    else setSelected(new Set(filtered.map((c) => c.id)));
+    if (allFilteredSelected) {
+      setSelected((prev) => {
+        const next = new Set(prev);
+        filtered.forEach((c) => next.delete(c.id));
+        return next;
+      });
+    } else {
+      setSelected((prev) => {
+        const next = new Set(prev);
+        filtered.forEach((c) => next.add(c.id));
+        return next;
+      });
+    }
   }
 
   function handleSort(key) {
@@ -320,7 +334,7 @@ export default function DealerModeView() {
           {exporting ? "Exporting..." : useServer ? `Export ${exportPlatformLabel} CSV` : "Export CSV"}
         </button>
         <button style={s.btnOutline} onClick={selectAll}>
-          {filtered.length > 0 && selected.size === filtered.length ? "Deselect All" : "Select All"} ({filtered.length})
+          {allFilteredSelected ? "Deselect All" : "Select All"} ({filtered.length})
         </button>
         <span style={{ color: "#6b7280", fontSize: 12, alignSelf: "center", marginLeft: "auto" }}>
           {useServer && selected.size > 0
@@ -334,7 +348,7 @@ export default function DealerModeView() {
         <table style={s.table}>
           <thead>
             <tr>
-              <th style={s.th}><input type="checkbox" style={s.checkbox} checked={selected.size === filtered.length && filtered.length > 0} onChange={selectAll} /></th>
+              <th style={s.th}><input type="checkbox" style={s.checkbox} checked={allFilteredSelected} onChange={selectAll} /></th>
               {SORT_KEYS.map((sk) => (
                 <th key={sk.v} style={s.th} onClick={() => handleSort(sk.v)}>
                   {sk.l} {sortKey === sk.v ? (sortDir === 1 ? " ▲" : " ▼") : ""} 
