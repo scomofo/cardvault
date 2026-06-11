@@ -163,16 +163,17 @@ function normalizeLabelPurchase(value, { shipmentId, trackingNumber, labelTempla
     };
   }
 
+  const resolvedTrackingNumber = firstDefined(purchase.trackingNumber, purchase.tracking_number, trackingNumber);
   const labelUrlTemplate = firstDefined(purchase.labelUrl, purchase.label_url, labelTemplate);
   return {
     labelStatus: firstDefined(purchase.labelStatus, purchase.label_status, "purchased"),
     shipmentStatus: firstDefined(purchase.shipmentStatus, purchase.shipment_status, "shipped"),
-    trackingNumber: firstDefined(purchase.trackingNumber, purchase.tracking_number, trackingNumber),
+    trackingNumber: resolvedTrackingNumber,
     labelUrl: renderTemplate(labelUrlTemplate, {
       provider,
       serviceCode,
       shipmentId,
-      trackingNumber: trackingNumber || "",
+      trackingNumber: resolvedTrackingNumber || "",
     }),
   };
 }

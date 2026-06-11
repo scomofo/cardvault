@@ -90,7 +90,7 @@ test("shipping automation persists purchased provider label metadata", async (t)
       labelPurchase: {
         labelStatus: "purchased",
         trackingNumber: "CP-PURCHASED-123",
-        labelUrl: "labels/canada-post/{shipmentId}.pdf",
+        labelUrl: "labels/canada-post/{trackingNumber}/{shipmentId}.pdf",
       },
     }],
   });
@@ -106,7 +106,7 @@ test("shipping automation persists purchased provider label metadata", async (t)
   assert.equal(shipment.label_status, "purchased");
   assert.equal(shipment.status, "shipped");
   assert.equal(shipment.tracking_number, "CP-PURCHASED-123");
-  assert.equal(shipment.label_url, `labels/canada-post/${shipment.id}.pdf`);
+  assert.equal(shipment.label_url, `labels/canada-post/CP-PURCHASED-123/${shipment.id}.pdf`);
 
   const db = new Database(dbPath, { readonly: true });
   try {
