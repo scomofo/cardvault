@@ -37,6 +37,19 @@ test("dealer mode selected listing export tolerates missing listings while loadi
   );
 });
 
+test("settings exposes shipping provider connection management", async () => {
+  const api = await readFile(new URL("../src/lib/api.js", import.meta.url), "utf8");
+  const settings = await readFile(new URL("../src/components/Settings.jsx", import.meta.url), "utf8");
+
+  assert.match(api, /export const shippingProvidersAPI\s*=/);
+  assert.match(api, /shipping-provider-connections/);
+  assert.match(settings, /ShippingProviderConnectionsSection/);
+  assert.match(settings, /shippingProvidersAPI\.connections\(\)/);
+  assert.match(settings, /shippingProvidersAPI\.connect\(newConn/);
+  assert.match(settings, /shippingProvidersAPI\.test\(conn\.id/);
+  assert.match(settings, /type="password"[\s\S]*value=\{newConn\.apiKey\}/);
+});
+
 test("sales flow blocks duplicate manual sale submissions while saving", async () => {
   const salesFlow = await readFile(new URL("../src/components/SalesFlow.jsx", import.meta.url), "utf8");
   const activeListingCard = await readFile(new URL("../src/components/ActiveListingCard.jsx", import.meta.url), "utf8");

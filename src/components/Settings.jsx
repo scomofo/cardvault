@@ -3,7 +3,7 @@ import { useToast } from "./Toast";
 import { useData } from "../lib/DataContext";
 import { apiPath } from "../lib/apiBase";
 import { fmtShort } from "../lib/utils";
-import { automationAPI, marketplacesAPI, feeModelsAPI } from "../lib/api";
+import { automationAPI, marketplacesAPI, shippingProvidersAPI, feeModelsAPI } from "../lib/api";
 import { PLATFORMS, PLATFORM_FEES } from "../lib/constants";
 import { clearFeeModelCache } from "../hooks/useFeeModels";
 import { createBackupPayload, normalizeBackupState } from "../lib/backupState";
@@ -384,6 +384,176 @@ function MarketplaceConnectionsSection() {
   );
 }
 
+const DEFAULT_SHIPPING_PROVIDER = {
+  provider: "Canada Post",
+  apiKey: "",
+  metadata: {
+    accountLabel: "",
+    rates: [{
+      service: "Canada Post Expedited Parcel",
+      serviceCode: "DOM.EP",
+      countries: ["CA"],
+      cost: 9.75,
+      tracking: true,
+    }],
+  },
+};
+
+function cloneDefaultShippingProvider() {
+  return {
+    ...DEFAULT_SHIPPING_PROVIDER,
+    metadata: {
+      ...DEFAULT_SHIPPING_PROVIDER.metadata,
+      rates: DEFAULT_SHIPPING_PROVIDER.metadata.rates.map((rate) => ({ ...rate, countries: [...rate.countries] })),
+    },
+  };
+}
+
+function ShippingProviderConnectionsSection() {
+  const toast = useToast();
+  const [connections, setConnections] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showAdd, setShowAdd] = useState(false);
+  const [newConn, setNewConn] = useState(cloneDefaultShippingProvider);
+  const [saving, setSaving] = useState(false);
+  const [testingId, setTestingId] = useState(null);
+  const rate = newConn.metadata.rates[0];
+
+  useEffect(() => {
+    shippingProvidersAPI.connections()
+      .then((rows) => setConnections(Array.isArray(rows) ? rows : []))
+      .catch(() => setConnections([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const updateRate = (updates) => {
+    setNewConn((current) => ({
+      ...current,
+      metadata: {
+        ...current.metadata,
+        rates: [{ ...current.metadata.rates[0], ...updates }],
+      },
+    }));
+  };
+
+  const saveConnection = async () => {
+    if (!newConn.provider.trim()) { toast.error("Provider required"); return; }
+    setSaving(true);
+    try {
+      const result = await shippingProvidersAPI.connect(newConn);
+      setConnections((current) => [result, ...current]);
+      setNewConn(cloneDefaultShippingProvider());
+      setShowAdd(false);
+      toast.success("Shipping provider saved");
+    } catch (error) {
+      toast.error(error.message || "Failed to save shipping provider");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const testConnection = async (conn) => {
+    setTestingId(conn.id);
+    try {
+      const result = await shippingProvidersAPI.test(conn.id, { country: "CA", salePrice: 100, weightOz: 3 });
+      setConnections((current) => current.map((entry) => (
+        entry.id === conn.id ? { ...entry, authStatus: result.authStatus || "connected" } : entry
+      )));
+      toast.success(`Shipping provider ready: ${result.serviceCount} service${result.serviceCount === 1 ? "" : "s"}`);
+    } catch (error) {
+      toast.error(error.message || "Shipping provider test failed");
+    } finally {
+      setTestingId(null);
+    }
+  };
+
+  return (
+    <div className="card mb-12">
+      <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center gap-8">
+          <IconZap size={16} style={{ color: "var(--acc)" }} />
+          <div className="lbl" style={{ margin: 0 }}>Shipping Providers</div>
+        </div>
+        <button className="btn btn-ghost btn-sm" onClick={() => setShowAdd(!showAdd)}>
+          <IconPlus size={12} /> Add
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="text-xs text-dim">Loading...</div>
+      ) : connections.length === 0 ? (
+        <div className="text-xs text-dim">No shipping provider configured yet. CardVault will use the offline fallback.</div>
+      ) : (
+        connections.map((conn) => (
+          <div key={conn.id} className="flex justify-between items-center mt-6" style={{ padding: "8px 12px", background: "var(--s3)", borderRadius: "var(--radius)" }}>
+            <div>
+              <span className="text-xs fw-700">{conn.provider}</span>
+              {conn.metadata?.accountLabel && <span className="text-xxs text-dim ml-8">{conn.metadata.accountLabel}</span>}
+              {conn.hasApiKey && <span className="badge badge-dim ml-8">Key saved</span>}
+            </div>
+            <div className="flex items-center gap-8">
+              <span className={`badge ${conn.authStatus === "connected" ? "badge-grn" : "badge-dim"}`}>
+                <IconCheck size={10} /> {conn.authStatus || "configured"}
+              </span>
+              <button className="btn btn-outline btn-sm" onClick={() => testConnection(conn)} disabled={testingId === conn.id}>
+                {testingId === conn.id ? <Spinner size={12} /> : <IconCheck size={12} />} Test
+              </button>
+            </div>
+          </div>
+        ))
+      )}
+
+      {showAdd && (
+        <div className="fade mt-10" style={{ padding: 12, background: "var(--acc-bg)", borderRadius: "var(--radius)", border: "1px solid var(--acc-brd)" }}>
+          <div className="text-xxs text-dim mb-8">
+            Saves provider credentials server-side and uses configured rates for Auto-Ship. Keys are never returned to the browser after save.
+          </div>
+          <div className="form-grid mt-4">
+            <label className="fld">
+              <span className="text-xxs text-dim">Provider</span>
+              <input className="inp" value={newConn.provider} onChange={(e) => setNewConn((p) => ({ ...p, provider: e.target.value }))} placeholder="Canada Post" />
+            </label>
+            <label className="fld">
+              <span className="text-xxs text-dim">Account Label</span>
+              <input className="inp" value={newConn.metadata.accountLabel} onChange={(e) => setNewConn((p) => ({ ...p, metadata: { ...p.metadata, accountLabel: e.target.value } }))} placeholder="Main shipping account" />
+            </label>
+            <label className="fld">
+              <span className="text-xxs text-dim">API Key</span>
+              <input className="inp" type="password" value={newConn.apiKey} onChange={(e) => setNewConn((p) => ({ ...p, apiKey: e.target.value }))} placeholder="Provider key" autoComplete="off" />
+            </label>
+            <label className="fld">
+              <span className="text-xxs text-dim">Service</span>
+              <input className="inp" value={rate.service} onChange={(e) => updateRate({ service: e.target.value })} placeholder="Canada Post Expedited Parcel" />
+            </label>
+            <label className="fld">
+              <span className="text-xxs text-dim">Service Code</span>
+              <input className="inp" value={rate.serviceCode} onChange={(e) => updateRate({ serviceCode: e.target.value })} placeholder="DOM.EP" />
+            </label>
+            <label className="fld">
+              <span className="text-xxs text-dim">Countries</span>
+              <input className="inp" value={rate.countries.join(", ")} onChange={(e) => updateRate({ countries: e.target.value.split(",").map((entry) => entry.trim()).filter(Boolean) })} placeholder="CA, US" />
+            </label>
+            <label className="fld">
+              <span className="text-xxs text-dim">Cost</span>
+              <input className="inp" type="number" step="0.01" min="0" value={rate.cost} onChange={(e) => updateRate({ cost: Number(e.target.value) || 0 })} />
+            </label>
+            <label className="flex items-center gap-8 mt-8" style={{ cursor: "pointer" }}>
+              <input type="checkbox" checked={rate.tracking} onChange={(e) => updateRate({ tracking: e.target.checked })} />
+              <span className="text-xs">Includes tracking</span>
+            </label>
+          </div>
+          <div className="flex gap-8 mt-8">
+            <button className="btn btn-primary btn-sm" onClick={saveConnection} disabled={saving}>
+              {saving ? <Spinner size={12} /> : <IconCheck size={12} />} Save Provider
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setShowAdd(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FeeModelsSection() {
   const toast = useToast();
   const { useServer } = useData();
@@ -610,6 +780,7 @@ export default function Settings() {
       <EbayConnectionSection />
 
       <MarketplaceConnectionsSection />
+      <ShippingProviderConnectionsSection />
       <MacAppSection />
       <FeeModelsSection />
 
