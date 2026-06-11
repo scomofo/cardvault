@@ -28,6 +28,15 @@ test("dealer mode select all is based on filtered item membership", async () => 
   assert.doesNotMatch(dealerModeView, /selected\.size\s*===\s*filtered\.length/);
 });
 
+test("dealer mode selected listing export tolerates missing listings while loading", async () => {
+  const dealerModeView = await readFile(new URL("../src/components/DealerModeView.jsx", import.meta.url), "utf8");
+
+  assert.match(
+    dealerModeView,
+    /return\s+\(listings\s*\|\|\s*\[\]\)\s*\.\s*filter\(/,
+  );
+});
+
 test("sales flow blocks duplicate manual sale submissions while saving", async () => {
   const salesFlow = await readFile(new URL("../src/components/SalesFlow.jsx", import.meta.url), "utf8");
   const activeListingCard = await readFile(new URL("../src/components/ActiveListingCard.jsx", import.meta.url), "utf8");

@@ -120,7 +120,7 @@ export default function DealerModeView() {
 
   const selectedListingIds = useMemo(() => {
     const selectedCardIds = new Set(selectedCards.map((card) => card.id));
-    return listings
+    return (listings || [])
       .filter((listing) => {
         const cardId = listing.cardId || listing.card_id;
         const status = String(listing.publishStatus || listing.publish_status || listing.status || "").toLowerCase();
