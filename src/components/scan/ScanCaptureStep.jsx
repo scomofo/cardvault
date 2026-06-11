@@ -19,6 +19,7 @@ export default function ScanCaptureStep({
   onBackRetake,
   onFrontCapture,
   onFrontRetake,
+  onManualEntry,
   onNext,
   onRecognize,
   onVisualSearch,
@@ -98,8 +99,11 @@ export default function ScanCaptureStep({
           {visualSearching ? <Spinner size={16} /> : <IconSearch size={16} />}{" "}
           Visual Search
         </button>
-        <button className="btn btn-outline btn-lg" disabled={!frontImg} onClick={onNext}>
-          Skip <IconChevron size={14} />
+        <button
+          className="btn btn-outline btn-lg"
+          onClick={frontImg ? onNext : onManualEntry}
+        >
+          {frontImg ? "Skip" : "Manual Entry"} <IconChevron size={14} />
         </button>
       </div>
 

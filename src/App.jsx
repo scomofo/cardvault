@@ -158,7 +158,7 @@ function AppContent() {
           />
         )}
         {view === "cards" && <CatalogView />}
-        {view === "sales" && <SalesFlow />}
+        {view === "sales" && <SalesFlow onNavigate={handleNavigate} />}
         {view === "tools" && <ToolsView tab={toolsTab} setTab={setToolsTab} />}
         {view === "more" && <Settings />}
       </main>

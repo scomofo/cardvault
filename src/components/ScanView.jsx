@@ -101,6 +101,7 @@ export default function ScanView({ onNavigate, pendingImage, onPendingImageConsu
           onBackRetake={() => actions.setBackImg(null)}
           onFrontCapture={actions.captureFrontImg}
           onFrontRetake={() => actions.setFrontImg(null)}
+          onManualEntry={() => setStep(2)}
           onNext={() => setStep(1)}
           onRecognize={async () => {
             await actions.doRecognize();

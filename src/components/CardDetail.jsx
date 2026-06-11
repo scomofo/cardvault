@@ -30,6 +30,7 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
   const [autoIdResult, setAutoIdResult] = useState(null);
   const [autoGrading, setAutoGrading] = useState(null);
   const [autoDuplicates, setAutoDuplicates] = useState(null);
+  const isListed = detail?.status === "listed" || (detail?.listedOn || []).length > 0;
 
   useEffect(() => {
     let cancelled = false;
@@ -54,7 +55,7 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
     return () => {
       cancelled = true;
     };
-  }, [detail?.id]);
+  }, [detail?.id, detail?.status, (detail?.listedOn || []).join("|")]);
   const toggleListed = (id, platform) => {
     setCatalog((p) => p.map((c) => {
       if (c.id !== id) return c;
@@ -96,6 +97,7 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
     };
     setListings((p) => [listing, ...p]);
     setCatalog((p) => p.map((x) => x.id === id ? { ...x, status: "listed", listedOn: [...(x.listedOn || []), quickListPlatform] } : x));
+    setDecisions((current) => current.filter((decision) => decision.decisionType !== "listing_readiness"));
     setShowQuickList(false);
     setQuickListPrice("");
     toast.success(`Listed ${c.name} on ${quickListPlatform} for ${fmtShort(quickListPrice)}`);
@@ -212,7 +214,10 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
             <div className="text-xs text-dim mt-8">No recommendations yet.</div>
           ) : (
             <div className="mt-8">
-              {decisions.slice(0, 4).map((decision) => (
+              {decisions
+                .filter((decision) => !(isListed && decision.decisionType === "listing_readiness"))
+                .slice(0, 4)
+                .map((decision) => (
                 <div key={`${decision.decisionType}-${decision.recommendation}`} className="card mb-6" style={{ padding: 10 }}>
                   <div className="flex justify-between items-center gap-8">
                     <strong className="text-xs" style={{ textTransform: "capitalize" }}>
