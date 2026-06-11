@@ -1,10 +1,12 @@
 import { EbayAdapter } from "./ebayAdapter.js";
 import { ComcAdapter } from "./comcAdapter.js";
+import { ConsignmentAdapter } from "./consignmentAdapter.js";
 import { ShopifyAdapter } from "./shopifyAdapter.js";
 
 const registry = {
   ebay: new EbayAdapter(),
   comc: new ComcAdapter(),
+  consignment: new ConsignmentAdapter(),
   shopify: new ShopifyAdapter(),
 };
 

@@ -48,7 +48,7 @@ Items in this tier are planned but unscoped. They address the known limitations 
 | Marketplace fee model for routing | **implemented** | `services/decisions/marketplaceFees.js` — default rates for eBay (13.35%+$0.40), TCGplayer (10.25%), Shopify (2.9%+$0.30), COMC (20%), consignment (20%). `marketplaceDecision` now emits `expectedNet` in inputs/explanation. |
 | Confidence calibration from outcome history | **implemented** | `services/decisions/confidenceCalibration.js` — Laplace-smoothed acceptance rate per decision type, blended by `decisionStore.saveDecisions`. Falls back to the hardcoded prior until ≥5 resolved feedback rows exist. `GET /api/decisions/calibration` reports per-type samples. |
 | Cross-marketplace inventory sync reconciliation | **partial** | `services/marketplaces/syncReconciler.js` detects `external_id_mismatch`, `status_mismatch`, `price_mismatch`, and `missing_remote` conflicts. Blocking conflicts halt the apply step and log a `reconciliation_conflict` event. Adapter payloads are thin — richer remote data (updated timestamps, remote price history) is still needed for full parity. |
-| Consignment / COMC integrations | planned | `marketplaceDecision` emits `send_to_comc` / `route_to_consignment` actions but the integrations are stubs. |
+| Consignment / COMC integrations | **partial** | `integrations/marketplaces/comcAdapter.js` and `consignmentAdapter.js` provide CSV handoff exports and channel tracking. External marketplace APIs are still stubbed. |
 
 ## How to propose a change
 

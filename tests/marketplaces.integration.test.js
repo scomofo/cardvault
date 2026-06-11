@@ -142,6 +142,73 @@ test("marketplace export includes crossposted listings when no ids are supplied"
   assert.match(exportPayload.content, /Mario Lemieux card/);
 });
 
+test("consignment marketplace supports publish and export handoff", async (t) => {
+  const { baseUrl } = await startTestServer(t, {
+    dirPrefix: "cardvault-consignment-",
+    portBase: 4000,
+    portSpan: 300,
+  });
+
+  const marketplacesResponse = await fetch(`${baseUrl}/api/marketplaces`);
+  assert.equal(marketplacesResponse.status, 200);
+  const marketplacesPayload = await marketplacesResponse.json();
+  assert.ok(marketplacesPayload.marketplaces.includes("consignment"));
+
+  await fetch(`${baseUrl}/api/items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "consignment-item",
+      name: "Connor Bedard",
+      set: "Upper Deck",
+      listedOn: [],
+      priceHistory: [],
+      marketPrice: 750,
+      suggestedListingPrice: 799.99,
+    }),
+  });
+
+  const listingResponse = await fetch(`${baseUrl}/api/listings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "consignment-listing",
+      cardId: "consignment-item",
+      cardName: "Connor Bedard",
+      cardSet: "Upper Deck",
+      platform: "consignment",
+      listingTitle: "Connor Bedard high-end card",
+      listingDescription: "High value card routed to consignment",
+      startPrice: 799.99,
+      shipping: 0,
+      status: "draft",
+    }),
+  });
+  assert.equal(listingResponse.status, 201);
+
+  const publishResponse = await fetch(`${baseUrl}/api/marketplaces/publish`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ listingId: "consignment-listing", marketplace: "consignment" }),
+  });
+  assert.equal(publishResponse.status, 200);
+  const publishPayload = await publishResponse.json();
+  assert.equal(publishPayload.marketplace, "consignment");
+  assert.equal(publishPayload.status, "active");
+  assert.match(publishPayload.external_listing_id, /^consignment-/);
+
+  const exportResponse = await fetch(`${baseUrl}/api/marketplaces/export`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ marketplace: "consignment" }),
+  });
+  assert.equal(exportResponse.status, 200);
+  const exportPayload = await exportResponse.json();
+  assert.equal(exportPayload.marketplace, "consignment");
+  assert.match(exportPayload.content, /Card,DeclaredValue,ReservePrice,Notes,Quantity,Marketplace/);
+  assert.match(exportPayload.content, /Connor Bedard high-end card/);
+});
+
 test("crossposting does not overwrite the primary marketplace external id", async (t) => {
   const { baseUrl } = await startTestServer(t, {
     dirPrefix: "cardvault-marketplaces-revise-",

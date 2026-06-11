@@ -28,6 +28,6 @@ export const ROADMAP = {
     { name: "Marketplace fee model for routing", status: "implemented", module: "services/decisions/marketplaceFees.js" },
     { name: "Confidence calibration from outcome history", status: "implemented", module: "services/decisions/confidenceCalibration.js" },
     { name: "Cross-marketplace inventory sync reconciliation", status: "partial", module: "services/marketplaces/syncReconciler.js" },
-    { name: "Consignment / COMC integrations", status: "planned" },
+    { name: "Consignment / COMC integrations", status: "partial", module: "integrations/marketplaces/comcAdapter.js + consignmentAdapter.js" },
   ],
 };
