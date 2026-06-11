@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import Database from "better-sqlite3";
+import { createServer } from "node:http";
 
 import { startTestServer } from "./helpers/testServer.js";
 
@@ -12,6 +13,30 @@ async function requestJson(baseUrl, path, { method = "GET", body } = {}) {
   });
   const payload = await response.json().catch(() => ({}));
   return { response, payload };
+}
+
+async function startLabelEndpoint(handler) {
+  const requests = [];
+  const server = createServer((req, res) => {
+    let body = "";
+    req.setEncoding("utf8");
+    req.on("data", (chunk) => {
+      body += chunk;
+    });
+    req.on("end", () => {
+      const payload = body ? JSON.parse(body) : {};
+      requests.push({ headers: req.headers, payload });
+      handler({ req, res, payload });
+    });
+  });
+
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address();
+  return {
+    requests,
+    url: `http://127.0.0.1:${port}/labels`,
+    close: () => new Promise((resolve) => server.close(resolve)),
+  };
 }
 
 test("shipping provider connection routes save, update, test, and sanitize credentials", async (t) => {
@@ -108,6 +133,112 @@ test("shipping provider connection routes save, update, test, and sanitize crede
     tracking: true,
   });
   assert.doesNotMatch(JSON.stringify(testResult.payload), /replacement-secret|secret-provider-key|apiKey|api_key/);
+});
+
+test("shipping provider connection test validates a dry-run label endpoint", async (t) => {
+  const labelEndpoint = await startLabelEndpoint(({ res }) => {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      labelStatus: "purchased",
+      trackingNumber: "TEST-TRACK-123",
+      labelUrl: "labels/test/{trackingNumber}/{shipmentId}.pdf",
+    }));
+  });
+  t.after(labelEndpoint.close);
+
+  const { baseUrl } = await startTestServer(t, { dirPrefix: "cardvault-shipping-live-test-" });
+  const createResult = await requestJson(baseUrl, "/api/shipping-provider-connections", {
+    method: "POST",
+    body: {
+      provider: "Generic Ship API",
+      apiKey: "secret-provider-key",
+      metadata: {
+        labelPurchaseUrl: labelEndpoint.url,
+        apiKeyHeader: "X-API-KEY",
+        apiKeyPrefix: "",
+        rates: [{
+          service: "Tracked Card Mailer",
+          serviceCode: "TRACKED_CARD",
+          countries: ["CA"],
+          cost: 8.25,
+          tracking: true,
+        }],
+      },
+    },
+  });
+  assert.equal(createResult.response.status, 201);
+
+  const testResult = await requestJson(baseUrl, `/api/shipping-provider-connections/${createResult.payload.id}/test`, {
+    method: "POST",
+    body: { country: "CA", salePrice: 100, weightOz: 3 },
+  });
+
+  assert.equal(testResult.response.status, 200);
+  assert.equal(testResult.payload.ok, true);
+  assert.equal(testResult.payload.authStatus, "connected");
+  assert.equal(testResult.payload.endpointValidation.attempted, true);
+  assert.equal(testResult.payload.endpointValidation.ok, true);
+  assert.equal(testResult.payload.endpointValidation.labelStatus, "purchased");
+  assert.equal(testResult.payload.endpointValidation.trackingNumber, "TEST-TRACK-123");
+  assert.equal(testResult.payload.endpointValidation.labelUrl, "labels/test/TEST-TRACK-123/connection-test.pdf");
+  assert.equal(labelEndpoint.requests.length, 1);
+  assert.equal(labelEndpoint.requests[0].headers["x-api-key"], "secret-provider-key");
+  assert.equal(labelEndpoint.requests[0].headers.authorization, undefined);
+  assert.equal(labelEndpoint.requests[0].payload.dryRun, true);
+  assert.equal(labelEndpoint.requests[0].payload.shipmentId, "connection-test");
+  assert.equal(labelEndpoint.requests[0].payload.serviceCode, "TRACKED_CARD");
+  assert.doesNotMatch(JSON.stringify(testResult.payload), /secret-provider-key|apiKey|api_key/);
+});
+
+test("shipping provider connection test returns sanitized live endpoint failures", async (t) => {
+  const longProxyError = `<html>${"x".repeat(220)}END-OF-LONG-PROXY-PAGE</html>`;
+  const labelEndpoint = await startLabelEndpoint(({ res }) => {
+    res.writeHead(502, { "Content-Type": "text/html" });
+    res.end(longProxyError);
+  });
+  t.after(labelEndpoint.close);
+
+  const { baseUrl, dbPath } = await startTestServer(t, { dirPrefix: "cardvault-shipping-live-test-failed-" });
+  const createResult = await requestJson(baseUrl, "/api/shipping-provider-connections", {
+    method: "POST",
+    body: {
+      provider: "Generic Ship API",
+      apiKey: "secret-provider-key",
+      metadata: {
+        labelPurchaseUrl: labelEndpoint.url,
+        labelPurchaseTimeoutMs: 1000,
+        rates: [{
+          service: "Tracked Card Mailer",
+          serviceCode: "TRACKED_CARD",
+          countries: ["CA"],
+          cost: 8.25,
+          tracking: true,
+        }],
+      },
+    },
+  });
+  assert.equal(createResult.response.status, 201);
+
+  const testResult = await requestJson(baseUrl, `/api/shipping-provider-connections/${createResult.payload.id}/test`, {
+    method: "POST",
+    body: { country: "CA", salePrice: 100, weightOz: 3 },
+  });
+
+  assert.equal(testResult.response.status, 400);
+  assert.equal(testResult.payload.endpointValidation.attempted, true);
+  assert.equal(testResult.payload.endpointValidation.ok, false);
+  assert.match(testResult.payload.error, /Provider label endpoint test failed/i);
+  assert.match(testResult.payload.endpointValidation.error, /<html>/);
+  assert.match(testResult.payload.endpointValidation.error, /\.\.\./);
+  assert.doesNotMatch(JSON.stringify(testResult.payload), /END-OF-LONG-PROXY-PAGE|secret-provider-key|apiKey|api_key/);
+
+  const db = new Database(dbPath, { readonly: true });
+  try {
+    const row = db.prepare("SELECT auth_status FROM shipping_provider_connections WHERE id = ?").get(createResult.payload.id);
+    assert.equal(row.auth_status, "configured");
+  } finally {
+    db.close();
+  }
 });
 
 test("shipping provider connection test handles null metadata without crashing", async (t) => {

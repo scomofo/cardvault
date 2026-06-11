@@ -1,6 +1,6 @@
 import { all, get, run } from "../database.js";
 import { requireProtectedConfigWrite } from "../auth.js";
-import { selectConfiguredProviderService } from "../integrations/shipping/configuredProviderAdapter.js";
+import { testConfiguredProviderService } from "../integrations/shipping/configuredProviderAdapter.js";
 import { requireJsonBody } from "../validation/common.js";
 import { uid } from "./shared.js";
 
@@ -126,7 +126,7 @@ export function registerShippingProviderConnectionRoutes(app) {
     }
   });
 
-  app.post("/api/shipping-provider-connections/:id/test", requireProtectedConfigWrite, requireJsonBody, (req, res) => {
+  app.post("/api/shipping-provider-connections/:id/test", requireProtectedConfigWrite, requireJsonBody, async (req, res) => {
     try {
       const connection = get("SELECT * FROM shipping_provider_connections WHERE id = ?", [req.params.id]);
       if (!connection) return res.status(404).json({ error: "Shipping provider connection not found" });
@@ -137,14 +137,24 @@ export function registerShippingProviderConnectionRoutes(app) {
         return res.status(400).json({ error: "At least one provider rate is required to test the connection" });
       }
 
-      const sampleService = selectConfiguredProviderService(connection, {
+      const validation = await testConfiguredProviderService(connection, {
         country: req.body.country || "CA",
         salePrice: Number(req.body.salePrice ?? req.body.sale_price ?? 100),
         weightOz: Number(req.body.weightOz ?? req.body.weight_oz ?? 3),
         shipmentId: "connection-test",
       });
-      if (!sampleService) {
+      if (!validation) {
         return res.status(400).json({ error: "No provider rate matched the test shipment" });
+      }
+      if (!validation.endpointValidation.ok) {
+        return res.status(400).json({
+          error: `Provider label endpoint test failed: ${validation.endpointValidation.error || "unknown error"}`,
+          provider: connection.provider,
+          serviceCount: services.length,
+          selectedService: validation.service.service,
+          endpointValidation: validation.endpointValidation,
+          services,
+        });
       }
 
       run(
@@ -157,7 +167,8 @@ export function registerShippingProviderConnectionRoutes(app) {
         provider: connection.provider,
         authStatus: "connected",
         serviceCount: services.length,
-        selectedService: sampleService.service,
+        selectedService: validation.service.service,
+        endpointValidation: validation.endpointValidation,
         services,
       });
     } catch (error) {

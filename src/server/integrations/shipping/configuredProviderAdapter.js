@@ -174,6 +174,56 @@ export function selectConfiguredProviderService(connection, context) {
   return selectConfiguredProviderCandidate(connection, context)?.service || null;
 }
 
+export async function testConfiguredProviderService(connection, context) {
+  const candidate = selectConfiguredProviderCandidate(connection, context);
+  if (!candidate) return null;
+
+  const client = resolveShippingProviderClient(connection, candidate.metadata, candidate.rate);
+  if (!client) {
+    return {
+      service: candidate.service,
+      endpointValidation: {
+        attempted: false,
+        ok: true,
+      },
+    };
+  }
+
+  let purchasedLabel;
+  try {
+    purchasedLabel = await client.purchaseLabel({
+      connection,
+      metadata: candidate.metadata,
+      rate: candidate.rate,
+      service: candidate.service,
+      shipment: { ...context, dryRun: true },
+    });
+  } catch (error) {
+    purchasedLabel = failedPurchase(error);
+  }
+
+  const service = normalizeProviderRate(
+    connection,
+    candidate.metadata,
+    candidate.rate,
+    context.shipmentId,
+    purchasedLabel,
+  ) || candidate.service;
+  const failed = service.labelStatus === "failed" || Boolean(service.purchaseError);
+
+  return {
+    service,
+    endpointValidation: {
+      attempted: true,
+      ok: !failed,
+      labelStatus: service.labelStatus || null,
+      trackingNumber: service.trackingNumber || null,
+      labelUrl: service.labelUrl || null,
+      error: failed ? service.purchaseError || "Provider label endpoint test failed" : null,
+    },
+  };
+}
+
 export async function purchaseConfiguredProviderService(connection, context) {
   const candidate = selectConfiguredProviderCandidate(connection, context);
   if (!candidate) return null;

@@ -389,6 +389,10 @@ const DEFAULT_SHIPPING_PROVIDER = {
   apiKey: "",
   metadata: {
     accountLabel: "",
+    labelPurchaseUrl: "",
+    apiKeyHeader: "Authorization",
+    apiKeyPrefix: "Bearer ",
+    labelPurchaseTimeoutMs: 10000,
     rates: [{
       service: "Canada Post Expedited Parcel",
       serviceCode: "DOM.EP",
@@ -437,6 +441,13 @@ function ShippingProviderConnectionsSection() {
     }));
   };
 
+  const updateMetadata = (updates) => {
+    setNewConn((current) => ({
+      ...current,
+      metadata: { ...current.metadata, ...updates },
+    }));
+  };
+
   const saveConnection = async () => {
     if (!newConn.provider.trim()) { toast.error("Provider required"); return; }
     setSaving(true);
@@ -461,7 +472,8 @@ function ShippingProviderConnectionsSection() {
       setConnections((current) => current.map((entry) => (
         entry.id === conn.id ? { ...entry, authStatus: result.authStatus || "connected" } : entry
       )));
-      toast.success(`Shipping provider ready: ${result.serviceCount} service${result.serviceCount === 1 ? "" : "s"}`);
+      const endpointStatus = result.endpointValidation?.attempted ? " and label endpoint dry-run validated" : "";
+      toast.success(`Shipping provider ready: ${result.serviceCount} service${result.serviceCount === 1 ? "" : "s"}${endpointStatus}`);
     } catch (error) {
       toast.error(error.message || "Shipping provider test failed");
     } finally {
@@ -522,6 +534,22 @@ function ShippingProviderConnectionsSection() {
             <label className="fld">
               <span className="text-xxs text-dim">API Key</span>
               <input className="inp" type="password" value={newConn.apiKey} onChange={(e) => setNewConn((p) => ({ ...p, apiKey: e.target.value }))} placeholder="Provider key" autoComplete="off" />
+            </label>
+            <label className="fld">
+              <span className="text-xxs text-dim">Label Endpoint</span>
+              <input className="inp" value={newConn.metadata.labelPurchaseUrl} onChange={(e) => updateMetadata({ labelPurchaseUrl: e.target.value })} placeholder="https://provider.example/labels" />
+            </label>
+            <label className="fld">
+              <span className="text-xxs text-dim">Auth Header</span>
+              <input className="inp" value={newConn.metadata.apiKeyHeader} onChange={(e) => updateMetadata({ apiKeyHeader: e.target.value })} placeholder="Authorization" />
+            </label>
+            <label className="fld">
+              <span className="text-xxs text-dim">Auth Prefix</span>
+              <input className="inp" value={newConn.metadata.apiKeyPrefix} onChange={(e) => updateMetadata({ apiKeyPrefix: e.target.value })} placeholder="Bearer " />
+            </label>
+            <label className="fld">
+              <span className="text-xxs text-dim">Timeout (ms)</span>
+              <input className="inp" type="number" min="1" step="100" value={newConn.metadata.labelPurchaseTimeoutMs} onChange={(e) => updateMetadata({ labelPurchaseTimeoutMs: Number(e.target.value) || 10000 })} />
             </label>
             <label className="fld">
               <span className="text-xxs text-dim">Service</span>

@@ -47,6 +47,11 @@ test("settings exposes shipping provider connection management", async () => {
   assert.match(settings, /shippingProvidersAPI\.connections\(\)/);
   assert.match(settings, /shippingProvidersAPI\.connect\(newConn/);
   assert.match(settings, /shippingProvidersAPI\.test\(conn\.id/);
+  assert.match(settings, /labelPurchaseUrl/);
+  assert.match(settings, /apiKeyHeader/);
+  assert.match(settings, /apiKeyPrefix/);
+  assert.match(settings, /labelPurchaseTimeoutMs/);
+  assert.match(settings, /endpointValidation\?\.attempted/);
   assert.match(settings, /type="password"[\s\S]*value=\{newConn\.apiKey\}/);
 });
 

@@ -73,6 +73,7 @@ function purchasePayload({ connection, service, shipment }) {
     packageType: shipment.packageType,
     salePrice: shipment.salePrice,
     weightOz: shipment.weightOz,
+    ...(shipment.dryRun === true ? { dryRun: true } : {}),
     destination: {
       country: shipment.country,
       postalCode: shipment.destinationPostalCode || null,
