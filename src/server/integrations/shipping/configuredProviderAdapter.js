@@ -1,3 +1,5 @@
+import { resolveShippingProviderClient } from "./providerClientRegistry.js";
+
 function parseJson(value, fallback = {}) {
   if (!value) return fallback;
   if (typeof value === "object") return value;
@@ -30,6 +32,13 @@ function renderTemplate(template, values) {
 function buildTracking(service, prefixOverride) {
   const prefix = prefixOverride || (service.includes("Lettermail") ? "LT" : "TRK");
   return `${prefix}${Date.now().toString().slice(-10)}`;
+}
+
+function failedPurchase(error) {
+  return {
+    labelStatus: "failed",
+    error: String(error?.message || error || "Shipping label purchase failed"),
+  };
 }
 
 function rateMatches(rate, { country, salePrice, weightOz }) {
@@ -79,7 +88,7 @@ function normalizeLabelPurchase(value, { shipmentId, trackingNumber, labelTempla
   };
 }
 
-function normalizeProviderRate(connection, metadata, rate, shipmentId) {
+function normalizeProviderRate(connection, metadata, rate, shipmentId, purchasedLabel) {
   const cost = Number(firstDefined(rate.cost, rate.rate, rate.amount));
   if (!Number.isFinite(cost)) return null;
 
@@ -105,8 +114,11 @@ function normalizeProviderRate(connection, metadata, rate, shipmentId) {
     metadata.label_url_template,
     "labels/{shipmentId}.pdf",
   );
+  const labelPurchaseSource = purchasedLabel === undefined
+    ? firstDefined(rate.labelPurchase, rate.label_purchase, metadata.labelPurchase, metadata.label_purchase)
+    : purchasedLabel;
   const labelPurchase = normalizeLabelPurchase(
-    firstDefined(rate.labelPurchase, rate.label_purchase, metadata.labelPurchase, metadata.label_purchase),
+    labelPurchaseSource,
     {
       shipmentId,
       trackingNumber,
@@ -140,16 +152,53 @@ function normalizeProviderRate(connection, metadata, rate, shipmentId) {
   };
 }
 
-export function selectConfiguredProviderService(connection, { country, salePrice, weightOz, shipmentId }) {
+function selectConfiguredProviderCandidate(connection, { country, salePrice, weightOz, shipmentId }) {
   if (!connection) return null;
 
   const metadata = parseJson(connection.metadata);
   const rates = Array.isArray(metadata.rates) ? metadata.rates : [];
   const candidates = rates
     .filter((rate) => rate && typeof rate === "object" && rateMatches(rate, { country, salePrice, weightOz }))
-    .map((rate) => normalizeProviderRate(connection, metadata, rate, shipmentId))
-    .filter(Boolean)
-    .sort((a, b) => a.cost - b.cost);
+    .map((rate) => ({
+      metadata,
+      rate,
+      service: normalizeProviderRate(connection, metadata, rate, shipmentId),
+    }))
+    .filter((candidate) => candidate.service)
+    .sort((a, b) => a.service.cost - b.service.cost);
 
   return candidates[0] || null;
+}
+
+export function selectConfiguredProviderService(connection, context) {
+  return selectConfiguredProviderCandidate(connection, context)?.service || null;
+}
+
+export async function purchaseConfiguredProviderService(connection, context) {
+  const candidate = selectConfiguredProviderCandidate(connection, context);
+  if (!candidate) return null;
+
+  const client = resolveShippingProviderClient(connection, candidate.metadata, candidate.rate);
+  if (!client) return candidate.service;
+
+  let purchasedLabel;
+  try {
+    purchasedLabel = await client.purchaseLabel({
+      connection,
+      metadata: candidate.metadata,
+      rate: candidate.rate,
+      service: candidate.service,
+      shipment: context,
+    });
+  } catch (error) {
+    purchasedLabel = failedPurchase(error);
+  }
+
+  return normalizeProviderRate(
+    connection,
+    candidate.metadata,
+    candidate.rate,
+    context.shipmentId,
+    purchasedLabel,
+  ) || candidate.service;
 }

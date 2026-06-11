@@ -191,7 +191,7 @@ Order payload (see `orders.routes.js`):
 }
 ```
 
-Shipping handoff rule: the shipping module consumes `destinationCountry` + item weight to pick a carrier. Canada Post integration is currently stubbed — the module returns a placeholder label reference, and actual label purchase is on the Tier 3 roadmap.
+Shipping handoff rule: the shipping module consumes `destinationCountry` + item weight to pick a carrier. Configured provider connections can now execute live label purchases through a registered provider client or generic HTTP label endpoint, while the deterministic Canada Post fallback still returns a local placeholder label when no live provider is configured.
 
 ## 10. Sale settlement
 
