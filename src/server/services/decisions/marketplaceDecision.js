@@ -2,14 +2,15 @@ import { DECISION_TYPES } from "./decisionTypes.js";
 import { getDecisionNumber } from "./decisionSettings.js";
 import { computeExpectedNet } from "./marketplaceFees.js";
 import { action } from "./explanationBuilder.js";
+import { listSupportedMarketplaces } from "../../integrations/marketplaces/marketplaceRegistry.js";
 
 const ALL_CHANNELS = ["ebay", "tcgplayer", "mercari", "shopify", "comc", "consignment"];
 const OPEN_MARKET_CHANNELS = ["ebay", "tcgplayer", "mercari", "shopify"];
 
 const CHANNEL_TO_RECOMMENDATION = {
   ebay: "sell_on_ebay",
-  tcgplayer: "sell_on_ebay", // no TCGplayer adapter yet — route through eBay as primary
-  mercari: "sell_on_ebay",   // same — disclosure only until adapter lands
+  tcgplayer: "sell_on_ebay", // disclosure-only until an adapter makes it executable
+  mercari: "sell_on_ebay",   // same — keep fee scoring visible, not selectable
   shopify: "store_inventory_shopify",
   comc: "send_to_comc",
   consignment: "consign_high_end",
@@ -44,12 +45,60 @@ function pickBestEligible(eligible, channelNets) {
   return best;
 }
 
+function executableOpenChannels() {
+  const supported = new Set(listSupportedMarketplaces());
+  return OPEN_MARKET_CHANNELS.filter((channel) => supported.has(channel));
+}
+
+function parseListedOn(value) {
+  if (Array.isArray(value)) return value.map((channel) => String(channel).toLowerCase()).filter(Boolean);
+  if (typeof value !== "string" || !value.trim()) return [];
+
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) {
+      return parsed.map((channel) => String(channel).toLowerCase()).filter(Boolean);
+    }
+  } catch {}
+
+  return value.split(",").map((channel) => channel.trim().toLowerCase()).filter(Boolean);
+}
+
+function hasMarketplaceExposure(item) {
+  const listingStatus = String(item.listing_status || "").toLowerCase();
+  return ["listed", "active", "ended", "sold"].includes(listingStatus)
+    || parseListedOn(item.listed_on || item.listedOn).length > 0;
+}
+
+function isActivelyListed(item) {
+  return ["listed", "active"].includes(String(item.listing_status || "").toLowerCase());
+}
+
+function hasStructuredStoreSignal(item) {
+  return [
+    item.storage_type,
+    item.storageType,
+    item.storage_location,
+    item.storageLocation,
+    item.sales_channel,
+    item.salesChannel,
+    item.routing_channel,
+    item.routingChannel,
+  ].some((value) => ["store", "shopify", "retail"].includes(String(value || "").toLowerCase()));
+}
+
+function primaryOpenChannel(item, openChannels) {
+  const listedOn = parseListedOn(item.listed_on || item.listedOn);
+  const preferred = String(item.platform || item.marketplace || listedOn[0] || "ebay").toLowerCase();
+  return openChannels.includes(preferred) ? preferred : "ebay";
+}
+
 /**
  * Recommend optimal marketplace for listing.
  *
  * The rule tree produces a set of *eligible* channels based on hard
  * constraints (consignment threshold, stale-age clearance, bundle strategy,
- * storage location). Within the eligible set, the channel with the highest
+ * store routing signal). Within the eligible set, the channel with the highest
  * expected net is selected. See docs/decisions/Marketplace-Routing.md.
  *
  * @param {{ subjectType: string, item: object, ageDays?: number, strategyDecision?: object }} context
@@ -64,13 +113,18 @@ export function marketplaceDecision(context) {
   const lowValueFloor = getDecisionNumber("marketplace_low_value_floor");
   const comcStaleDays = getDecisionNumber("marketplace_stale_days_comc");
   const crosspostStaleDays = getDecisionNumber("marketplace_stale_days_crosspost");
-  const storageStore = context.item.storage_location?.toLowerCase().includes("store");
+  const openChannels = executableOpenChannels();
+  const unavailableChannels = OPEN_MARKET_CHANNELS.filter((channel) => !openChannels.includes(channel));
+  const storageStore = hasStructuredStoreSignal(context.item);
+  const priorMarketplaceExposure = hasMarketplaceExposure(context.item);
+  const primaryChannel = primaryOpenChannel(context.item, openChannels);
   const channelNets = buildChannelNets(marketPrice);
   const globalBest = pickBestEligible(Object.keys(channelNets), channelNets);
 
   let eligible;
   let recommendation;
   let selectionReason;
+  let targetMarketplaces = [];
 
   if (marketPrice > consignThreshold) {
     eligible = ["consignment"];
@@ -82,11 +136,17 @@ export function marketplaceDecision(context) {
       ? "strategy is bundle_with_similar"
       : `market price $${marketPrice.toFixed(2)} below low-value floor $${lowValueFloor.toFixed(2)}`;
   } else if (ageDays > comcStaleDays) {
-    eligible = ["comc"];
-    selectionReason = `inventory age ${ageDays}d exceeds COMC stale threshold ${comcStaleDays}d`;
-  } else if (context.item.listing_status === "listed" && ageDays > crosspostStaleDays) {
+    if (priorMarketplaceExposure) {
+      eligible = ["comc"];
+      selectionReason = `inventory age ${ageDays}d exceeds COMC stale threshold ${comcStaleDays}d`;
+    } else {
+      eligible = ["ebay"];
+      selectionReason = `inventory age ${ageDays}d exceeds COMC stale threshold ${comcStaleDays}d but has no prior marketplace exposure`;
+    }
+  } else if (isActivelyListed(context.item) && ageDays > crosspostStaleDays) {
     recommendation = "crosspost";
-    eligible = OPEN_MARKET_CHANNELS;
+    eligible = openChannels;
+    targetMarketplaces = openChannels.filter((channel) => channel !== primaryChannel && !parseListedOn(context.item.listed_on || context.item.listedOn).includes(channel));
     selectionReason = `listed for ${ageDays}d — crossposting to increase reach`;
   } else if (storageStore) {
     eligible = ["shopify"];
@@ -95,7 +155,7 @@ export function marketplaceDecision(context) {
     eligible = ["ebay"];
     selectionReason = "selling strategy is auction_recommended";
   } else {
-    eligible = OPEN_MARKET_CHANNELS;
+    eligible = openChannels;
     selectionReason = "no hard constraints — optimizing for expected net";
   }
 
@@ -105,7 +165,7 @@ export function marketplaceDecision(context) {
   }
 
   const selectedKey = recommendation === "crosspost"
-    ? "ebay"
+    ? primaryChannel
     : Object.keys(CHANNEL_TO_RECOMMENDATION).find(
         (key) => CHANNEL_TO_RECOMMENDATION[key] === recommendation,
       ) || "ebay";
@@ -131,9 +191,12 @@ export function marketplaceDecision(context) {
     recommendation,
     confidence: 0.65,
     explanation: explanationParts.join(" "),
-    suggestedAction: action(CHANNEL_TO_ACTION[recommendation] || "assign_marketplace", {
-      marketplace: selectedKey,
-    }),
+    suggestedAction: action(
+      CHANNEL_TO_ACTION[recommendation] || "assign_marketplace",
+      recommendation === "crosspost"
+        ? { marketplace: selectedKey, marketplaces: targetMarketplaces }
+        : { marketplace: selectedKey },
+    ),
     inputsUsed: {
       marketPrice,
       ageDays,
@@ -141,7 +204,9 @@ export function marketplaceDecision(context) {
       eligibleChannels: eligible,
       selectedChannel: selectedKey,
       expectedNet,
+      targetMarketplaces,
       channelNets,
+      unavailableChannels,
       unconstrainedBest: globalBest,
       selectionReason,
     },
