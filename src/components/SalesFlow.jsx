@@ -8,7 +8,7 @@ import { actionQueueAPI, marketplacesAPI, ordersAPI, listingsAPI, salesAPI, auto
 import { importEbayPurchasesLocal, parseEbayPurchaseImport } from "../lib/ebayPurchaseImport";
 import { loadServerSalesState, summarizeMarketplaceSyncResults } from "../lib/salesViewState";
 import { requestNotificationPermission, canNotify, sendNotification, scheduleAuctionNotification, cancelNotificationTimer } from "../lib/notifications";
-import { IconPlus, IconBell, IconCheck, IconX, Spinner } from "./Icons";
+import { IconPlus, IconBell, IconCheck, IconX, IconUpload, Spinner } from "./Icons";
 import EbayExport from "./EbayExport";
 import ActiveListingCard from "./ActiveListingCard";
 
