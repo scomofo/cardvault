@@ -180,7 +180,7 @@ test("eBay adapter search filter falls back to a recent window when listing date
   const filter = adapter.buildOrderSearchFilter({});
   const after = Date.now();
 
-  assert.match(filter, /^creationdate:\[[0-9TZ:.\-]+..\]$/);
+  assert.match(filter, /^creationdate:\[[0-9TZ:.-]+..\]$/);
   const isoStart = filter.slice("creationdate:[".length, -3);
   const parsed = Date.parse(isoStart);
   const ninetyDaysMs = 1000 * 60 * 60 * 24 * 90;

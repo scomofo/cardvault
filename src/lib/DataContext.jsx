@@ -240,7 +240,6 @@ export function DataProvider({ children }) {
     if (loading) return;
     backfillFrontImgPhashes(catalog, setCatalog);
     // Run once after initial load; subsequent catalog changes don't retrigger.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading]);
 
   const value = {

@@ -1,4 +1,4 @@
-import { CONDITIONS } from "./constants";
+import { CONDITIONS } from "./constants.js";
 
 export const uid = () =>
   crypto.randomUUID

@@ -1,18 +1,19 @@
 import { useState, useEffect } from "react";
 import { useToast } from "./Toast";
 import { PLATFORMS } from "../lib/constants";
+import { useFeeModels } from "../hooks/useFeeModels";
 import { condOf, fmtShort, uid } from "../lib/utils";
 import { decisionsAPI, automationAPI } from "../lib/api";
 import { calculateGrade, gradeToTerm, generateConditionReport } from "../lib/grading";
 import PriceChart from "./PriceChart";
 import { aiGradePredict } from "../lib/ai";
 import { IconBack, IconTrash, IconCheck, IconSearch, IconPlus, IconZap, IconShield, IconCopy, Spinner, Skeleton } from "./Icons";
-import { PLATFORM_FEES } from "./SalesFlow";
 import ProfitWarning from "./ProfitWarning";
 import SoldComps from "./SoldComps";
 
 export default function CardDetail({ detail, detailFrontImg, detailBackImg, catalog, setCatalog, sales, setSales, listings, setListings, onBack }) {
   const toast = useToast();
+  const { getFeeRate } = useFeeModels();
   const [gradePred, setGradePred] = useState(null);
   const [predicting, setPredicting] = useState(false);
   const [salePrice, setSalePrice] = useState("");
@@ -146,6 +147,7 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
     setPredicting(false);
   };
 
+  const quickListFeeRate = getFeeRate(quickListPlatform);
 
   return (
       <div className="slide-up">
@@ -265,12 +267,12 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
               </div>
               {quickListPrice && (
                 <div className="text-xxs text-dim mt-6">
-                  Fees: {fmtShort(parseFloat(quickListPrice) * (PLATFORM_FEES[quickListPlatform] || 0))} ({((PLATFORM_FEES[quickListPlatform] || 0) * 100).toFixed(1)}%)
-                  {" "}&middot; Net: {fmtShort(parseFloat(quickListPrice) - parseFloat(quickListPrice) * (PLATFORM_FEES[quickListPlatform] || 0) - 4.99 - (parseFloat(detail.costBasis) || 0))}
+                  Fees: {fmtShort(parseFloat(quickListPrice) * quickListFeeRate)} ({(quickListFeeRate * 100).toFixed(1)}%)
+                  {" "}&middot; Net: {fmtShort(parseFloat(quickListPrice) - parseFloat(quickListPrice) * quickListFeeRate - 4.99 - (parseFloat(detail.costBasis) || 0))}
                 </div>
               )}
               <SoldComps comps={autoIdResult?.pricing?.recommendations} />
-              <ProfitWarning price={parseFloat(quickListPrice)} costBasis={parseFloat(detail.costBasis) || 0} feeRate={PLATFORM_FEES[quickListPlatform] || 0} shipping={4.99} />
+              <ProfitWarning price={parseFloat(quickListPrice)} costBasis={parseFloat(detail.costBasis) || 0} feeRate={quickListFeeRate} shipping={4.99} />
               <div className="flex gap-8 mt-8">
                 <button className="btn btn-primary btn-sm flex-1" onClick={() => quickList(detail.id)}>
                   <IconCheck size={12} /> Create Listing

@@ -1,28 +1,25 @@
 import { useEffect, useState, useMemo } from "react";
 import { useToast } from "./Toast";
 import { useData } from "../lib/DataContext";
-import { PLATFORMS } from "../lib/constants";
+import { PLATFORMS, PLATFORM_FEES } from "../lib/constants";
+import { useFeeModels } from "../hooks/useFeeModels";
 import { uid, fmtShort } from "../lib/utils";
 import { actionQueueAPI, marketplacesAPI, ordersAPI, listingsAPI, salesAPI, automationAPI, purchasesAPI, itemsAPI } from "../lib/api";
 import { importEbayPurchasesLocal, parseEbayPurchaseImport } from "../lib/ebayPurchaseImport";
-import { loadServerSalesState } from "../lib/salesViewState";
+import { loadServerSalesState, summarizeMarketplaceSyncResults } from "../lib/salesViewState";
 import { requestNotificationPermission, canNotify, sendNotification, scheduleAuctionNotification, cancelNotificationTimer } from "../lib/notifications";
-import { IconPlus, IconBell, IconCheck, IconX, Spinner } from "./Icons";
+import { IconPlus, IconBell, IconCheck, IconX, IconUpload, Spinner } from "./Icons";
 import EbayExport from "./EbayExport";
 import ActiveListingCard from "./ActiveListingCard";
 
 const TABS = ["active", "completed", "orders", "purchases"];
-
-const PLATFORM_FEES = {
-  ebay: 0.1312, tcgplayer: 0.1089, mercari: 0.10, facebook: 0,
-  collx: 0.10, poshmark: 0.20, comc: 0.10, alt: 0.10, goldin: 0.15, shopify: 0.029,
-};
 
 export { PLATFORM_FEES };
 
 export default function SalesFlow() {
   const toast = useToast();
   const { catalog, setCatalog, sales, setSales, orders, setOrders, listings, setListings, purchases, setPurchases, shipFrom, useServer } = useData();
+  const { getFeeRate } = useFeeModels(useServer);
   const [tab, setTab] = useState("active");
   const [showCreate, setShowCreate] = useState(false);
   const [showBuy, setShowBuy] = useState(false);
@@ -97,7 +94,7 @@ export default function SalesFlow() {
     const listing = listings.find((l) => l.id === listingId);
     if (!listing) return;
     const price = parseFloat(salePrice) || listing.startPrice;
-    const feeRate = PLATFORM_FEES[listing.platform] || 0;
+    const feeRate = getFeeRate(listing.platform);
     const fees = Math.round(price * feeRate * 100) / 100;
     const card = catalog.find((c) => c.id === listing.cardId);
     const costBasis = parseFloat(card?.costBasis) || 0;
@@ -248,6 +245,7 @@ export default function SalesFlow() {
 
   const totalActive = useMemo(() => activeListings.reduce((s, l) => s + (l.startPrice || 0), 0), [activeListings]);
   const totalPurchases = useMemo(() => purchases.reduce((s, p) => s + p.totalCost, 0), [purchases]);
+  const newListingFeeRate = getFeeRate(newListing.platform);
 
   useEffect(() => {
     if (!useServer) {
@@ -297,8 +295,8 @@ export default function SalesFlow() {
             ? {
                 ...listing,
                 publishStatus: channel.status,
-                externalListingId: channel.external_listing_id,
-                lastSyncAt: channel.last_sync_at,
+                externalListingId: channel.externalListingId || channel.external_listing_id,
+                lastSyncAt: channel.lastSyncAt || channel.last_sync_at,
               }
             : listing,
         ),
@@ -315,9 +313,10 @@ export default function SalesFlow() {
   const syncListing = async (listingId, marketplace = "ebay") => {
     try {
       setBusyListingId(listingId);
-      await marketplacesAPI.sync({ marketplace, listingId });
+      const syncResults = await marketplacesAPI.sync({ marketplace, listingId });
       await refreshServerSalesState();
-      toast.success(`Synced ${marketplace} status`);
+      const summary = summarizeMarketplaceSyncResults(syncResults, marketplace);
+      (toast[summary.type] || toast.info)(summary.message);
     } catch (error) {
       toast.error(error.message);
     } finally {
@@ -529,8 +528,8 @@ export default function SalesFlow() {
           </div>
           {newListing.startPrice && (
             <div className="text-xs text-dim mt-8">
-              Est. fees: {fmtShort(parseFloat(newListing.startPrice) * (PLATFORM_FEES[newListing.platform] || 0))} ({((PLATFORM_FEES[newListing.platform] || 0) * 100).toFixed(1)}%)
-              {" "}&middot; Net: {fmtShort(parseFloat(newListing.startPrice) - parseFloat(newListing.startPrice) * (PLATFORM_FEES[newListing.platform] || 0) - (parseFloat(newListing.shipping) || 0))}
+              Est. fees: {fmtShort(parseFloat(newListing.startPrice) * newListingFeeRate)} ({(newListingFeeRate * 100).toFixed(1)}%)
+              {" "}&middot; Net: {fmtShort(parseFloat(newListing.startPrice) - parseFloat(newListing.startPrice) * newListingFeeRate - (parseFloat(newListing.shipping) || 0))}
             </div>
           )}
           <button className="btn btn-primary btn-full mt-8" onClick={createListing}>Create Listing</button>
@@ -599,6 +598,7 @@ export default function SalesFlow() {
               onEndListing={endListing}
               onCancelSell={() => { setSellingId(null); setSellPrice(""); setSellTracking(""); }}
               onCancelReprice={() => { setRepricingId(null); setRepriceVal(""); }}
+              getFeeRate={getFeeRate}
               timeLeft={timeLeft}
             />
           ))}

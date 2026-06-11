@@ -1,9 +1,10 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import Camera from "./Camera";
 import { useToast } from "./Toast";
 import { useData } from "../lib/DataContext";
-import { itemsAPI } from "../lib/api";
+import { itemsAPI, presetsAPI } from "../lib/api";
 import { CONDITIONS, TYPES } from "../lib/constants";
+import { classifyListingViability } from "../lib/listingViability";
 import { uid, fmtShort } from "../lib/utils";
 import { aiRecognize, aiPrice } from "../lib/ai";
 import { saveImage } from "../lib/storage";
@@ -11,6 +12,11 @@ import { IconPlus, IconZap, IconX, Spinner } from "./Icons";
 
 const BATCH_FEE_RATE = 0.1312; // eBay default for net estimate
 const BATCH_SHIP = 4.99;
+const VIABILITY_LABELS = {
+  bulk_lot: { color: "var(--orange)", label: "bulk lot" },
+  not_worth_listing: { color: "var(--red)", label: "not worth listing" },
+  review: { color: "var(--orange)", label: "review" },
+};
 
 function calcNet(midPrice) {
   const p = parseFloat(midPrice) || 0;
@@ -29,6 +35,12 @@ export default function BatchView() {
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(null);
   const [dragging, setDragging] = useState(false);
+  const [presets, setPresets] = useState([]);
+
+  useEffect(() => {
+    if (!useServer) return;
+    presetsAPI.list().then(setPresets).catch(() => {});
+  }, [useServer]);
 
   const updateItem = (id, patch) => setQueue((p) => p.map((x) => (x.id === id ? { ...x, ...patch } : x)));
 
@@ -81,6 +93,21 @@ export default function BatchView() {
       if (d) { updateItem(items[i].id, { priceEstimate: d.priceEstimate, priceHistory: d.priceHistory }); priced++; }
     }
     setProgress(null); toast.success(`Priced ${priced} cards`); setProcessing(false);
+  };
+
+  const savePreset = async () => {
+    const name = window.prompt("Preset name");
+    if (!name?.trim()) return;
+    try {
+      const preset = await presetsAPI.create({
+        name: name.trim(),
+        defaults: { condition: cond, type, binder, minPrice },
+      });
+      setPresets((current) => [preset, ...current]);
+      toast.success("Preset saved");
+    } catch (err) {
+      toast.error(`Preset save failed: ${err.message}`);
+    }
   };
 
   const saveAll = async () => {
@@ -166,6 +193,30 @@ export default function BatchView() {
             title="Minimum price — items below this will require confirmation before saving"
           />
         </div>
+        {useServer && (
+          <div className="flex gap-8 flex-wrap mt-8">
+            <select
+              className="inp flex-1"
+              value=""
+              onChange={(e) => {
+                const preset = presets.find((entry) => entry.id === e.target.value);
+                if (!preset?.defaults) return;
+                if (preset.defaults.condition) setCond(preset.defaults.condition);
+                if (preset.defaults.type) setType(preset.defaults.type);
+                if (preset.defaults.binder != null) setBinder(preset.defaults.binder);
+                if (preset.defaults.minPrice != null) setMinPrice(preset.defaults.minPrice);
+              }}
+            >
+              <option value="">Load preset</option>
+              {presets.map((preset) => (
+                <option key={preset.id} value={preset.id}>{preset.name}</option>
+              ))}
+            </select>
+            <button className="btn btn-ghost btn-sm" type="button" onClick={savePreset}>
+              Save preset
+            </button>
+          </div>
+        )}
       </div>
 
       {queue.length > 0 && (
@@ -193,6 +244,8 @@ export default function BatchView() {
         const mid = parseFloat(item.priceEstimate?.mid) || 0;
         const net = calcNet(mid);
         const belowFloor = floor > 0 && mid > 0 && mid < floor;
+        const viability = classifyListingViability({ mid, net, floor });
+        const viabilityLabel = VIABILITY_LABELS[viability];
         return (
           <div key={item.id} className="card fade mb-10" style={{ padding: 14, animationDelay: `${idx * .04}s` }}>
             <div className="flex gap-8 mb-8">
@@ -217,6 +270,11 @@ export default function BatchView() {
               {belowFloor && (
                 <span className="text-xs fw-700" style={{ color: "var(--red)" }}>
                   below floor
+                </span>
+              )}
+              {viabilityLabel && (
+                <span className="text-xs fw-700" style={{ color: viabilityLabel.color }}>
+                  {viabilityLabel.label}
                 </span>
               )}
               <div className="flex-1" />

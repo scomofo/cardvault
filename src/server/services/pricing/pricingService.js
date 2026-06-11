@@ -122,9 +122,25 @@ function insertSnapshot(itemId, snapshot) {
   return { snapshotId, recommendations };
 }
 
-export async function refreshPricingForItem(itemId, { source } = {}) {
+const SNAPSHOT_TTL_HOURS = parseInt(process.env.SNAPSHOT_TTL_HOURS || "24", 10);
+
+function getRecentSnapshot(itemId, ttlHours) {
+  return get(
+    `SELECT id FROM price_snapshots
+     WHERE item_id = ? AND observed_at > datetime('now', ?)
+     ORDER BY observed_at DESC LIMIT 1`,
+    [itemId, `-${ttlHours} hours`],
+  );
+}
+
+export async function refreshPricingForItem(itemId, { source, forceRefresh = false } = {}) {
   const item = get("SELECT * FROM user_items WHERE id = ?", [itemId]);
   if (!item) throw new Error("Item not found");
+
+  if (!forceRefresh) {
+    const cached = getRecentSnapshot(itemId, SNAPSHOT_TTL_HOURS);
+    if (cached) return getPricingForItem(itemId);
+  }
 
   const resolvedSource = source || defaultPricingSource();
   const snapshot = await fetchPricingBySource(resolvedSource, item);

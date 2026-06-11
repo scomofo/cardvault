@@ -1,20 +1,20 @@
 import { MarketplaceAdapter } from "./marketplaceAdapter.js";
 
-export class ComcAdapter extends MarketplaceAdapter {
+export class ConsignmentAdapter extends MarketplaceAdapter {
   constructor() {
-    super("comc");
+    super("consignment");
   }
 
   async publish(listing) {
     return {
       marketplace: this.marketplace,
-      externalListingId: `comc-handoff-${String(listing.id).slice(0, 12)}`,
+      externalListingId: `consignment-handoff-${String(listing.id).slice(0, 12)}`,
       status: "handoff_ready",
       payload: {
         ...listing,
         handoff: {
-          submissionType: "comc_submission",
-          submissionStatus: "ready_to_ship",
+          submissionType: "broker_consignment",
+          submissionStatus: "ready_for_review",
         },
       },
       syncedAt: new Date().toISOString(),
@@ -25,13 +25,14 @@ export class ComcAdapter extends MarketplaceAdapter {
     const mapped = super.mapForExport(listing);
     return {
       Card: mapped.title,
-      AskPrice: mapped.price,
+      DeclaredValue: mapped.price,
+      ReservePrice: mapped.price,
       Notes: mapped.description,
       Quantity: mapped.quantity,
-      Marketplace: "COMC",
+      Marketplace: "Consignment",
       CardVaultListingId: listing.id,
-      SubmissionType: "comc_submission",
-      SubmissionStatus: "ready_to_ship",
+      SubmissionType: "broker_consignment",
+      SubmissionStatus: "ready_for_review",
     };
   }
 }

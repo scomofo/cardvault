@@ -59,12 +59,9 @@ export function genEbayCSV(catalog, shipFrom = "", currency = "CAD") {
         .filter(Boolean).join(" ").slice(0, 80);
 
       // Generate condition description from AI grade data or fallback
-      let description = "";
-      if (c.gradeScores) {
-        description = generateConditionReport(c.gradeScores);
-      } else {
-        description = `Condition: ${co.l}. Ships securely in penny sleeve and toploader from Canada.`;
-      }
+      const description = c.gradeScores
+        ? generateConditionReport(c.gradeScores)
+        : `Condition: ${co.l}. Ships securely in penny sleeve and toploader from Canada.`;
 
       const price = c.priceEstimate?.mid || "0.99";
       const player = c.type === "sports" ? c.name.split(" ").slice(-2).join(" ") : c.name;

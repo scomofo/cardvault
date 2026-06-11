@@ -1,9 +1,9 @@
 import { useState, useMemo } from "react";
 import { useData } from "../lib/DataContext";
 import { useToast } from "./Toast";
-import { CONDITIONS, PLATFORMS, TYPES } from "../lib/constants";
+import { CONDITIONS, DEALER_EXPORT_PLATFORMS, TYPES } from "../lib/constants";
 import { fmtShort, condOf } from "../lib/utils";
-import { automationAPI } from "../lib/api";
+import { automationAPI, marketplacesAPI } from "../lib/api";
 
 function escapeCsv(value) {
   if (value == null) return "";
@@ -50,6 +50,8 @@ const STATUS_FILTERS = [
   { v: "sold", l: "Sold" },
 ];
 
+const EXPORTABLE_LISTING_STATUSES = new Set(["draft", "active", "revised"]);
+
 function daysSince(dateStr) {
   if (!dateStr) return 0;
   return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
@@ -61,11 +63,13 @@ function quickPrice(card) {
 }
 
 export default function DealerModeView() {
-  const { catalog, setCatalog, listings, setListings } = useData();
+  const { catalog, setCatalog, listings, setListings, useServer } = useData();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const [selected, setSelected] = useState(new Set());
+  const [exportPlatform, setExportPlatform] = useState("ebay");
   const [sortKey, setSortKey] = useState("name");
   const [sortDir, setSortDir] = useState(1);
   const [filterType, setFilterType] = useState("all");
@@ -109,6 +113,25 @@ export default function DealerModeView() {
     return { count: inv.length, totalValue, totalCost, potentialProfit: totalValue - totalCost, aging };
   }, [catalog]);
 
+  const selectedCards = useMemo(
+    () => catalog.filter((card) => selected.has(card.id)),
+    [catalog, selected],
+  );
+
+  const selectedListingIds = useMemo(() => {
+    const selectedCardIds = new Set(selectedCards.map((card) => card.id));
+    return listings
+      .filter((listing) => {
+        const cardId = listing.cardId || listing.card_id;
+        const status = String(listing.publishStatus || listing.publish_status || listing.status || "").toLowerCase();
+        return selectedCardIds.has(cardId)
+          && EXPORTABLE_LISTING_STATUSES.has(status);
+      })
+      .map((listing) => listing.id);
+  }, [listings, selectedCards]);
+
+  const exportPlatformLabel = DEALER_EXPORT_PLATFORMS.find((platform) => platform.v === exportPlatform)?.l || exportPlatform;
+
   // Actions
   function toggleSelect(id) {
     setSelected((prev) => {
@@ -129,12 +152,12 @@ export default function DealerModeView() {
   }
 
   async function batchListSelected() {
-    const cards = catalog.filter((c) => selected.has(c.id));
+    const cards = selectedCards;
     if (cards.length === 0) { toast.error("Select cards first"); return; }
     setBusy(true);
     try {
       const itemIds = cards.map((c) => c.id);
-      const result = await automationAPI.generateListings({ itemIds });
+      const result = await automationAPI.generateListings({ itemIds, platform: exportPlatform });
       const drafts = Array.isArray(result?.drafts) ? result.drafts : [];
       const generated = drafts.length || itemIds.length;
       const listedPlatformsByCardId = new Map();
@@ -155,11 +178,10 @@ export default function DealerModeView() {
           ? {
               ...card,
               status: "listed",
-              listedOn: Array.from(new Set([...(card.listedOn || []), ...(listedPlatformsByCardId.get(card.id) || ["ebay"])])),
+              listedOn: Array.from(new Set([...(card.listedOn || []), ...(listedPlatformsByCardId.get(card.id) || [exportPlatform])])),
             }
           : card
       )));
-      setSelected(new Set());
       toast.success(generated + " listings generated server-side");
     } catch (error) {
       toast.error("Batch listing failed: " + error.message);
@@ -168,9 +190,34 @@ export default function DealerModeView() {
     }
   }
 
-  function exportSelected() {
-    const cards = catalog.filter((c) => selected.has(c.id));
+  async function exportSelected() {
+    const cards = selectedCards;
     if (cards.length === 0) { toast.error("Select cards first"); return; }
+
+    if (useServer) {
+      if (selectedListingIds.length === 0) {
+        toast.error(`No exportable ${exportPlatformLabel} listings selected. Generate listings first.`);
+        return;
+      }
+
+      setExporting(true);
+      try {
+        const result = await marketplacesAPI.export({
+          marketplace: exportPlatform,
+          listingIds: selectedListingIds,
+        });
+        const filename = result.filePath?.split("/").pop()
+          || `cardvault_${exportPlatform}_${new Date().toISOString().slice(0, 10)}.csv`;
+        downloadCsvBlob(result.content || "", filename);
+        toast.success(`Exported ${result.itemCount || selectedListingIds.length} ${exportPlatformLabel} listing${selectedListingIds.length === 1 ? "" : "s"}`);
+      } catch (error) {
+        toast.error("Export failed: " + error.message);
+      } finally {
+        setExporting(false);
+      }
+      return;
+    }
+
     const rows = cards.map((c) => ({
       title: [c.year, c.name, c.set, c.number ? "#" + c.number : ""].filter(Boolean).join(" "),
       price: quickPrice(c) || 0.99,
@@ -262,14 +309,21 @@ export default function DealerModeView() {
         <button style={s.btn} onClick={batchListSelected} disabled={selected.size === 0 || busy}>
           {busy ? "Listing..." : `List Selected (${selected.size})`}
         </button>
-        <button style={s.btnOutline} onClick={exportSelected} disabled={selected.size === 0}>
-          Export CSV
+        {useServer && (
+          <select style={s.select} value={exportPlatform} onChange={(e) => setExportPlatform(e.target.value)} disabled={exporting}>
+            {DEALER_EXPORT_PLATFORMS.map((platform) => <option key={platform.v} value={platform.v}>{platform.l}</option>)}
+          </select>
+        )}
+        <button style={s.btnOutline} onClick={exportSelected} disabled={selected.size === 0 || exporting}>
+          {exporting ? "Exporting..." : useServer ? `Export ${exportPlatformLabel} CSV` : "Export CSV"}
         </button>
         <button style={s.btnOutline} onClick={selectAll}>
           {selected.size === filtered.length ? "Deselect All" : "Select All"} ({filtered.length})
         </button>
         <span style={{ color: "#6b7280", fontSize: 12, alignSelf: "center", marginLeft: "auto" }}>
-          {filtered.length} of {catalog.length} cards
+          {useServer && selected.size > 0
+            ? `${selectedListingIds.length}/${selected.size} exportable`
+            : `${filtered.length} of ${catalog.length} cards`}
         </span>
       </div>
 

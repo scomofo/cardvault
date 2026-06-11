@@ -88,6 +88,8 @@ export function runMigrations(db) {
   addColumnIfMissing("shipments", "label_url", "TEXT");
   addColumnIfMissing("shipments", "status", "TEXT DEFAULT 'pending'");
   addColumnIfMissing("shipments", "provider", "TEXT");
+  addColumnIfMissing("listing_channels", "remote_updated_at", "TEXT");
+  addColumnIfMissing("listing_channels", "remote_price_history", "TEXT");
 
   // Identification feedback payload (serialized clues + candidate snapshot)
   // used to retrain similarity weights from confirmations and corrections.
@@ -113,6 +115,23 @@ export function runMigrations(db) {
       currency TEXT NOT NULL,
       item_count INTEGER,
       created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS batch_presets (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      defaults_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS fee_models (
+      id TEXT PRIMARY KEY,
+      platform TEXT NOT NULL UNIQUE,
+      fee_rate REAL NOT NULL DEFAULT 0,
+      label TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
     );
   `);
 }

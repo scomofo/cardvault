@@ -3,7 +3,9 @@ import { useToast } from "./Toast";
 import { useData } from "../lib/DataContext";
 import { apiPath } from "../lib/apiBase";
 import { fmtShort } from "../lib/utils";
-import { automationAPI, marketplacesAPI } from "../lib/api";
+import { automationAPI, marketplacesAPI, feeModelsAPI } from "../lib/api";
+import { PLATFORMS, PLATFORM_FEES } from "../lib/constants";
+import { clearFeeModelCache } from "../hooks/useFeeModels";
 import { createBackupPayload, normalizeBackupState } from "../lib/backupState";
 import { genSalesCSV } from "../lib/exports";
 import { clearAllImages, exportAllImages, importAllImages } from "../lib/storage";
@@ -382,6 +384,109 @@ function MarketplaceConnectionsSection() {
   );
 }
 
+function FeeModelsSection() {
+  const toast = useToast();
+  const { useServer } = useData();
+  const [rates, setRates] = useState({ ...PLATFORM_FEES });
+  const [customRates, setCustomRates] = useState({});
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!useServer) return;
+    let cancelled = false;
+    feeModelsAPI
+      .list()
+      .then((rows) => {
+        if (cancelled) return;
+        const next = {};
+        for (const row of rows || []) next[row.platform] = Number(row.feeRate) || 0;
+        setCustomRates(next);
+        setRates({ ...PLATFORM_FEES, ...next });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [useServer]);
+
+  const save = async () => {
+    if (!useServer) return;
+    setSaving(true);
+    try {
+      const saved = {};
+      for (const [platform, rate] of Object.entries(rates)) {
+        const feeRate = Math.max(0, Math.min(1, Number(rate) || 0));
+        const row = await feeModelsAPI.upsert(platform, { feeRate });
+        saved[row.platform] = row.feeRate;
+      }
+      setCustomRates(saved);
+      clearFeeModelCache();
+      toast.success("Fee models saved");
+    } catch (error) {
+      toast.error(`Fee model save failed: ${error.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const reset = async (platform) => {
+    try {
+      await feeModelsAPI.delete(platform);
+      setCustomRates((current) => {
+        const next = { ...current };
+        delete next[platform];
+        return next;
+      });
+      setRates((current) => ({ ...current, [platform]: PLATFORM_FEES[platform] || 0 }));
+      clearFeeModelCache();
+    } catch (error) {
+      toast.error(`Fee model reset failed: ${error.message}`);
+    }
+  };
+
+  return (
+    <div className="card mb-12">
+      <div className="lbl">Platform Fee Models</div>
+      {PLATFORMS.map(({ v, l }) => {
+        const pct = ((rates[v] ?? PLATFORM_FEES[v] ?? 0) * 100);
+        const isCustom = v in customRates;
+        return (
+          <div key={v} className="flex items-center gap-8 flex-wrap mt-8">
+            <span className="text-xs fw-700" style={{ minWidth: 94 }}>{l}</span>
+            <input
+              className="inp"
+              type="number"
+              step="0.01"
+              min="0"
+              max="100"
+              style={{ maxWidth: 96 }}
+              value={Number.isFinite(pct) ? pct.toFixed(2) : "0.00"}
+              onChange={(e) => setRates((current) => ({ ...current, [v]: (Number(e.target.value) || 0) / 100 }))}
+            />
+            <span className="text-xs text-dim">%</span>
+            {isCustom ? (
+              <>
+                <span className="badge badge-acc">Custom</span>
+                <button className="btn btn-ghost btn-sm" type="button" onClick={() => reset(v)}>Reset</button>
+              </>
+            ) : (
+              <span className="badge badge-dim">Default</span>
+            )}
+          </div>
+        );
+      })}
+      {useServer ? (
+        <button className="btn btn-primary btn-sm mt-12" type="button" onClick={save} disabled={saving}>
+          {saving ? <Spinner size={12} /> : <IconCheck size={12} />}
+          Save Fee Models
+        </button>
+      ) : (
+        <div className="text-xs text-dim mt-8">Server mode required</div>
+      )}
+    </div>
+  );
+}
+
 export default function Settings() {
   const {
     catalog, setCatalog, sales, setSales, orders, setOrders, listings, setListings, purchases, setPurchases, trades, setTrades,
@@ -506,6 +611,7 @@ export default function Settings() {
 
       <MarketplaceConnectionsSection />
       <MacAppSection />
+      <FeeModelsSection />
 
       <div className="card mb-12">
         <div className="lbl">User Profile</div>

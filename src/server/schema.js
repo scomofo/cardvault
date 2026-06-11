@@ -201,6 +201,23 @@ export function createTables(db) {
       notes TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS batch_presets (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      defaults_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS fee_models (
+      id TEXT PRIMARY KEY,
+      platform TEXT NOT NULL UNIQUE,
+      fee_rate REAL NOT NULL DEFAULT 0,
+      label TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS orders (
       id TEXT PRIMARY KEY,
       sale_id TEXT REFERENCES sales(id),
@@ -350,6 +367,8 @@ export function createTables(db) {
       external_listing_id TEXT,
       status TEXT DEFAULT 'draft',
       last_sync_at TEXT,
+      remote_updated_at TEXT,
+      remote_price_history TEXT,
       publish_error TEXT,
       overrides TEXT,
       created_at TEXT DEFAULT (datetime('now')),
