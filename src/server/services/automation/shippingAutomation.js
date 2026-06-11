@@ -113,21 +113,67 @@ function normalizeProviderRate(connection, metadata, rate, shipmentId) {
     metadata.label_url_template,
     "labels/{shipmentId}.pdf",
   );
+  const labelPurchase = normalizeLabelPurchase(
+    firstDefined(rate.labelPurchase, rate.label_purchase, metadata.labelPurchase, metadata.label_purchase),
+    {
+      shipmentId,
+      trackingNumber,
+      labelTemplate,
+      provider: slug(connection.provider),
+      serviceCode: slug(serviceCode || service),
+    },
+  );
 
   return {
     carrier: firstDefined(rate.carrier, metadata.carrier, connection.provider),
     service,
     serviceCode,
-    cost,
+    cost: labelPurchase?.labelStatus === "failed" ? 0 : cost,
     tracking,
-    trackingNumber,
-    labelUrl: renderTemplate(labelTemplate, {
-      provider: slug(connection.provider),
-      serviceCode: slug(serviceCode || service),
+    trackingNumber: labelPurchase?.labelStatus === "failed"
+      ? null
+      : firstDefined(labelPurchase?.trackingNumber, trackingNumber),
+    labelUrl: labelPurchase?.labelStatus === "failed"
+      ? null
+      : firstDefined(labelPurchase?.labelUrl, renderTemplate(labelTemplate, {
+        provider: slug(connection.provider),
+        serviceCode: slug(serviceCode || service),
+        shipmentId,
+        trackingNumber: trackingNumber || "",
+      })),
+    labelStatus: labelPurchase?.labelStatus || "created",
+    shipmentStatus: labelPurchase?.shipmentStatus || "shipped",
+    purchaseError: labelPurchase?.error || null,
+    source: "provider_connection",
+  };
+}
+
+function normalizeLabelPurchase(value, { shipmentId, trackingNumber, labelTemplate, provider, serviceCode }) {
+  const purchase = parseJson(value, null);
+  if (!purchase || typeof purchase !== "object") return null;
+
+  const rawStatus = String(firstDefined(purchase.labelStatus, purchase.label_status, purchase.status, "purchased")).toLowerCase();
+  if (rawStatus === "failed" || purchase.error) {
+    return {
+      labelStatus: "failed",
+      shipmentStatus: "exception",
+      trackingNumber: null,
+      labelUrl: null,
+      error: String(purchase.error || "Shipping label purchase failed"),
+    };
+  }
+
+  const labelUrlTemplate = firstDefined(purchase.labelUrl, purchase.label_url, labelTemplate);
+  return {
+    labelStatus: firstDefined(purchase.labelStatus, purchase.label_status, "purchased"),
+    shipmentStatus: firstDefined(purchase.shipmentStatus, purchase.shipment_status, "shipped"),
+    trackingNumber: firstDefined(purchase.trackingNumber, purchase.tracking_number, trackingNumber),
+    labelUrl: renderTemplate(labelUrlTemplate, {
+      provider,
+      serviceCode,
       shipmentId,
       trackingNumber: trackingNumber || "",
     }),
-    source: "provider_connection",
   };
 }
 
@@ -147,11 +193,15 @@ function pickProviderService({ provider, country, salePrice, weightOz, shipmentI
 }
 
 function syncOrderAndSaleShippingState(order, shipment) {
+  const fulfillmentStatus = shipment.status === "exception" || shipment.label_status === "failed"
+    ? "shipping_exception"
+    : "shipped";
+
   run(
     `UPDATE orders
-     SET fulfillment_status = 'shipped'
+     SET fulfillment_status = ?
      WHERE id = ?`,
-    [order.id],
+    [fulfillmentStatus, order.id],
   );
 
   run(
@@ -176,7 +226,10 @@ export function automateShipment(orderId, options = {}) {
     `SELECT * FROM shipments WHERE order_id = ? ORDER BY created_at DESC LIMIT 1`,
     [orderId],
   );
-  if (existingShipment) {
+  const retryFailedShipment = options.retry === true
+    && existingShipment
+    && (existingShipment.status === "exception" || existingShipment.label_status === "failed");
+  if (existingShipment && !retryFailedShipment) {
     syncOrderAndSaleShippingState(order, existingShipment);
     return existingShipment;
   }
@@ -197,11 +250,16 @@ export function automateShipment(orderId, options = {}) {
     weightOz,
   });
 
-  const trackingNumber = firstDefined(
-    service.trackingNumber,
-    service.tracking ? buildTracking(service.service) : null,
-  );
-  const labelUrl = service.labelUrl || `labels/${shipmentId}.pdf`;
+  const labelStatus = service.labelStatus || "created";
+  const shipmentStatus = service.shipmentStatus || "shipped";
+  const trackingNumber = labelStatus === "failed"
+    ? null
+    : firstDefined(
+      service.trackingNumber,
+      service.tracking ? buildTracking(service.service) : null,
+    );
+  const labelUrl = service.labelUrl || (labelStatus === "failed" ? null : `labels/${shipmentId}.pdf`);
+  const now = new Date().toISOString();
 
   run(
     `INSERT INTO shipments
@@ -215,15 +273,15 @@ export function automateShipment(orderId, options = {}) {
       service.carrier,
       service.service,
       packageType,
-      "created",
+      labelStatus,
       trackingNumber,
       service.cost,
       0.35,
       weightOz,
-      new Date().toISOString(),
-      new Date().toISOString(),
+      labelStatus === "failed" ? null : now,
+      shipmentStatus === "exception" ? null : now,
       labelUrl,
-      "shipped",
+      shipmentStatus,
       service.carrier,
     ],
   );
@@ -231,6 +289,8 @@ export function automateShipment(orderId, options = {}) {
   syncOrderAndSaleShippingState(order, {
     shipping_cost: service.cost,
     tracking_number: trackingNumber,
+    label_status: labelStatus,
+    status: shipmentStatus,
   });
 
   if (order.listing_id) {
@@ -248,15 +308,22 @@ export function automateShipment(orderId, options = {}) {
       [order.listing_id],
     );
     if (channel) {
+      const isException = shipmentStatus === "exception" || labelStatus === "failed";
       run(
         `INSERT INTO listing_channel_events (id, listing_channel_id, event_type, status, payload)
          VALUES (?,?,?,?,?)`,
         [
           uid(),
           channel.id,
-          "tracking_sync",
-          "shipped",
-          JSON.stringify({ trackingNumber, service: service.service, labelUrl }),
+          isException ? "shipping_exception" : "tracking_sync",
+          isException ? "failed" : "shipped",
+          JSON.stringify({
+            trackingNumber,
+            service: service.service,
+            labelUrl,
+            labelStatus,
+            error: service.purchaseError || undefined,
+          }),
         ],
       );
     }

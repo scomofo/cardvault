@@ -11,6 +11,39 @@ function score({ base = 0, marketPrice = 0, ageDays = 0, urgency = 0, blockedCas
 export function getActionQueue() {
   const queue = [];
 
+  for (const order of all(`
+    SELECT
+      orders.id,
+      orders.sale_price,
+      orders.platform,
+      shipments.label_status,
+      shipments.status AS shipment_status
+    FROM orders
+    JOIN shipments
+      ON shipments.id = (
+        SELECT id
+        FROM shipments
+        WHERE order_id = orders.id
+        ORDER BY created_at DESC
+        LIMIT 1
+      )
+    WHERE orders.fulfillment_status = 'shipping_exception'
+       OR shipments.status = 'exception'
+       OR shipments.label_status = 'failed'
+  `)) {
+    queue.push({
+      queue: "shipping_exception",
+      item: order.id,
+      itemId: order.id,
+      itemName: null,
+      reason: `Shipping label for ${order.platform} order needs retry`,
+      suggestedAction: "retry_shipment",
+      priorityScore: score({ base: 240, marketPrice: Number(order.sale_price || 0), urgency: 70, risk: 40 }),
+      subjectType: "order",
+      subjectId: order.id,
+    });
+  }
+
   for (const order of all(`SELECT id, sale_price, platform FROM orders WHERE fulfillment_status IN ('pending', 'paid')`)) {
     queue.push({
       queue: "ship_now",
