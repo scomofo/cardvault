@@ -6,7 +6,7 @@ import { useFeeModels } from "../hooks/useFeeModels";
 import { uid, fmtShort } from "../lib/utils";
 import { actionQueueAPI, marketplacesAPI, ordersAPI, listingsAPI, salesAPI, automationAPI, purchasesAPI, itemsAPI } from "../lib/api";
 import { importEbayPurchasesLocal, parseEbayPurchaseImport } from "../lib/ebayPurchaseImport";
-import { loadServerSalesState, summarizeMarketplaceSyncResults } from "../lib/salesViewState";
+import { buildManualSaleFulfillment, loadServerSalesState, summarizeMarketplaceCrosspostResults, summarizeMarketplaceSyncResults } from "../lib/salesViewState";
 import { requestNotificationPermission, canNotify, sendNotification, scheduleAuctionNotification, cancelNotificationTimer } from "../lib/notifications";
 import { IconPlus, IconBell, IconCheck, IconX, IconUpload, Spinner } from "./Icons";
 import EbayExport from "./EbayExport";
@@ -16,7 +16,7 @@ const TABS = ["active", "completed", "orders", "purchases"];
 
 export { PLATFORM_FEES };
 
-export default function SalesFlow() {
+export default function SalesFlow({ onNavigate }) {
   const toast = useToast();
   const { catalog, setCatalog, sales, setSales, orders, setOrders, listings, setListings, purchases, setPurchases, shipFrom, useServer } = useData();
   const { getFeeRate } = useFeeModels(useServer);
@@ -68,9 +68,16 @@ export default function SalesFlow() {
     if (ok) toast.success("Notifications enabled"); else toast.error("Notification permission denied");
   };
 
+  const goToManualCardEntry = () => {
+    onNavigate?.({ view: "tools", toolsTab: "batch" });
+  };
+
   const createListing = () => {
     const card = catalog.find((c) => c.id === newListing.cardId);
-    if (!card) { toast.error("Select a card"); return; }
+    if (!card) {
+      toast.error(unlistedCards.length === 0 ? "Add a card before creating a listing" : "Select a card");
+      return;
+    }
     if (!newListing.startPrice) { toast.error("Enter a price"); return; }
     const listing = {
       id: uid(), cardId: card.id, cardName: card.name, set: card.set, number: card.number,
@@ -90,30 +97,42 @@ export default function SalesFlow() {
     toast.success(`Listed: ${card.name}`);
   };
 
-  const completeSale = (listingId, salePrice, trackingNumber) => {
+  const completeSale = async (listingId, salePrice, trackingNumber) => {
     const listing = listings.find((l) => l.id === listingId);
     if (!listing) return;
-    const price = parseFloat(salePrice) || listing.startPrice;
     const feeRate = getFeeRate(listing.platform);
-    const fees = Math.round(price * feeRate * 100) / 100;
     const card = catalog.find((c) => c.id === listing.cardId);
-    const costBasis = parseFloat(card?.costBasis) || 0;
-    const netProfit = price - costBasis - fees - listing.shipping;
-    const sale = {
-      id: uid(), cardId: listing.cardId, cardName: listing.cardName, set: listing.set,
-      salePrice: price, costBasis, platform: listing.platform, fees,
-      shippingCost: listing.shipping, netProfit, date: new Date().toISOString(), listingId: listing.id,
-      ...(trackingNumber ? { trackingNumber } : {}),
-    };
-    setSales((p) => [sale, ...p]);
-    setListings((p) => p.map((l) => l.id === listingId ? { ...l, status: "sold", soldPrice: price, soldDate: new Date().toISOString(), trackingNumber: trackingNumber || null } : l));
-    setCatalog((p) => p.map((c) => c.id === listing.cardId ? { ...c, status: "sold", soldPrice: price, soldPlatform: listing.platform } : c));
+    const { sale, order } = buildManualSaleFulfillment({
+      idFactory: uid,
+      listing,
+      card,
+      feeRate,
+      salePrice,
+      trackingNumber,
+    });
+
+    if (useServer) {
+      try {
+        await salesAPI.create(sale);
+        await ordersAPI.create(order);
+        await refreshServerSalesState();
+      } catch (error) {
+        toast.error(`Sale save failed: ${error.message}`);
+        return;
+      }
+    } else {
+      setSales((p) => [sale, ...p]);
+      setOrders((p) => [order, ...p]);
+      setListings((p) => p.map((l) => l.id === listingId ? { ...l, status: "sold", soldPrice: sale.salePrice, soldDate: sale.date, trackingNumber: trackingNumber || null } : l));
+      setCatalog((p) => p.map((c) => c.id === listing.cardId ? { ...c, status: "sold", soldPrice: sale.salePrice, soldPlatform: listing.platform } : c));
+    }
     cancelNotificationTimer(listingId);
     setSellingId(null);
     setSellPrice("");
     setSellTracking("");
-    sendNotification("Card sold!", `${listing.cardName} sold for ${fmtShort(price)} on ${listing.platform}. Net: ${fmtShort(netProfit)}`);
-    toast.success(`Sold: ${listing.cardName} for ${fmtShort(price)} (net ${fmtShort(netProfit)})`);
+    setTab("orders");
+    sendNotification("Card sold!", `${listing.cardName} sold for ${fmtShort(sale.salePrice)} on ${listing.platform}. Net: ${fmtShort(sale.netProfit)}`);
+    toast.success(`Sold: ${listing.cardName}. Order queued for shipping.`);
   };
 
   const repriceListing = (listingId) => {
@@ -327,9 +346,10 @@ export default function SalesFlow() {
   const crosspost = async (listingId) => {
     try {
       setBusyListingId(listingId);
-      await marketplacesAPI.crosspost({ listingId, marketplaces: ["ebay", "comc", "shopify"] });
+      const result = await marketplacesAPI.crosspost({ listingId, marketplaces: ["ebay", "comc", "shopify"] });
       await refreshServerSalesState();
-      toast.success("Cross-post plan created");
+      const summary = summarizeMarketplaceCrosspostResults(result);
+      (toast[summary.type] || toast.info)(summary.message);
     } catch (error) {
       toast.error(error.message);
     } finally {
@@ -509,6 +529,16 @@ export default function SalesFlow() {
             <option value="">Select card...</option>
             {unlistedCards.map((c) => <option key={c.id} value={c.id}>{c.name} {c.set && `- ${c.set}`} {c.number && `#${c.number}`}</option>)}
           </select>
+          {unlistedCards.length === 0 && (
+            <div className="card mt-8" style={{ padding: 12 }}>
+              <div className="text-xs fw-700">No unlisted cards ready</div>
+              <div className="text-xxs text-dim mt-4">Add a manual card, then come straight back to create the listing.</div>
+              <div className="flex gap-8 mt-8">
+                <button className="btn btn-primary btn-sm flex-1" onClick={goToManualCardEntry}>Add Manual Card</button>
+                <button className="btn btn-outline btn-sm flex-1" onClick={() => onNavigate?.("scan")}>Scan Card</button>
+              </div>
+            </div>
+          )}
           <div className="form-grid mt-8">
             <select className="inp" value={newListing.platform} onChange={(e) => setNewListing((p) => ({ ...p, platform: e.target.value }))}>
               {PLATFORMS.map((p) => <option key={p.v} value={p.v}>{p.l}</option>)}
@@ -570,8 +600,13 @@ export default function SalesFlow() {
       {tab === "active" && (
         <>
           {activeListings.length === 0 && (
-            <div className="card empty-state" style={{ padding: 32 }}>
+              <div className="card empty-state" style={{ padding: 32 }}>
               <div className="empty-desc">No active listings &mdash; create one above</div>
+              {unlistedCards.length === 0 && (
+                <button className="btn btn-primary btn-sm mt-10" onClick={goToManualCardEntry}>
+                  <IconPlus size={12} /> Add Manual Card
+                </button>
+              )}
             </div>
           )}
           {activeListings.map((l) => (
@@ -635,7 +670,7 @@ export default function SalesFlow() {
         <>
           {orders.length === 0 ? (
             <div className="card empty-state" style={{ padding: 32 }}>
-              <div className="empty-desc">No orders yet &mdash; orders are created when marketplace listings sell</div>
+              <div className="empty-desc">No orders yet &mdash; mark a listing sold or sync a marketplace sale to create shipping work</div>
             </div>
           ) : (
             orders.map((o) => (

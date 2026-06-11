@@ -54,7 +54,7 @@ const EXPORTABLE_LISTING_STATUSES = new Set(["draft", "active", "revised"]);
 
 function daysSince(dateStr) {
   if (!dateStr) return 0;
-  return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
+  return Math.max(0, Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000));
 }
 
 function quickPrice(card) {
@@ -73,7 +73,7 @@ export default function DealerModeView() {
   const [sortKey, setSortKey] = useState("name");
   const [sortDir, setSortDir] = useState(1);
   const [filterType, setFilterType] = useState("all");
-  const [filterStatus, setFilterStatus] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("inventory");
   const [filterCond, setFilterCond] = useState("all");
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState(null);
@@ -142,7 +142,9 @@ export default function DealerModeView() {
   }
 
   function selectAll() {
-    if (selected.size === filtered.length) setSelected(new Set());
+    if (filtered.length === 0) {
+      setSelected(new Set());
+    } else if (selected.size === filtered.length) setSelected(new Set());
     else setSelected(new Set(filtered.map((c) => c.id)));
   }
 
@@ -318,7 +320,7 @@ export default function DealerModeView() {
           {exporting ? "Exporting..." : useServer ? `Export ${exportPlatformLabel} CSV` : "Export CSV"}
         </button>
         <button style={s.btnOutline} onClick={selectAll}>
-          {selected.size === filtered.length ? "Deselect All" : "Select All"} ({filtered.length})
+          {filtered.length > 0 && selected.size === filtered.length ? "Deselect All" : "Select All"} ({filtered.length})
         </button>
         <span style={{ color: "#6b7280", fontSize: 12, alignSelf: "center", marginLeft: "auto" }}>
           {useServer && selected.size > 0

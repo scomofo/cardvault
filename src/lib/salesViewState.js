@@ -57,3 +57,74 @@ export function summarizeMarketplaceSyncResults(results, marketplace = "marketpl
     message: `No ${marketplace} marketplace channel to sync`,
   };
 }
+
+export function summarizeMarketplaceCrosspostResults(results) {
+  const entries = Array.isArray(results) ? results : [];
+  const marketplaces = entries
+    .map((entry) => entry?.marketplace)
+    .filter(Boolean);
+
+  if (marketplaces.length === 0) {
+    return {
+      type: "info",
+      message: "No additional marketplaces were added",
+    };
+  }
+
+  return {
+    type: "success",
+    message: `Crosspost ready: ${marketplaces.join(", ")}`,
+  };
+}
+
+export function buildManualSaleFulfillment({
+  idFactory,
+  listing,
+  card,
+  feeRate,
+  salePrice,
+  trackingNumber,
+  soldAt = new Date().toISOString(),
+}) {
+  const id = idFactory();
+  const price = parseFloat(salePrice) || listing.startPrice;
+  const fees = Math.round(price * feeRate * 100) / 100;
+  const costBasis = parseFloat(card?.costBasis) || 0;
+  const shipping = parseFloat(listing.shipping) || 0;
+  const netProfit = Math.round((price - costBasis - fees - shipping) * 100) / 100;
+  const tracking = trackingNumber?.trim();
+
+  const sale = {
+    id,
+    cardId: listing.cardId,
+    cardName: listing.cardName,
+    set: listing.set,
+    salePrice: price,
+    costBasis,
+    platform: listing.platform,
+    fees,
+    shippingCost: shipping,
+    netProfit,
+    date: soldAt,
+    listingId: listing.id,
+    ...(tracking ? { trackingNumber: tracking } : {}),
+  };
+
+  const order = {
+    id: idFactory(),
+    saleId: id,
+    listingId: listing.id,
+    itemId: listing.cardId,
+    cardName: listing.cardName,
+    platform: listing.platform,
+    salePrice: price,
+    fees,
+    shippingCharge: shipping,
+    paymentStatus: "paid",
+    fulfillmentStatus: tracking ? "shipped" : "pending",
+    soldAt,
+    ...(tracking ? { trackingNumber: tracking } : {}),
+  };
+
+  return { sale, order };
+}

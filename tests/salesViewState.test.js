@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  buildManualSaleFulfillment,
+  summarizeMarketplaceCrosspostResults,
   loadServerSalesState,
   summarizeMarketplaceSyncResults,
 } from "../src/lib/salesViewState.js";
@@ -84,4 +86,57 @@ test("summarizeMarketplaceSyncResults reports clean status refreshes", () => {
       message: "Refreshed ebay status: active",
     },
   );
+});
+
+test("summarizeMarketplaceCrosspostResults names ready handoff channels", () => {
+  assert.deepEqual(
+    summarizeMarketplaceCrosspostResults([
+      { marketplace: "comc", status: "handoff_ready" },
+      { marketplace: "shopify", status: "active" },
+    ]),
+    {
+      type: "success",
+      message: "Crosspost ready: comc, shopify",
+    },
+  );
+});
+
+test("summarizeMarketplaceCrosspostResults explains empty plans", () => {
+  assert.deepEqual(
+    summarizeMarketplaceCrosspostResults([]),
+    {
+      type: "info",
+      message: "No additional marketplaces were added",
+    },
+  );
+});
+
+test("buildManualSaleFulfillment creates a pending shipment task for a confirmed sale", () => {
+  const now = "2026-06-11T06:40:00.000Z";
+  const result = buildManualSaleFulfillment({
+    idFactory: () => "fixed-id",
+    listing: {
+      id: "listing-1",
+      cardId: "item-1",
+      cardName: "Connor Bedard Young Guns",
+      set: "Upper Deck",
+      platform: "ebay",
+      shipping: 4.99,
+      startPrice: 79.99,
+    },
+    card: { id: "item-1", costBasis: 25 },
+    feeRate: 0.1312,
+    salePrice: "79.99",
+    trackingNumber: "",
+    soldAt: now,
+  });
+
+  assert.equal(result.sale.id, "fixed-id");
+  assert.equal(result.sale.cardId, "item-1");
+  assert.equal(result.sale.listingId, "listing-1");
+  assert.equal(result.sale.netProfit, 39.51);
+  assert.equal(result.order.saleId, "fixed-id");
+  assert.equal(result.order.listingId, "listing-1");
+  assert.equal(result.order.itemId, "item-1");
+  assert.equal(result.order.fulfillmentStatus, "pending");
 });

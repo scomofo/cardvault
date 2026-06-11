@@ -169,7 +169,7 @@ export default function BatchView() {
         <div className="fw-700" style={{ fontSize: 15, color: dragging ? "var(--acc)" : "var(--tx)" }}>
           {dragging ? "Drop photos here" : "Drag & drop card photos"}
         </div>
-        <div className="text-xs text-dim mt-4">Drop multiple images to auto-identify with AI</div>
+        <div className="text-xs text-dim mt-4">Drop photos to auto-identify, or add a manual card below</div>
       </div>
 
       <div className="card mb-12">
@@ -287,7 +287,7 @@ export default function BatchView() {
       <button className="btn btn-primary btn-full btn-lg" onClick={() => setQueue((p) => [...p, {
         id: uid(), frontImg: null, backImg: null, name: "", set: "", year: "", number: "",
         condition: cond, type, costBasis: "", priceEstimate: null, priceHistory: null,
-      }])}><IconPlus size={14} /> Add Card</button>
+      }])}><IconPlus size={14} /> Add Manual Card</button>
     </div>
   );
 }
