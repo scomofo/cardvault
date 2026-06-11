@@ -155,6 +155,13 @@ export const marketplacesAPI = {
   export: (data) => request("/marketplaces/export", { method: "POST", body: data }),
 };
 
+export const shippingProvidersAPI = {
+  connections: () => request("/shipping-provider-connections"),
+  connect: (data) => request("/shipping-provider-connections", { method: "POST", body: data }),
+  update: (id, data) => request(`/shipping-provider-connections/${id}`, { method: "PUT", body: data }),
+  test: (id, data = {}) => request(`/shipping-provider-connections/${id}/test`, { method: "POST", body: data }),
+};
+
 // Trades
 export const tradesAPI = {
   list: () => request("/trades"),
