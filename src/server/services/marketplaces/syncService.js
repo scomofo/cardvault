@@ -38,6 +38,27 @@ function roundCurrency(value) {
   return Number(Number(value || 0).toFixed(2));
 }
 
+function reconciliationMessage(reconciliation) {
+  const firstMessage = reconciliation?.conflicts?.find((conflict) => conflict?.message)?.message;
+  return `Sync needs review: ${firstMessage || "marketplace conflict detected"}`;
+}
+
+function persistBlockingReconciliationConflict(listingId, channelId, reconciliation) {
+  const message = reconciliationMessage(reconciliation);
+  run(
+    `UPDATE listing_channels
+     SET publish_error = ?, updated_at = datetime('now')
+     WHERE id = ?`,
+    [message, channelId],
+  );
+  run(
+    `UPDATE listings
+     SET publish_error = ?
+     WHERE id = ?`,
+    [message, listingId],
+  );
+}
+
 function normalizeCountry(value) {
   if (typeof value !== "string" || !value.trim()) return null;
   return value.trim().toUpperCase();
@@ -355,6 +376,7 @@ export async function syncMarketplaceListings(marketplace, listingId = null) {
     }
 
     if (!reconciliation.safeToApply) {
+      persistBlockingReconciliationConflict(listing.id, channel.id, reconciliation);
       results.push({ channelId: channel.id, synced: normalizedSynced, sale: null, reconciliation });
       continue;
     }

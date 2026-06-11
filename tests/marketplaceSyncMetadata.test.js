@@ -662,3 +662,88 @@ test("marketplace sync applies payload-native remote state", async () => {
     await rm(tempDir, { recursive: true, force: true });
   }
 });
+
+test("blocking reconciliation conflicts surface on channel and listing errors", async () => {
+  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-sync-conflict-visible-"));
+  const dbPath = join(tempDir, "cardvault.db");
+  const previousPath = process.env.CARDVAULT_DB_PATH;
+
+  process.env.CARDVAULT_DB_PATH = dbPath;
+
+  const database = await import("../src/server/database.js");
+  const registry = await import("../src/server/integrations/marketplaces/marketplaceRegistry.js");
+  const syncService = await import(`../src/server/services/marketplaces/syncService.js?ts=${Date.now()}`);
+
+  const db = database.initDB();
+  const adapter = registry.getMarketplaceAdapter("ebay");
+  const originalSync = adapter.sync;
+
+  try {
+    database.run(
+      `INSERT INTO user_items
+       (id, name, card_set, listing_status, sale_status, status)
+       VALUES (?,?,?,?,?,?)`,
+      ["sync-visible-conflict-item", "Bobby Orr", "Topps", "listed", "available", "listed"],
+    );
+
+    database.run(
+      `INSERT INTO listings
+       (id, card_id, card_name, card_set, platform, listing_title, listing_description, start_price, shipping, status, publish_status)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        "sync-visible-conflict-listing",
+        "sync-visible-conflict-item",
+        "Bobby Orr",
+        "Topps",
+        "ebay",
+        "Bobby Orr card",
+        "Visible reconciliation conflict test",
+        120,
+        4.99,
+        "active",
+        "active",
+      ],
+    );
+
+    database.run(
+      `INSERT INTO listing_channels
+       (id, listing_id, marketplace, external_listing_id, status, last_sync_at, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,datetime('now'),datetime('now'))`,
+      [
+        "sync-visible-conflict-channel",
+        "sync-visible-conflict-listing",
+        "ebay",
+        "ebay-local-id",
+        "active",
+        new Date().toISOString(),
+      ],
+    );
+
+    adapter.sync = async () => ({
+      marketplace: "ebay",
+      externalListingId: "ebay-remote-id",
+      status: "active",
+      syncedAt: "2026-06-11T04:00:00.000Z",
+      payload: { price: 120 },
+    });
+
+    const results = await syncService.syncMarketplaceListings("ebay", "sync-visible-conflict-listing");
+    assert.equal(results.length, 1);
+    assert.equal(results[0].reconciliation.hasBlockingConflict, true);
+
+    const channel = database.get(`SELECT * FROM listing_channels WHERE id = ?`, ["sync-visible-conflict-channel"]);
+    const listing = database.get(`SELECT * FROM listings WHERE id = ?`, ["sync-visible-conflict-listing"]);
+
+    assert.match(channel.publish_error, /^Sync needs review: Local external id ebay-local-id differs from remote ebay-remote-id/);
+    assert.equal(listing.publish_error, channel.publish_error);
+  } finally {
+    adapter.sync = originalSync;
+    db.close();
+    if (previousPath === undefined) {
+      delete process.env.CARDVAULT_DB_PATH;
+    } else {
+      process.env.CARDVAULT_DB_PATH = previousPath;
+    }
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
