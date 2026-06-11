@@ -35,6 +35,13 @@ test("shipping provider connection routes save, update, test, and sanitize crede
       apiKey: "secret-provider-key",
       metadata: {
         accountLabel: "Main shipping account",
+        authorization: "Bearer provider-authorization",
+        authHeader: "Bearer provider-auth-header",
+        bearer: "Bearer provider-bearer",
+        headers: {
+          Authorization: "Bearer nested-provider-authorization",
+          safeTrace: "trace-1",
+        },
         rates: [{
           service: "Canada Post Expedited Parcel",
           serviceCode: "DOM.EP",
@@ -51,14 +58,16 @@ test("shipping provider connection routes save, update, test, and sanitize crede
   assert.equal(createResult.payload.hasApiKey, true);
   assert.equal(createResult.payload.metadata.accountLabel, "Main shipping account");
   assert.equal(createResult.payload.metadata.rates[0].serviceCode, "DOM.EP");
-  assert.doesNotMatch(JSON.stringify(createResult.payload), /secret-provider-key|apiKey|api_key/);
+  assert.equal(createResult.payload.metadata.headers.safeTrace, "trace-1");
+  assert.doesNotMatch(JSON.stringify(createResult.payload), /secret-provider-key|apiKey|api_key|provider-authorization|provider-auth-header|provider-bearer|nested-provider-authorization/);
 
   const listResult = await requestJson(baseUrl, "/api/shipping-provider-connections");
   assert.equal(listResult.response.status, 200);
   assert.equal(listResult.payload.length, 1);
   assert.equal(listResult.payload[0].id, createResult.payload.id);
   assert.equal(listResult.payload[0].hasApiKey, true);
-  assert.doesNotMatch(JSON.stringify(listResult.payload), /secret-provider-key|apiKey|api_key/);
+  assert.equal(listResult.payload[0].metadata.headers.safeTrace, "trace-1");
+  assert.doesNotMatch(JSON.stringify(listResult.payload), /secret-provider-key|apiKey|api_key|provider-authorization|provider-auth-header|provider-bearer|nested-provider-authorization/);
 
   const updateResult = await requestJson(baseUrl, `/api/shipping-provider-connections/${createResult.payload.id}`, {
     method: "PUT",

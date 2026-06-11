@@ -4,7 +4,7 @@ import { selectConfiguredProviderService } from "../integrations/shipping/config
 import { requireJsonBody } from "../validation/common.js";
 import { uid } from "./shared.js";
 
-const SENSITIVE_METADATA_KEYS = /api[_-]?key|token|secret|password/i;
+const SENSITIVE_METADATA_KEYS = /api[_-]?key|token|secret|password|authorization|auth[_-]?header|bearer/i;
 
 function parseJson(value, fallback = {}) {
   if (!value) return fallback;
