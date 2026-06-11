@@ -157,7 +157,7 @@ export default function DealerModeView() {
     setBusy(true);
     try {
       const itemIds = cards.map((c) => c.id);
-      const result = await automationAPI.generateListings({ itemIds });
+      const result = await automationAPI.generateListings({ itemIds, platform: exportPlatform });
       const drafts = Array.isArray(result?.drafts) ? result.drafts : [];
       const generated = drafts.length || itemIds.length;
       const listedPlatformsByCardId = new Map();
@@ -178,7 +178,7 @@ export default function DealerModeView() {
           ? {
               ...card,
               status: "listed",
-              listedOn: Array.from(new Set([...(card.listedOn || []), ...(listedPlatformsByCardId.get(card.id) || ["ebay"])])),
+              listedOn: Array.from(new Set([...(card.listedOn || []), ...(listedPlatformsByCardId.get(card.id) || [exportPlatform])])),
             }
           : card
       )));
