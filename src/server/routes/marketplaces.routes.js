@@ -8,6 +8,7 @@ import {
   publishListingToMarketplace,
   reviseListingOnMarketplace,
   endListingOnMarketplace,
+  updateMarketplaceHandoffStatus,
 } from "../services/marketplaces/publishService.js";
 import { crosspostListing, getListingChannelState } from "../services/marketplaces/crosspostService.js";
 import { syncMarketplaceListings } from "../services/marketplaces/syncService.js";
@@ -96,6 +97,15 @@ export function registerMarketplaceRoutes(app) {
         return res.status(400).json({ error: "listingId and marketplace required" });
       }
       res.json(await endListingOnMarketplace(listingId, marketplace));
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/marketplaces/handoff/status", requireJsonBody, (req, res) => {
+    try {
+      const { listingId, marketplace, status, submissionReference, note } = req.body;
+      res.json(updateMarketplaceHandoffStatus({ listingId, marketplace, status, submissionReference, note }));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

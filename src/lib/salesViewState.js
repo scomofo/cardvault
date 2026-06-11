@@ -60,9 +60,11 @@ export function summarizeMarketplaceSyncResults(results, marketplace = "marketpl
 
 export function summarizeMarketplaceCrosspostResults(results) {
   const entries = Array.isArray(results) ? results : [];
-  const marketplaces = entries
-    .map((entry) => entry?.marketplace)
-    .filter(Boolean);
+  const marketplaces = Array.from(new Set(
+    entries
+      .map((entry) => entry?.marketplace)
+      .filter(Boolean),
+  ));
 
   if (marketplaces.length === 0) {
     return {
@@ -87,7 +89,8 @@ export function buildManualSaleFulfillment({
   soldAt = new Date().toISOString(),
 }) {
   const id = idFactory();
-  const price = parseFloat(salePrice) || listing.startPrice;
+  const parsedPrice = parseFloat(salePrice);
+  const price = Number.isNaN(parsedPrice) ? listing.startPrice : parsedPrice;
   const fees = Math.round(price * feeRate * 100) / 100;
   const costBasis = parseFloat(card?.costBasis) || 0;
   const shipping = parseFloat(listing.shipping) || 0;

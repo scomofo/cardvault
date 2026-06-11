@@ -23,6 +23,7 @@ export class ComcAdapter extends MarketplaceAdapter {
 
   mapForExport(listing) {
     const mapped = super.mapForExport(listing);
+    const submissionStatus = listing.handoff?.submissionStatus || "ready_to_ship";
     return {
       Card: mapped.title,
       AskPrice: mapped.price,
@@ -31,7 +32,7 @@ export class ComcAdapter extends MarketplaceAdapter {
       Marketplace: "COMC",
       CardVaultListingId: listing.id,
       SubmissionType: "comc_submission",
-      SubmissionStatus: "ready_to_ship",
+      SubmissionStatus: submissionStatus,
     };
   }
 }

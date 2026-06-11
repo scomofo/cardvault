@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useToast } from "./Toast";
 import { useData } from "../lib/DataContext";
 import { PLATFORMS, PLATFORM_FEES } from "../lib/constants";
@@ -27,6 +27,7 @@ export default function SalesFlow({ onNavigate }) {
   const [notifEnabled, setNotifEnabled] = useState(canNotify());
   const [actionQueue, setActionQueue] = useState([]);
   const [busyListingId, setBusyListingId] = useState(null);
+  const saleSubmissionRef = useRef(new Set());
 
   const [showEbayExport, setShowEbayExport] = useState(false);
 
@@ -98,41 +99,49 @@ export default function SalesFlow({ onNavigate }) {
   };
 
   const completeSale = async (listingId, salePrice, trackingNumber) => {
+    if (saleSubmissionRef.current.has(listingId)) return;
     const listing = listings.find((l) => l.id === listingId);
     if (!listing) return;
-    const feeRate = getFeeRate(listing.platform);
-    const card = catalog.find((c) => c.id === listing.cardId);
-    const { sale, order } = buildManualSaleFulfillment({
-      idFactory: uid,
-      listing,
-      card,
-      feeRate,
-      salePrice,
-      trackingNumber,
-    });
+    saleSubmissionRef.current.add(listingId);
+    setBusyListingId(listingId);
+    try {
+      const feeRate = getFeeRate(listing.platform);
+      const card = catalog.find((c) => c.id === listing.cardId);
+      const { sale, order } = buildManualSaleFulfillment({
+        idFactory: uid,
+        listing,
+        card,
+        feeRate,
+        salePrice,
+        trackingNumber,
+      });
 
-    if (useServer) {
-      try {
-        await salesAPI.create(sale);
-        await ordersAPI.create(order);
-        await refreshServerSalesState();
-      } catch (error) {
-        toast.error(`Sale save failed: ${error.message}`);
-        return;
+      if (useServer) {
+        try {
+          await salesAPI.create(sale);
+          await ordersAPI.create(order);
+          await refreshServerSalesState();
+        } catch (error) {
+          toast.error(`Sale save failed: ${error.message}`);
+          return;
+        }
+      } else {
+        setSales((p) => [sale, ...p]);
+        setOrders((p) => [order, ...p]);
+        setListings((p) => p.map((l) => l.id === listingId ? { ...l, status: "sold", soldPrice: sale.salePrice, soldDate: sale.date, trackingNumber: trackingNumber || null } : l));
+        setCatalog((p) => p.map((c) => c.id === listing.cardId ? { ...c, status: "sold", soldPrice: sale.salePrice, soldPlatform: listing.platform } : c));
       }
-    } else {
-      setSales((p) => [sale, ...p]);
-      setOrders((p) => [order, ...p]);
-      setListings((p) => p.map((l) => l.id === listingId ? { ...l, status: "sold", soldPrice: sale.salePrice, soldDate: sale.date, trackingNumber: trackingNumber || null } : l));
-      setCatalog((p) => p.map((c) => c.id === listing.cardId ? { ...c, status: "sold", soldPrice: sale.salePrice, soldPlatform: listing.platform } : c));
+      cancelNotificationTimer(listingId);
+      setSellingId(null);
+      setSellPrice("");
+      setSellTracking("");
+      setTab("orders");
+      sendNotification("Card sold!", `${listing.cardName} sold for ${fmtShort(sale.salePrice)} on ${listing.platform}. Net: ${fmtShort(sale.netProfit)}`);
+      toast.success(`Sold: ${listing.cardName}. Order queued for shipping.`);
+    } finally {
+      saleSubmissionRef.current.delete(listingId);
+      setBusyListingId(null);
     }
-    cancelNotificationTimer(listingId);
-    setSellingId(null);
-    setSellPrice("");
-    setSellTracking("");
-    setTab("orders");
-    sendNotification("Card sold!", `${listing.cardName} sold for ${fmtShort(sale.salePrice)} on ${listing.platform}. Net: ${fmtShort(sale.netProfit)}`);
-    toast.success(`Sold: ${listing.cardName}. Order queued for shipping.`);
   };
 
   const repriceListing = (listingId) => {

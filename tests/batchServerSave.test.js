@@ -17,3 +17,33 @@ test("dealer mode listing generation uses the selected export platform", async (
     /automationAPI\.generateListings\(\{\s*itemIds,\s*platform:\s*exportPlatform\s*\}\)/s,
   );
 });
+
+test("dealer mode select all is based on filtered item membership", async () => {
+  const dealerModeView = await readFile(new URL("../src/components/DealerModeView.jsx", import.meta.url), "utf8");
+
+  assert.match(
+    dealerModeView,
+    /filtered\.length\s*>\s*0\s*&&\s*filtered\.every\(\(c\)\s*=>\s*selected\.has\(c\.id\)\)/,
+  );
+  assert.doesNotMatch(dealerModeView, /selected\.size\s*===\s*filtered\.length/);
+});
+
+test("dealer mode selected listing export tolerates missing listings while loading", async () => {
+  const dealerModeView = await readFile(new URL("../src/components/DealerModeView.jsx", import.meta.url), "utf8");
+
+  assert.match(
+    dealerModeView,
+    /return\s+\(listings\s*\|\|\s*\[\]\)\s*\.\s*filter\(/,
+  );
+});
+
+test("sales flow blocks duplicate manual sale submissions while saving", async () => {
+  const salesFlow = await readFile(new URL("../src/components/SalesFlow.jsx", import.meta.url), "utf8");
+  const activeListingCard = await readFile(new URL("../src/components/ActiveListingCard.jsx", import.meta.url), "utf8");
+
+  assert.match(salesFlow, /useRef\(new Set\(\)\)/);
+  assert.match(salesFlow, /saleSubmissionRef\.current\.has\(listingId\)/);
+  assert.match(salesFlow, /saleSubmissionRef\.current\.add\(listingId\)/);
+  assert.match(salesFlow, /saleSubmissionRef\.current\.delete\(listingId\)/);
+  assert.match(activeListingCard, /disabled=\{busyListingId === l\.id\}/);
+});

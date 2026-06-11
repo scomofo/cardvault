@@ -11,6 +11,63 @@ function score({ base = 0, marketPrice = 0, ageDays = 0, urgency = 0, blockedCas
 export function getActionQueue() {
   const queue = [];
 
+  for (const order of all(`
+    SELECT
+      orders.id,
+      orders.sale_price,
+      orders.platform,
+      shipments.label_status,
+      shipments.status AS shipment_status
+    FROM orders
+    JOIN shipments
+      ON shipments.id = (
+        SELECT id
+        FROM shipments
+        WHERE order_id = orders.id
+        ORDER BY created_at DESC
+        LIMIT 1
+      )
+    WHERE orders.fulfillment_status = 'shipping_exception'
+       OR shipments.status = 'exception'
+       OR shipments.label_status = 'failed'
+  `)) {
+    queue.push({
+      queue: "shipping_exception",
+      item: order.id,
+      itemId: order.id,
+      itemName: null,
+      reason: `Shipping label for ${order.platform} order needs retry`,
+      suggestedAction: "retry_shipment",
+      priorityScore: score({ base: 240, marketPrice: Number(order.sale_price || 0), urgency: 70, risk: 40 }),
+      subjectType: "order",
+      subjectId: order.id,
+    });
+  }
+
+  for (const channel of all(`
+    SELECT
+      listing_channels.listing_id,
+      listing_channels.marketplace,
+      listing_channels.publish_error,
+      listings.card_name,
+      listings.start_price
+    FROM listing_channels
+    JOIN listings ON listings.id = listing_channels.listing_id
+    WHERE listing_channels.status = 'handoff_exception'
+  `)) {
+    queue.push({
+      queue: "marketplace_handoff_exception",
+      item: channel.card_name || channel.listing_id,
+      itemId: channel.listing_id,
+      itemName: channel.card_name || null,
+      reason: channel.publish_error || `${channel.marketplace} handoff needs retry`,
+      suggestedAction: "retry_handoff",
+      priorityScore: score({ base: 210, marketPrice: Number(channel.start_price || 0), urgency: 60, risk: 35 }),
+      subjectType: "listing",
+      subjectId: channel.listing_id,
+    });
+  }
+
   for (const order of all(`SELECT id, sale_price, platform FROM orders WHERE fulfillment_status IN ('pending', 'paid')`)) {
     queue.push({
       queue: "ship_now",

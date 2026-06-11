@@ -1,35 +1,9 @@
 import { get, run } from "../../database.js";
+import { pickShippingProviderService } from "../../integrations/shipping/shippingProviderRegistry.js";
 import { uid } from "../../routes/shared.js";
-
-const CONFIGURED_PROVIDER_STATUSES = ["configured", "connected", "active"];
-
-function parseJson(value, fallback = {}) {
-  if (!value) return fallback;
-  if (typeof value === "object") return value;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return fallback;
-  }
-}
 
 function firstDefined(...values) {
   return values.find((value) => value != null && value !== "");
-}
-
-function normalizeCountry(country) {
-  return String(country || "").trim().toUpperCase();
-}
-
-function slug(value) {
-  return String(value || "provider")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "") || "provider";
-}
-
-function renderTemplate(template, values) {
-  return String(template || "").replace(/\{([a-zA-Z0-9_]+)\}/g, (_match, key) => values[key] ?? "");
 }
 
 function pickService({ country = "CA", salePrice = 0, weightOz = 3 }) {
@@ -57,101 +31,16 @@ function buildTracking(service, prefixOverride) {
   return `${prefix}${Date.now().toString().slice(-10)}`;
 }
 
-function findProviderConnection(provider = "Canada Post") {
-  const placeholders = CONFIGURED_PROVIDER_STATUSES.map(() => "?").join(",");
-  return get(
-    `SELECT *
-     FROM shipping_provider_connections
-     WHERE lower(provider) = lower(?)
-       AND auth_status IN (${placeholders})
-     ORDER BY updated_at DESC, created_at DESC
-     LIMIT 1`,
-    [provider, ...CONFIGURED_PROVIDER_STATUSES],
-  );
-}
-
-function rateMatches(rate, { country, salePrice, weightOz }) {
-  const countries = Array.isArray(rate.countries) ? rate.countries.map(normalizeCountry) : [];
-  if (countries.length > 0 && !countries.includes(normalizeCountry(country))) return false;
-
-  const minWeightOz = Number(rate.minWeightOz ?? rate.min_weight_oz ?? 0);
-  const maxWeightOz = Number(rate.maxWeightOz ?? rate.max_weight_oz ?? Infinity);
-  if (Number.isFinite(minWeightOz) && weightOz < minWeightOz) return false;
-  if (Number.isFinite(maxWeightOz) && weightOz > maxWeightOz) return false;
-
-  const minSalePrice = Number(rate.minSalePrice ?? rate.min_sale_price ?? 0);
-  const maxSalePrice = Number(rate.maxSalePrice ?? rate.max_sale_price ?? Infinity);
-  if (Number.isFinite(minSalePrice) && salePrice < minSalePrice) return false;
-  if (Number.isFinite(maxSalePrice) && salePrice > maxSalePrice) return false;
-
-  return true;
-}
-
-function normalizeProviderRate(connection, metadata, rate, shipmentId) {
-  const cost = Number(firstDefined(rate.cost, rate.rate, rate.amount));
-  if (!Number.isFinite(cost)) return null;
-
-  const service = firstDefined(
-    rate.service,
-    rate.serviceName,
-    rate.service_name,
-    rate.name,
-    metadata.defaultService,
-    metadata.default_service,
-    `${connection.provider} Shipping`,
-  );
-  const serviceCode = firstDefined(rate.serviceCode, rate.service_code, rate.code, "");
-  const trackingPrefix = firstDefined(rate.trackingPrefix, rate.tracking_prefix, metadata.trackingPrefix, metadata.tracking_prefix);
-  const tracking = rate.tracking !== false;
-  const trackingNumber = tracking
-    ? firstDefined(rate.trackingNumber, rate.tracking_number, buildTracking(service, trackingPrefix))
-    : null;
-  const labelTemplate = firstDefined(
-    rate.labelUrlTemplate,
-    rate.label_url_template,
-    metadata.labelUrlTemplate,
-    metadata.label_url_template,
-    "labels/{shipmentId}.pdf",
-  );
-
-  return {
-    carrier: firstDefined(rate.carrier, metadata.carrier, connection.provider),
-    service,
-    serviceCode,
-    cost,
-    tracking,
-    trackingNumber,
-    labelUrl: renderTemplate(labelTemplate, {
-      provider: slug(connection.provider),
-      serviceCode: slug(serviceCode || service),
-      shipmentId,
-      trackingNumber: trackingNumber || "",
-    }),
-    source: "provider_connection",
-  };
-}
-
-function pickProviderService({ provider, country, salePrice, weightOz, shipmentId }) {
-  const connection = findProviderConnection(provider);
-  if (!connection) return null;
-
-  const metadata = parseJson(connection.metadata);
-  const rates = Array.isArray(metadata.rates) ? metadata.rates : [];
-  const candidates = rates
-    .filter((rate) => rate && typeof rate === "object" && rateMatches(rate, { country, salePrice, weightOz }))
-    .map((rate) => normalizeProviderRate(connection, metadata, rate, shipmentId))
-    .filter(Boolean)
-    .sort((a, b) => a.cost - b.cost);
-
-  return candidates[0] || null;
-}
-
 function syncOrderAndSaleShippingState(order, shipment) {
+  const fulfillmentStatus = shipment.status === "exception" || shipment.label_status === "failed"
+    ? "shipping_exception"
+    : "shipped";
+
   run(
     `UPDATE orders
-     SET fulfillment_status = 'shipped'
+     SET fulfillment_status = ?
      WHERE id = ?`,
-    [order.id],
+    [fulfillmentStatus, order.id],
   );
 
   run(
@@ -176,7 +65,10 @@ export function automateShipment(orderId, options = {}) {
     `SELECT * FROM shipments WHERE order_id = ? ORDER BY created_at DESC LIMIT 1`,
     [orderId],
   );
-  if (existingShipment) {
+  const retryFailedShipment = options.retry === true
+    && existingShipment
+    && (existingShipment.status === "exception" || existingShipment.label_status === "failed");
+  if (existingShipment && !retryFailedShipment) {
     syncOrderAndSaleShippingState(order, existingShipment);
     return existingShipment;
   }
@@ -185,7 +77,7 @@ export function automateShipment(orderId, options = {}) {
   const weightOz = Number(options.weightOz || 3);
   const packageType = options.packageType || "card_mailer";
   const shipmentId = uid();
-  const service = pickProviderService({
+  const service = pickShippingProviderService({
     provider: options.provider || "Canada Post",
     country,
     salePrice: Number(order.sale_price || 0),
@@ -197,11 +89,16 @@ export function automateShipment(orderId, options = {}) {
     weightOz,
   });
 
-  const trackingNumber = firstDefined(
-    service.trackingNumber,
-    service.tracking ? buildTracking(service.service) : null,
-  );
-  const labelUrl = service.labelUrl || `labels/${shipmentId}.pdf`;
+  const labelStatus = service.labelStatus || "created";
+  const shipmentStatus = service.shipmentStatus || "shipped";
+  const trackingNumber = labelStatus === "failed"
+    ? null
+    : firstDefined(
+      service.trackingNumber,
+      service.tracking ? buildTracking(service.service) : null,
+    );
+  const labelUrl = service.labelUrl || (labelStatus === "failed" ? null : `labels/${shipmentId}.pdf`);
+  const now = new Date().toISOString();
 
   run(
     `INSERT INTO shipments
@@ -215,15 +112,15 @@ export function automateShipment(orderId, options = {}) {
       service.carrier,
       service.service,
       packageType,
-      "created",
+      labelStatus,
       trackingNumber,
       service.cost,
       0.35,
       weightOz,
-      new Date().toISOString(),
-      new Date().toISOString(),
+      labelStatus === "failed" ? null : now,
+      shipmentStatus === "exception" ? null : now,
       labelUrl,
-      "shipped",
+      shipmentStatus,
       service.carrier,
     ],
   );
@@ -231,6 +128,8 @@ export function automateShipment(orderId, options = {}) {
   syncOrderAndSaleShippingState(order, {
     shipping_cost: service.cost,
     tracking_number: trackingNumber,
+    label_status: labelStatus,
+    status: shipmentStatus,
   });
 
   if (order.listing_id) {
@@ -248,15 +147,22 @@ export function automateShipment(orderId, options = {}) {
       [order.listing_id],
     );
     if (channel) {
+      const isException = shipmentStatus === "exception" || labelStatus === "failed";
       run(
         `INSERT INTO listing_channel_events (id, listing_channel_id, event_type, status, payload)
          VALUES (?,?,?,?,?)`,
         [
           uid(),
           channel.id,
-          "tracking_sync",
-          "shipped",
-          JSON.stringify({ trackingNumber, service: service.service, labelUrl }),
+          isException ? "shipping_exception" : "tracking_sync",
+          isException ? "failed" : "shipped",
+          JSON.stringify({
+            trackingNumber,
+            service: service.service,
+            labelUrl,
+            labelStatus,
+            error: service.purchaseError || undefined,
+          }),
         ],
       );
     }
