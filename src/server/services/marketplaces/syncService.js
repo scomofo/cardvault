@@ -329,7 +329,9 @@ export async function syncMarketplaceListings(marketplace, listingId = null) {
 
     let synced;
     try {
-      synced = await adapter.sync(listingForChannel);
+      // Guard against adapters that resolve to null/undefined — downstream
+      // reads (synced.externalListingId, the spread below) expect an object.
+      synced = (await adapter.sync(listingForChannel)) || {};
     } catch (error) {
       console.error(`Failed to sync ${channel.marketplace} listing ${listing.id}:`, error);
       run(

@@ -91,12 +91,13 @@ function readPayloadPriceHistory(payload = {}) {
   return Array.isArray(history) ? history : [];
 }
 
-function normalizeRemoteState(synced = {}) {
-  const payload = synced.payload && typeof synced.payload === "object" ? synced.payload : {};
+function normalizeRemoteState(synced) {
+  const safe = synced || {};
+  const payload = safe.payload && typeof safe.payload === "object" ? safe.payload : {};
   const status = firstDefined(
-    synced.status,
-    synced.listingStatus,
-    synced.listing_status,
+    safe.status,
+    safe.listingStatus,
+    safe.listing_status,
     payload.status,
     payload.listingStatus,
     payload.listing_status,
@@ -106,12 +107,12 @@ function normalizeRemoteState(synced = {}) {
 
   return {
     externalListingId: firstDefined(
-      synced.externalListingId,
-      synced.external_listing_id,
-      synced.listingId,
-      synced.listing_id,
-      synced.itemId,
-      synced.item_id,
+      safe.externalListingId,
+      safe.external_listing_id,
+      safe.listingId,
+      safe.listing_id,
+      safe.itemId,
+      safe.item_id,
       payload.externalListingId,
       payload.external_listing_id,
       payload.listingId,
@@ -123,21 +124,21 @@ function normalizeRemoteState(synced = {}) {
     ) || null,
     status: status == null ? null : String(status).toLowerCase(),
     price: firstDefined(
-      amountValue(synced.price),
-      amountValue(synced.currentPrice),
-      amountValue(synced.current_price),
+      amountValue(safe.price),
+      amountValue(safe.currentPrice),
+      amountValue(safe.current_price),
       readPayloadPrice(payload),
     ),
     updatedAt: firstDefined(
-      synced.remoteUpdatedAt,
-      synced.remote_updated_at,
-      synced.updatedAt,
-      synced.updated_at,
+      safe.remoteUpdatedAt,
+      safe.remote_updated_at,
+      safe.updatedAt,
+      safe.updated_at,
       readPayloadUpdatedAt(payload),
     ) || null,
     priceHistory: firstDefined(
-      synced.priceHistory,
-      synced.price_history,
+      safe.priceHistory,
+      safe.price_history,
       readPayloadPriceHistory(payload),
     ) || [],
   };

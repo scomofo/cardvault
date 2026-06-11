@@ -50,7 +50,7 @@ const STATUS_FILTERS = [
   { v: "sold", l: "Sold" },
 ];
 
-const EXPORTABLE_LISTING_STATUSES = new Set(["draft", "active", "revised"]);
+const EXPORTABLE_LISTING_STATUSES = new Set(["draft", "active", "revised", "handoff_ready"]);
 
 function daysSince(dateStr) {
   if (!dateStr) return 0;
@@ -120,15 +120,18 @@ export default function DealerModeView() {
 
   const selectedListingIds = useMemo(() => {
     const selectedCardIds = new Set(selectedCards.map((card) => card.id));
+    const platform = String(exportPlatform).toLowerCase();
     return listings
       .filter((listing) => {
         const cardId = listing.cardId || listing.card_id;
+        const listingPlatform = String(listing.platform || "").toLowerCase();
         const status = String(listing.publishStatus || listing.publish_status || listing.status || "").toLowerCase();
         return selectedCardIds.has(cardId)
+          && listingPlatform === platform
           && EXPORTABLE_LISTING_STATUSES.has(status);
       })
       .map((listing) => listing.id);
-  }, [listings, selectedCards]);
+  }, [listings, selectedCards, exportPlatform]);
 
   const exportPlatformLabel = DEALER_EXPORT_PLATFORMS.find((platform) => platform.v === exportPlatform)?.l || exportPlatform;
 
