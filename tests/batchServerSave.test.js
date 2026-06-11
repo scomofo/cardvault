@@ -50,6 +50,17 @@ test("settings exposes shipping provider connection management", async () => {
   assert.match(settings, /type="password"[\s\S]*value=\{newConn\.apiKey\}/);
 });
 
+test("settings keeps shipping provider countries input as raw text", async () => {
+  const settings = await readFile(new URL("../src/components/Settings.jsx", import.meta.url), "utf8");
+
+  assert.match(settings, /const\s+\[countriesText,\s*setCountriesText\]\s*=\s*useState\("CA"\)/);
+  assert.match(settings, /setNewConn\(cloneDefaultShippingProvider\(\)\);\s*setCountriesText\("CA"\);/s);
+  assert.match(settings, /value=\{countriesText\}/);
+  assert.match(settings, /const\s+val\s*=\s*e\.target\.value;\s*setCountriesText\(val\);/s);
+  assert.match(settings, /updateRate\(\{\s*countries:\s*val\.split\(","\)\.map\(\(entry\)\s*=>\s*entry\.trim\(\)\)\.filter\(Boolean\)\s*\}\)/s);
+  assert.doesNotMatch(settings, /value=\{rate\.countries\.join\(", "\)\}/);
+});
+
 test("sales flow blocks duplicate manual sale submissions while saving", async () => {
   const salesFlow = await readFile(new URL("../src/components/SalesFlow.jsx", import.meta.url), "utf8");
   const activeListingCard = await readFile(new URL("../src/components/ActiveListingCard.jsx", import.meta.url), "utf8");

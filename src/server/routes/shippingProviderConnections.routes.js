@@ -45,7 +45,7 @@ function normalizeMetadata(value) {
 }
 
 function serviceSummaries(metadata) {
-  const rates = Array.isArray(metadata.rates) ? metadata.rates : [];
+  const rates = metadata && Array.isArray(metadata.rates) ? metadata.rates : [];
   return rates
     .filter((rate) => rate && typeof rate === "object")
     .map((rate) => ({

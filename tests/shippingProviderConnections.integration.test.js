@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import Database from "better-sqlite3";
 
 import { startTestServer } from "./helpers/testServer.js";
 
@@ -98,4 +99,33 @@ test("shipping provider connection routes save, update, test, and sanitize crede
     tracking: true,
   });
   assert.doesNotMatch(JSON.stringify(testResult.payload), /replacement-secret|secret-provider-key|apiKey|api_key/);
+});
+
+test("shipping provider connection test handles null metadata without crashing", async (t) => {
+  const { baseUrl, dbPath } = await startTestServer(t, { dirPrefix: "cardvault-shipping-null-metadata-" });
+  const db = new Database(dbPath);
+  try {
+    db.prepare(
+      `INSERT INTO shipping_provider_connections
+       (id, provider, auth_status, api_key, metadata, created_at, updated_at)
+       VALUES (?,?,?,?,?,datetime('now'),datetime('now'))`,
+    ).run(
+      "null-metadata-provider",
+      "Canada Post",
+      "configured",
+      "secret-provider-key",
+      "null",
+    );
+  } finally {
+    db.close();
+  }
+
+  const testResult = await requestJson(baseUrl, "/api/shipping-provider-connections/null-metadata-provider/test", {
+    method: "POST",
+    body: { country: "CA", salePrice: 100, weightOz: 3 },
+  });
+
+  assert.equal(testResult.response.status, 400);
+  assert.match(testResult.payload.error, /At least one provider rate is required/i);
+  assert.doesNotMatch(JSON.stringify(testResult.payload), /secret-provider-key|apiKey|api_key/);
 });
