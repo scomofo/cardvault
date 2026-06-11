@@ -5,6 +5,22 @@ export class ComcAdapter extends MarketplaceAdapter {
     super("comc");
   }
 
+  async publish(listing) {
+    return {
+      marketplace: this.marketplace,
+      externalListingId: `comc-handoff-${String(listing.id).slice(0, 12)}`,
+      status: "handoff_ready",
+      payload: {
+        ...listing,
+        handoff: {
+          submissionType: "comc_submission",
+          submissionStatus: "ready_to_ship",
+        },
+      },
+      syncedAt: new Date().toISOString(),
+    };
+  }
+
   mapForExport(listing) {
     const mapped = super.mapForExport(listing);
     return {
@@ -13,6 +29,9 @@ export class ComcAdapter extends MarketplaceAdapter {
       Notes: mapped.description,
       Quantity: mapped.quantity,
       Marketplace: "COMC",
+      CardVaultListingId: listing.id,
+      SubmissionType: "comc_submission",
+      SubmissionStatus: "ready_to_ship",
     };
   }
 }

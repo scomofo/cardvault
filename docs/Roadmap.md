@@ -20,7 +20,7 @@ Status values:
 | Profit tracking | implemented | `services/dashboard/kpiService.js` |
 | Inventory aging alerts | implemented | `services/dashboard/actionQueueService.js` |
 
-**Shipping partial notes:** automation module exists and wires into the order flow, but carrier rate lookups and label purchase are stubbed in the adapter layer. Canada Post integration mentioned in the README is not yet live.
+**Shipping partial notes:** automation module wires into the order flow and now uses configured `shipping_provider_connections` rate/label metadata when available, with the deterministic Canada Post fallback preserved for offline use. Live carrier API purchase still requires real provider credentials and a network client.
 
 ## Tier 2 — Decision engine and automation
 
@@ -47,8 +47,8 @@ Items in this tier are planned but unscoped. They address the known limitations 
 | Grade risk distribution EV model | **implemented** | `services/decisions/gradeRiskModel.js` — 0.25/0.5/0.25 distribution around projected grade, value interpolated from PSA9/PSA10 comps. |
 | Marketplace fee model for routing | **implemented** | `services/decisions/marketplaceFees.js` — default rates for eBay (13.35%+$0.40), TCGplayer (10.25%), Shopify (2.9%+$0.30), COMC (20%), consignment (20%). `marketplaceDecision` now emits `expectedNet` in inputs/explanation. |
 | Confidence calibration from outcome history | **implemented** | `services/decisions/confidenceCalibration.js` — Laplace-smoothed acceptance rate per decision type, blended by `decisionStore.saveDecisions`. Falls back to the hardcoded prior until ≥5 resolved feedback rows exist. `GET /api/decisions/calibration` reports per-type samples. |
-| Cross-marketplace inventory sync reconciliation | **partial** | `services/marketplaces/syncReconciler.js` detects `external_id_mismatch`, `status_mismatch`, `price_mismatch`, and `missing_remote` conflicts. Blocking conflicts halt the apply step and log a `reconciliation_conflict` event. Adapter payloads are thin — richer remote data (updated timestamps, remote price history) is still needed for full parity. |
-| Consignment / COMC integrations | **partial** | `integrations/marketplaces/comcAdapter.js` and `consignmentAdapter.js` provide CSV handoff exports and channel tracking. External marketplace APIs are still stubbed. |
+| Cross-marketplace inventory sync reconciliation | **implemented** | `services/marketplaces/syncReconciler.js` detects `external_id_mismatch`, `status_mismatch`, `price_mismatch`, and `missing_remote` conflicts. Blocking conflicts halt the apply step and log a `reconciliation_conflict` event. Adapter-provided remote update timestamps and price history are normalized into sync results and persisted on `listing_channels`. |
+| Consignment / COMC integrations | **partial** | `integrations/marketplaces/comcAdapter.js` and `consignmentAdapter.js` now publish handoff-ready channels and export CardVault listing IDs plus submission status metadata for CSV handoff tracking. External marketplace APIs are still stubbed. |
 
 ## How to propose a change
 

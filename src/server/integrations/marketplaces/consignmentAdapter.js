@@ -5,6 +5,22 @@ export class ConsignmentAdapter extends MarketplaceAdapter {
     super("consignment");
   }
 
+  async publish(listing) {
+    return {
+      marketplace: this.marketplace,
+      externalListingId: `consignment-handoff-${String(listing.id).slice(0, 12)}`,
+      status: "handoff_ready",
+      payload: {
+        ...listing,
+        handoff: {
+          submissionType: "broker_consignment",
+          submissionStatus: "ready_for_review",
+        },
+      },
+      syncedAt: new Date().toISOString(),
+    };
+  }
+
   mapForExport(listing) {
     const mapped = super.mapForExport(listing);
     return {
@@ -14,6 +30,9 @@ export class ConsignmentAdapter extends MarketplaceAdapter {
       Notes: mapped.description,
       Quantity: mapped.quantity,
       Marketplace: "Consignment",
+      CardVaultListingId: listing.id,
+      SubmissionType: "broker_consignment",
+      SubmissionStatus: "ready_for_review",
     };
   }
 }

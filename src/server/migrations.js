@@ -88,6 +88,8 @@ export function runMigrations(db) {
   addColumnIfMissing("shipments", "label_url", "TEXT");
   addColumnIfMissing("shipments", "status", "TEXT DEFAULT 'pending'");
   addColumnIfMissing("shipments", "provider", "TEXT");
+  addColumnIfMissing("listing_channels", "remote_updated_at", "TEXT");
+  addColumnIfMissing("listing_channels", "remote_price_history", "TEXT");
 
   // Identification feedback payload (serialized clues + candidate snapshot)
   // used to retrain similarity weights from confirmations and corrections.

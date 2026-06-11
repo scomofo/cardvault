@@ -663,6 +663,102 @@ test("marketplace sync applies payload-native remote state", async () => {
   }
 });
 
+test("marketplace sync persists remote update timestamp and price history", async () => {
+  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-sync-remote-history-"));
+  const dbPath = join(tempDir, "cardvault.db");
+  const previousPath = process.env.CARDVAULT_DB_PATH;
+
+  process.env.CARDVAULT_DB_PATH = dbPath;
+
+  const database = await import("../src/server/database.js");
+  const registry = await import("../src/server/integrations/marketplaces/marketplaceRegistry.js");
+  const syncService = await import(`../src/server/services/marketplaces/syncService.js?ts=${Date.now()}`);
+
+  const db = database.initDB();
+  const adapter = registry.getMarketplaceAdapter("ebay");
+  const originalSync = adapter.sync;
+
+  try {
+    database.run(
+      `INSERT INTO user_items
+       (id, name, card_set, listing_status, sale_status, status)
+       VALUES (?,?,?,?,?,?)`,
+      ["sync-remote-history-item", "Mario Lemieux", "Upper Deck", "listed", "available", "listed"],
+    );
+
+    database.run(
+      `INSERT INTO listings
+       (id, card_id, card_name, card_set, platform, listing_title, listing_description, start_price, shipping, status, publish_status)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        "sync-remote-history-listing",
+        "sync-remote-history-item",
+        "Mario Lemieux",
+        "Upper Deck",
+        "ebay",
+        "Mario Lemieux card",
+        "Remote timestamp and price history test",
+        74.99,
+        4.99,
+        "active",
+        "active",
+      ],
+    );
+
+    database.run(
+      `INSERT INTO listing_channels
+       (id, listing_id, marketplace, external_listing_id, status, last_sync_at, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,datetime('now'),datetime('now'))`,
+      [
+        "sync-remote-history-channel",
+        "sync-remote-history-listing",
+        "ebay",
+        "ebay-remote-history",
+        "active",
+        new Date().toISOString(),
+      ],
+    );
+
+    adapter.sync = async (listing) => ({
+      marketplace: "ebay",
+      syncedAt: "2026-06-11T05:00:00.000Z",
+      payload: {
+        itemId: listing.external_listing_id,
+        listingStatus: "active",
+        lastModifiedDate: "2026-06-10T21:15:00.000Z",
+        priceHistory: [
+          { price: 74.99, changedAt: "2026-06-09T18:00:00.000Z" },
+          { price: 72.5, changedAt: "2026-06-10T21:15:00.000Z" },
+        ],
+        pricingSummary: {
+          price: { value: "74.99", currency: "CAD" },
+        },
+      },
+    });
+
+    const results = await syncService.syncMarketplaceListings("ebay", "sync-remote-history-listing");
+    assert.equal(results.length, 1);
+    assert.equal(results[0].synced.remoteUpdatedAt, "2026-06-10T21:15:00.000Z");
+    assert.equal(results[0].synced.priceHistory.length, 2);
+
+    const channel = database.get(`SELECT * FROM listing_channels WHERE id = ?`, ["sync-remote-history-channel"]);
+    const priceHistory = JSON.parse(channel.remote_price_history);
+
+    assert.equal(channel.remote_updated_at, "2026-06-10T21:15:00.000Z");
+    assert.equal(priceHistory.length, 2);
+    assert.equal(priceHistory[1].price, 72.5);
+  } finally {
+    adapter.sync = originalSync;
+    db.close();
+    if (previousPath === undefined) {
+      delete process.env.CARDVAULT_DB_PATH;
+    } else {
+      process.env.CARDVAULT_DB_PATH = previousPath;
+    }
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("blocking reconciliation conflicts surface on channel and listing errors", async () => {
   const tempDir = await mkdtemp(join(tmpdir(), "cardvault-sync-conflict-visible-"));
   const dbPath = join(tempDir, "cardvault.db");

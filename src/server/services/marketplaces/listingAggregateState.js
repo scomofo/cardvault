@@ -1,6 +1,7 @@
 import { all, get, run } from "../../database.js";
 
 const ACTIVE_CHANNEL_STATUSES = new Set(["draft", "active", "revised"]);
+const HANDOFF_CHANNEL_STATUSES = new Set(["handoff_ready"]);
 
 function deriveAggregateState(channels) {
   const statuses = channels
@@ -19,6 +20,10 @@ function deriveAggregateState(channels) {
       return { status: "active", publishStatus: "revised" };
     }
     return { status: "active", publishStatus: "draft" };
+  }
+
+  if (statuses.some((status) => HANDOFF_CHANNEL_STATUSES.has(status))) {
+    return { status: "active", publishStatus: "handoff_ready" };
   }
 
   if (statuses.includes("ended")) {

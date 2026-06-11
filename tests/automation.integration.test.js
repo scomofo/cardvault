@@ -260,6 +260,146 @@ test("shipping automation records tracking against the order marketplace channel
   }
 });
 
+test("shipping automation uses configured provider rate and label metadata", async (t) => {
+  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-automation-shipping-provider-"));
+  const dbPath = join(tempDir, "cardvault-test.db");
+  const port = 4100 + Math.floor(Math.random() * 100);
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  const server = spawn(process.execPath, ["server.js"], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      PORT: String(port),
+      CARDVAULT_DB_PATH: dbPath,
+    },
+    stdio: "ignore",
+  });
+
+  t.after(async () => {
+    if (!server.killed) {
+      server.kill("SIGTERM");
+    }
+    await new Promise((resolve) => server.once("exit", resolve));
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  await waitForServer(baseUrl);
+
+  const db = new Database(dbPath);
+  try {
+    db.prepare(
+      `INSERT INTO shipping_provider_connections
+       (id, provider, auth_status, api_key, metadata, created_at, updated_at)
+       VALUES (?,?,?,?,?,datetime('now'),datetime('now'))`,
+    ).run(
+      "canada-post-provider",
+      "Canada Post",
+      "configured",
+      "secret-provider-key",
+      JSON.stringify({
+        trackingPrefix: "CP",
+        rates: [
+          {
+            service: "Canada Post Expedited Parcel",
+            serviceCode: "DOM.EP",
+            countries: ["CA"],
+            maxWeightOz: 8,
+            cost: 9.75,
+            tracking: true,
+            labelUrlTemplate: "labels/canada-post/{shipmentId}.pdf",
+          },
+        ],
+      }),
+    );
+  } finally {
+    db.close();
+  }
+
+  await fetch(`${baseUrl}/api/items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "provider-shipping-item",
+      name: "Connor McDavid",
+      set: "Upper Deck",
+      listedOn: [],
+      priceHistory: [],
+      marketPrice: 120,
+      suggestedListingPrice: 129.99,
+    }),
+  });
+
+  const listingResponse = await fetch(`${baseUrl}/api/listings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "provider-shipping-listing",
+      cardId: "provider-shipping-item",
+      cardName: "Connor McDavid",
+      cardSet: "Upper Deck",
+      platform: "ebay",
+      listingTitle: "Connor McDavid card",
+      listingDescription: "Configured provider shipment test",
+      startPrice: 129.99,
+      status: "draft",
+    }),
+  });
+  assert.equal(listingResponse.status, 201);
+
+  const publishResponse = await fetch(`${baseUrl}/api/marketplaces/publish`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ listingId: "provider-shipping-listing", marketplace: "ebay" }),
+  });
+  assert.equal(publishResponse.status, 200);
+
+  const orderResponse = await fetch(`${baseUrl}/api/orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: "provider-shipping-order",
+      itemId: "provider-shipping-item",
+      listingId: "provider-shipping-listing",
+      platform: "ebay",
+      salePrice: 129.99,
+      destinationCountry: "CA",
+      paymentStatus: "paid",
+      fulfillmentStatus: "pending",
+    }),
+  });
+  assert.equal(orderResponse.status, 201);
+
+  const shipmentResponse = await fetch(`${baseUrl}/api/automation/shipping/provider-shipping-order`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ destinationCountry: "CA", weightOz: 6 }),
+  });
+  assert.equal(shipmentResponse.status, 200);
+  const shipmentPayload = await shipmentResponse.json();
+
+  assert.equal(shipmentPayload.service_level, "Canada Post Expedited Parcel");
+  assert.equal(shipmentPayload.shipping_cost, 9.75);
+  assert.match(shipmentPayload.tracking_number, /^CP/);
+  assert.match(shipmentPayload.label_url, /^labels\/canada-post\//);
+
+  const readonlyDb = new Database(dbPath, { readonly: true });
+  try {
+    const trackingEvent = readonlyDb.prepare(
+      `SELECT payload
+       FROM listing_channel_events
+       WHERE event_type = 'tracking_sync'
+       ORDER BY created_at DESC
+       LIMIT 1`,
+    ).get();
+    assert.ok(trackingEvent);
+    assert.match(trackingEvent.payload, /Canada Post Expedited Parcel/);
+    assert.doesNotMatch(trackingEvent.payload, /secret-provider-key/);
+  } finally {
+    readonlyDb.close();
+  }
+});
+
 test("shipping automation is idempotent for the same order", async (t) => {
   const tempDir = await mkdtemp(join(tmpdir(), "cardvault-automation-idempotent-"));
   const dbPath = join(tempDir, "cardvault-test.db");

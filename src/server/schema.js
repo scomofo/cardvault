@@ -367,6 +367,8 @@ export function createTables(db) {
       external_listing_id TEXT,
       status TEXT DEFAULT 'draft',
       last_sync_at TEXT,
+      remote_updated_at TEXT,
+      remote_price_history TEXT,
       publish_error TEXT,
       overrides TEXT,
       created_at TEXT DEFAULT (datetime('now')),

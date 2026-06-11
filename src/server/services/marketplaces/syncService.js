@@ -358,6 +358,8 @@ export async function syncMarketplaceListings(marketplace, listingId = null) {
       ...synced,
       externalListingId: synced.externalListingId || reconciliation.remoteState.externalListingId,
       status: synced.status || reconciliation.remoteState.status,
+      remoteUpdatedAt: synced.remoteUpdatedAt || synced.remote_updated_at || reconciliation.remoteState.updatedAt,
+      priceHistory: synced.priceHistory || synced.price_history || reconciliation.remoteState.priceHistory,
       syncedAt: synced.syncedAt || new Date().toISOString(),
     };
 
@@ -384,9 +386,20 @@ export async function syncMarketplaceListings(marketplace, listingId = null) {
     const result = runInImmediateTransaction(() => {
       run(
         `UPDATE listing_channels
-         SET status = ?, last_sync_at = ?, publish_error = NULL, updated_at = datetime('now')
+         SET status = ?,
+             last_sync_at = ?,
+             remote_updated_at = COALESCE(?, remote_updated_at),
+             remote_price_history = COALESCE(?, remote_price_history),
+             publish_error = NULL,
+             updated_at = datetime('now')
          WHERE id = ?`,
-        [normalizedSynced.status, normalizedSynced.syncedAt, channel.id],
+        [
+          normalizedSynced.status,
+          normalizedSynced.syncedAt,
+          normalizedSynced.remoteUpdatedAt || null,
+          normalizedSynced.priceHistory?.length ? JSON.stringify(normalizedSynced.priceHistory) : null,
+          channel.id,
+        ],
       );
       run(
         `INSERT INTO listing_channel_events (id, listing_channel_id, event_type, status, payload)

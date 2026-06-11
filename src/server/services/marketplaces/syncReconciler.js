@@ -61,6 +61,36 @@ function readPayloadPrice(payload = {}) {
   );
 }
 
+function readPayloadUpdatedAt(payload = {}) {
+  return firstDefined(
+    payload.updatedAt,
+    payload.updated_at,
+    payload.lastModifiedDate,
+    payload.last_modified_date,
+    payload.lastUpdatedAt,
+    payload.last_updated_at,
+    payload.listingUpdatedAt,
+    payload.listing_updated_at,
+    payload.revisionSummary?.lastModifiedDate,
+    payload.revision_summary?.last_modified_date,
+  ) || null;
+}
+
+function readPayloadPriceHistory(payload = {}) {
+  const firstOffer = Array.isArray(payload.offers) ? payload.offers[0] : null;
+  const history = firstDefined(
+    payload.priceHistory,
+    payload.price_history,
+    payload.priceChanges,
+    payload.price_changes,
+    payload.pricingSummary?.priceHistory,
+    payload.pricing_summary?.price_history,
+    firstOffer?.priceHistory,
+    firstOffer?.price_history,
+  );
+  return Array.isArray(history) ? history : [];
+}
+
 function normalizeRemoteState(synced = {}) {
   const payload = synced.payload && typeof synced.payload === "object" ? synced.payload : {};
   const status = firstDefined(
@@ -98,6 +128,18 @@ function normalizeRemoteState(synced = {}) {
       amountValue(synced.current_price),
       readPayloadPrice(payload),
     ),
+    updatedAt: firstDefined(
+      synced.remoteUpdatedAt,
+      synced.remote_updated_at,
+      synced.updatedAt,
+      synced.updated_at,
+      readPayloadUpdatedAt(payload),
+    ) || null,
+    priceHistory: firstDefined(
+      synced.priceHistory,
+      synced.price_history,
+      readPayloadPriceHistory(payload),
+    ) || [],
   };
 }
 

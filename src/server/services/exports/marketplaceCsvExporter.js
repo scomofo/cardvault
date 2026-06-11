@@ -51,7 +51,7 @@ export function exportListingsForMarketplace({ marketplace, listingIds = [], exp
          INNER JOIN listing_channels
            ON listing_channels.listing_id = listings.id
          WHERE listing_channels.marketplace = ?
-           AND listing_channels.status IN ('draft', 'active', 'revised')`,
+           AND listing_channels.status IN ('draft', 'active', 'revised', 'handoff_ready')`,
         [normalizedMarketplace],
       );
 

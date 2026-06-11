@@ -74,6 +74,9 @@ test("marketplace ecosystem routes publish crosspost sync and export listings", 
   assert.equal(channelsResponse.status, 200);
   const channelsPayload = await channelsResponse.json();
   assert.equal(channelsPayload.channels.length, 3);
+  const comcChannel = channelsPayload.channels.find((channel) => channel.marketplace === "comc");
+  assert.ok(comcChannel);
+  assert.equal(comcChannel.status, "handoff_ready");
 
   const exportResponse = await fetch(`${baseUrl}/api/marketplaces/export`, {
     method: "POST",
@@ -84,6 +87,17 @@ test("marketplace ecosystem routes publish crosspost sync and export listings", 
   const exportPayload = await exportResponse.json();
   assert.equal(exportPayload.marketplace, "shopify");
   assert.match(exportPayload.content, /Handle,Title,Body,Price/);
+
+  const comcExportResponse = await fetch(`${baseUrl}/api/marketplaces/export`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ marketplace: "comc", listingIds: ["phase4-listing"] }),
+  });
+  assert.equal(comcExportResponse.status, 200);
+  const comcExportPayload = await comcExportResponse.json();
+  assert.equal(comcExportPayload.marketplace, "comc");
+  assert.match(comcExportPayload.content, /Card,AskPrice,Notes,Quantity,Marketplace,CardVaultListingId,SubmissionType,SubmissionStatus/);
+  assert.match(comcExportPayload.content, /"phase4-listing","comc_submission","ready_to_ship"/);
 });
 
 test("marketplace export includes crossposted listings when no ids are supplied", async (t) => {
@@ -194,8 +208,8 @@ test("consignment marketplace supports publish and export handoff", async (t) =>
   assert.equal(publishResponse.status, 200);
   const publishPayload = await publishResponse.json();
   assert.equal(publishPayload.marketplace, "consignment");
-  assert.equal(publishPayload.status, "active");
-  assert.match(publishPayload.external_listing_id, /^consignment-/);
+  assert.equal(publishPayload.status, "handoff_ready");
+  assert.match(publishPayload.external_listing_id, /^consignment-handoff-/);
 
   const exportResponse = await fetch(`${baseUrl}/api/marketplaces/export`, {
     method: "POST",
@@ -205,8 +219,9 @@ test("consignment marketplace supports publish and export handoff", async (t) =>
   assert.equal(exportResponse.status, 200);
   const exportPayload = await exportResponse.json();
   assert.equal(exportPayload.marketplace, "consignment");
-  assert.match(exportPayload.content, /Card,DeclaredValue,ReservePrice,Notes,Quantity,Marketplace/);
+  assert.match(exportPayload.content, /Card,DeclaredValue,ReservePrice,Notes,Quantity,Marketplace,CardVaultListingId,SubmissionType,SubmissionStatus/);
   assert.match(exportPayload.content, /Connor Bedard high-end card/);
+  assert.match(exportPayload.content, /"consignment-listing","broker_consignment","ready_for_review"/);
 });
 
 test("crossposting does not overwrite the primary marketplace external id", async (t) => {
