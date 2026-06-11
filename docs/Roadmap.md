@@ -20,7 +20,7 @@ Status values:
 | Profit tracking | implemented | `services/dashboard/kpiService.js` |
 | Inventory aging alerts | implemented | `services/dashboard/actionQueueService.js` |
 
-**Shipping partial notes:** automation module wires into the order flow and now uses configured `shipping_provider_connections` rate/label metadata when available, with the deterministic Canada Post fallback preserved for offline use. Live carrier API purchase still requires real provider credentials and a network client.
+**Shipping partial notes:** automation module wires into the order flow, uses configured `shipping_provider_connections` rate/label metadata when available, and can execute live label purchases through a registered provider client or generic HTTP label endpoint. The deterministic Canada Post fallback remains for offline use. Carrier-specific production adapters still require real provider credentials and endpoint configuration.
 
 ## Tier 2 — Decision engine and automation
 

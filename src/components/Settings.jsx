@@ -415,6 +415,7 @@ function ShippingProviderConnectionsSection() {
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [newConn, setNewConn] = useState(cloneDefaultShippingProvider);
+  const [countriesText, setCountriesText] = useState("CA");
   const [saving, setSaving] = useState(false);
   const [testingId, setTestingId] = useState(null);
   const rate = newConn.metadata.rates[0];
@@ -443,6 +444,7 @@ function ShippingProviderConnectionsSection() {
       const result = await shippingProvidersAPI.connect(newConn);
       setConnections((current) => [result, ...current]);
       setNewConn(cloneDefaultShippingProvider());
+      setCountriesText("CA");
       setShowAdd(false);
       toast.success("Shipping provider saved");
     } catch (error) {
@@ -531,7 +533,16 @@ function ShippingProviderConnectionsSection() {
             </label>
             <label className="fld">
               <span className="text-xxs text-dim">Countries</span>
-              <input className="inp" value={rate.countries.join(", ")} onChange={(e) => updateRate({ countries: e.target.value.split(",").map((entry) => entry.trim()).filter(Boolean) })} placeholder="CA, US" />
+              <input
+                className="inp"
+                value={countriesText}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setCountriesText(val);
+                  updateRate({ countries: val.split(",").map((entry) => entry.trim()).filter(Boolean) });
+                }}
+                placeholder="CA, US"
+              />
             </label>
             <label className="fld">
               <span className="text-xxs text-dim">Cost</span>

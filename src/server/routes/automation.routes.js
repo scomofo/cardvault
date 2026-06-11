@@ -52,10 +52,10 @@ export function registerAutomationRoutes(app) {
     }
   });
 
-  app.post("/api/automation/shipping/:orderId", requireJsonBody, (req, res) => {
+  app.post("/api/automation/shipping/:orderId", requireJsonBody, async (req, res) => {
     try {
       if (!req.params.orderId) return res.status(400).json({ error: "orderId required" });
-      res.json(automateShipment(req.params.orderId, req.body));
+      res.json(await automateShipment(req.params.orderId, req.body));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

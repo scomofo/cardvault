@@ -1,7 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { selectConfiguredProviderService } from "../src/server/integrations/shipping/configuredProviderAdapter.js";
+import {
+  purchaseConfiguredProviderService,
+  selectConfiguredProviderService,
+} from "../src/server/integrations/shipping/configuredProviderAdapter.js";
+import {
+  registerShippingProviderClient,
+  resetShippingProviderClientsForTests,
+} from "../src/server/integrations/shipping/providerClientRegistry.js";
 
 test("configured shipping provider adapter normalizes purchased label metadata", () => {
   const service = selectConfiguredProviderService(
@@ -66,4 +73,54 @@ test("configured shipping provider adapter returns null when no rates match", ()
   );
 
   assert.equal(service, null);
+});
+
+test("configured shipping provider adapter purchases labels through a registered provider client", async () => {
+  resetShippingProviderClientsForTests();
+  let purchaseInput = null;
+  registerShippingProviderClient("unit-test-client", {
+    async purchaseLabel(input) {
+      purchaseInput = input;
+      return {
+        labelStatus: "purchased",
+        trackingNumber: "LIVE-TRACK-123",
+        labelUrl: "labels/live/{trackingNumber}/{shipmentId}.pdf",
+      };
+    },
+  });
+
+  const service = await purchaseConfiguredProviderService(
+    {
+      provider: "Canada Post",
+      api_key: "secret-provider-key",
+      metadata: {
+        providerClient: "unit-test-client",
+        rates: [{
+          service: "Canada Post Expedited Parcel",
+          serviceCode: "DOM.EP",
+          countries: ["CA"],
+          maxWeightOz: 8,
+          cost: 9.75,
+          tracking: true,
+        }],
+      },
+    },
+    {
+      country: "CA",
+      salePrice: 129.99,
+      weightOz: 6,
+      shipmentId: "shipment-live",
+      packageType: "card_mailer",
+      destinationPostalCode: "T2P",
+    },
+  );
+
+  assert.equal(service.labelStatus, "purchased");
+  assert.equal(service.trackingNumber, "LIVE-TRACK-123");
+  assert.equal(service.labelUrl, "labels/live/LIVE-TRACK-123/shipment-live.pdf");
+  assert.equal(purchaseInput.connection.api_key, "secret-provider-key");
+  assert.equal(purchaseInput.service.serviceCode, "DOM.EP");
+  assert.equal(purchaseInput.shipment.destinationPostalCode, "T2P");
+
+  resetShippingProviderClientsForTests();
 });

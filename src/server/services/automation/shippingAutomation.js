@@ -57,7 +57,7 @@ function syncOrderAndSaleShippingState(order, shipment) {
  * @param {object} [options]
  * @returns {object}
  */
-export function automateShipment(orderId, options = {}) {
+export async function automateShipment(orderId, options = {}) {
   const order = get(`SELECT * FROM orders WHERE id = ?`, [orderId]);
   if (!order) throw new Error("Order not found");
 
@@ -77,12 +77,14 @@ export function automateShipment(orderId, options = {}) {
   const weightOz = Number(options.weightOz || 3);
   const packageType = options.packageType || "card_mailer";
   const shipmentId = uid();
-  const service = pickShippingProviderService({
+  const service = await pickShippingProviderService({
     provider: options.provider || "Canada Post",
     country,
     salePrice: Number(order.sale_price || 0),
     weightOz,
     shipmentId,
+    packageType,
+    destinationPostalCode: order.destination_postal_code,
   }) || pickService({
     country,
     salePrice: Number(order.sale_price || 0),

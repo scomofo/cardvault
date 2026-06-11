@@ -1,5 +1,5 @@
 import { get } from "../../database.js";
-import { selectConfiguredProviderService } from "./configuredProviderAdapter.js";
+import { purchaseConfiguredProviderService } from "./configuredProviderAdapter.js";
 
 const CONFIGURED_PROVIDER_STATUSES = ["configured", "connected", "active"];
 
@@ -16,7 +16,22 @@ function findProviderConnection(provider = "Canada Post") {
   );
 }
 
-export function pickShippingProviderService({ provider = "Canada Post", country, salePrice, weightOz, shipmentId }) {
+export async function pickShippingProviderService({
+  provider = "Canada Post",
+  country,
+  salePrice,
+  weightOz,
+  shipmentId,
+  packageType,
+  destinationPostalCode,
+}) {
   const connection = findProviderConnection(provider);
-  return selectConfiguredProviderService(connection, { country, salePrice, weightOz, shipmentId });
+  return purchaseConfiguredProviderService(connection, {
+    country,
+    salePrice,
+    weightOz,
+    shipmentId,
+    packageType,
+    destinationPostalCode,
+  });
 }
