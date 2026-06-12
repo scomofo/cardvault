@@ -190,6 +190,63 @@ test("shipping provider connection test validates a dry-run label endpoint", asy
   assert.doesNotMatch(JSON.stringify(testResult.payload), /secret-provider-key|apiKey|api_key/);
 });
 
+test("shipping provider connection test honors snake_case auth metadata for dry-run label endpoint", async (t) => {
+  const labelEndpoint = await startLabelEndpoint(({ req, res }) => {
+    if (req.headers["x-api-key"] !== "secret-provider-key" || req.headers.authorization) {
+      res.writeHead(401, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Missing expected API key header" }));
+      return;
+    }
+
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      label_status: "purchased",
+      tracking_number: "SNAKE-TRACK-123",
+      label_url: "labels/snake/{trackingNumber}/{shipmentId}.pdf",
+    }));
+  });
+  t.after(labelEndpoint.close);
+
+  const { baseUrl } = await startTestServer(t, { dirPrefix: "cardvault-shipping-snake-auth-" });
+  const createResult = await requestJson(baseUrl, "/api/shipping-provider-connections", {
+    method: "POST",
+    body: {
+      provider: "Generic Ship API",
+      apiKey: "secret-provider-key",
+      metadata: {
+        label_purchase_url: labelEndpoint.url,
+        api_key_header: "X-API-KEY",
+        api_key_prefix: "",
+        rates: [{
+          service: "Tracked Card Mailer",
+          service_code: "TRACKED_CARD",
+          countries: ["CA"],
+          cost: 8.25,
+          tracking: true,
+        }],
+      },
+    },
+  });
+  assert.equal(createResult.response.status, 201);
+
+  const testResult = await requestJson(baseUrl, `/api/shipping-provider-connections/${createResult.payload.id}/test`, {
+    method: "POST",
+    body: { country: "CA", salePrice: 100, weightOz: 3 },
+  });
+
+  assert.equal(testResult.response.status, 200);
+  assert.equal(testResult.payload.ok, true);
+  assert.equal(testResult.payload.endpointValidation.ok, true);
+  assert.equal(testResult.payload.endpointValidation.labelStatus, "purchased");
+  assert.equal(testResult.payload.endpointValidation.trackingNumber, "SNAKE-TRACK-123");
+  assert.equal(testResult.payload.endpointValidation.labelUrl, "labels/snake/SNAKE-TRACK-123/connection-test.pdf");
+  assert.equal(labelEndpoint.requests.length, 1);
+  assert.equal(labelEndpoint.requests[0].headers["x-api-key"], "secret-provider-key");
+  assert.equal(labelEndpoint.requests[0].headers.authorization, undefined);
+  assert.equal(labelEndpoint.requests[0].payload.serviceCode, "TRACKED_CARD");
+  assert.doesNotMatch(JSON.stringify(testResult.payload), /secret-provider-key|apiKey|api_key/);
+});
+
 test("shipping provider connection test returns sanitized live endpoint failures", async (t) => {
   const longProxyError = `<html>${"x".repeat(220)}END-OF-LONG-PROXY-PAGE</html>`;
   const labelEndpoint = await startLabelEndpoint(({ res }) => {

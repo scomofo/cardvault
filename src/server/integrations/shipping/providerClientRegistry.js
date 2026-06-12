@@ -98,8 +98,8 @@ async function purchaseLabelViaHttp({ connection, metadata, rate, service, shipm
 
   const headers = { "Content-Type": "application/json" };
   if (connection.api_key) {
-    const headerName = String(firstDefined(rate.apiKeyHeader, metadata.apiKeyHeader, "Authorization"));
-    const rawPrefix = rate.apiKeyPrefix ?? metadata.apiKeyPrefix;
+    const headerName = String(firstDefined(rate.apiKeyHeader, rate.api_key_header, metadata.apiKeyHeader, metadata.api_key_header, "Authorization"));
+    const rawPrefix = rate.apiKeyPrefix ?? rate.api_key_prefix ?? metadata.apiKeyPrefix ?? metadata.api_key_prefix;
     const headerPrefix = rawPrefix != null ? String(rawPrefix) : "Bearer ";
     headers[headerName] = `${headerPrefix}${connection.api_key}`;
   }
