@@ -24,6 +24,7 @@ export async function pickShippingProviderService({
   shipmentId,
   packageType,
   destinationPostalCode,
+  destination,
 }) {
   const connection = findProviderConnection(provider);
   return purchaseConfiguredProviderService(connection, {
@@ -33,5 +34,6 @@ export async function pickShippingProviderService({
     shipmentId,
     packageType,
     destinationPostalCode,
+    destination,
   });
 }

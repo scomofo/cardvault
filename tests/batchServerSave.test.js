@@ -68,6 +68,17 @@ test("settings exposes Canada Post production connection profile defaults", asyn
   assert.match(settings, /apiKeyPrefix:\s*"Basic "/);
   assert.match(settings, /const\s+CANADA_POST_LABEL_URL_TEMPLATE\s*=\s*"labels\/canada-post\/\{trackingNumber\}\/\{shipmentId\}\.pdf"/);
   assert.match(settings, /labelUrlTemplate:\s*CANADA_POST_LABEL_URL_TEMPLATE/);
+  assert.match(settings, /customerNumber:\s*""/);
+  assert.match(settings, /contractId:\s*""/);
+  assert.match(settings, /originPostalCode:\s*""/);
+  assert.match(settings, /packageDimensionsCm:\s*\{/);
+  assert.match(settings, /Customer Number/);
+  assert.match(settings, /Contract ID/);
+  assert.match(settings, /Origin Postal/);
+  assert.match(settings, /Origin Address/);
+  assert.match(settings, /Origin City/);
+  assert.match(settings, /Origin Province/);
+  assert.match(settings, /Package L\/W\/H/);
   assert.match(settings, /Canada Post Sandbox/);
   assert.match(settings, /Canada Post Production/);
 });

@@ -272,6 +272,17 @@ test("shipping provider connection test applies Canada Post defaults and diagnos
       metadata: {
         environment: "production",
         labelPurchaseUrl: labelEndpoint.url,
+        customerNumber: "1234567",
+        contractId: "0045678",
+        originPostalCode: "T2P 1J9",
+        shipFrom: {
+          name: "CardVault",
+          addressLine1: "1 Arena Way",
+          city: "Calgary",
+          province: "AB",
+          postalCode: "T2P 1J9",
+        },
+        packageDimensionsCm: { length: 16, width: 11, height: 1 },
         rates: [{
           service: "Canada Post Expedited Parcel",
           serviceCode: "DOM.EP",
@@ -291,7 +302,7 @@ test("shipping provider connection test applies Canada Post defaults and diagnos
 
   const testResult = await requestJson(baseUrl, `/api/shipping-provider-connections/${createResult.payload.id}/test`, {
     method: "POST",
-    body: { country: "CA", salePrice: 100, weightOz: 3 },
+    body: { country: "CA", salePrice: 100, weightOz: 3, destinationPostalCode: "K1A 0B1" },
   });
 
   assert.equal(testResult.response.status, 200);
@@ -308,6 +319,8 @@ test("shipping provider connection test applies Canada Post defaults and diagnos
   assert.equal(labelEndpoint.requests.length, 1);
   assert.equal(labelEndpoint.requests[0].payload.provider, "Canada Post");
   assert.equal(labelEndpoint.requests[0].payload.dryRun, true);
+  assert.equal(labelEndpoint.requests[0].payload.destination.postalCode, "K1A0B1");
+  assert.match(labelEndpoint.requests[0].payload.canadaPost.createShipmentXml, /<service-code>DOM\.EP<\/service-code>/);
   assert.doesNotMatch(JSON.stringify(testResult.payload), /encoded-canada-post-key|apiKey|api_key|Basic/);
 });
 

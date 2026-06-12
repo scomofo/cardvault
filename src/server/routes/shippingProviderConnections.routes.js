@@ -72,6 +72,11 @@ function normalizeProviderMetadata(provider, value) {
     providerClient: firstDefined(metadata.providerClient, metadata.provider_client, "canada_post"),
     environment,
     apiBaseUrl: firstDefined(metadata.apiBaseUrl, metadata.api_base_url, CANADA_POST_ENDPOINTS[environment]),
+    customerNumber: firstDefined(metadata.customerNumber, metadata.customer_number, ""),
+    contractId: firstDefined(metadata.contractId, metadata.contract_id, ""),
+    originPostalCode: firstDefined(metadata.originPostalCode, metadata.origin_postal_code, ""),
+    shipFrom: metadata.shipFrom || metadata.ship_from || {},
+    packageDimensionsCm: metadata.packageDimensionsCm || metadata.package_dimensions_cm || { length: 16, width: 11, height: 1 },
     apiKeyHeader: firstDefined(metadata.apiKeyHeader, metadata.api_key_header, "Authorization"),
     apiKeyPrefix: metadata.apiKeyPrefix ?? metadata.api_key_prefix ?? "Basic ",
     labelUrlTemplate: firstDefined(metadata.labelUrlTemplate, metadata.label_url_template, CANADA_POST_LABEL_URL_TEMPLATE),
@@ -231,6 +236,8 @@ export function registerShippingProviderConnectionRoutes(app) {
         country: req.body.country || "CA",
         salePrice: Number(req.body.salePrice ?? req.body.sale_price ?? 100),
         weightOz: Number(req.body.weightOz ?? req.body.weight_oz ?? 3),
+        destinationPostalCode: req.body.destinationPostalCode || req.body.destination_postal_code || null,
+        destination: req.body.destination || null,
         shipmentId: "connection-test",
       });
       if (!validation) {

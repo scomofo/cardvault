@@ -13,7 +13,7 @@ async function postJson(baseUrl, path, body) {
   });
 }
 
-function insertShippingProvider(dbPath, metadata) {
+function insertShippingProvider(dbPath, metadata, provider = "Canada Post") {
   const db = new Database(dbPath);
   try {
     db.prepare(
@@ -22,7 +22,7 @@ function insertShippingProvider(dbPath, metadata) {
        VALUES (?,?,?,?,?,datetime('now'),datetime('now'))`,
     ).run(
       "canada-post-provider",
-      "Canada Post",
+      provider,
       "configured",
       "secret-provider-key",
       JSON.stringify(metadata),
@@ -126,10 +126,11 @@ test("shipping automation purchases provider labels through a live HTTP client",
       cost: 9.75,
       tracking: true,
     }],
-  });
+  }, "Generic Ship API");
   const { orderId } = await createOrderFixture(baseUrl, "live-purchased");
 
   const response = await postJson(baseUrl, `/api/automation/shipping/${orderId}`, {
+    provider: "Generic Ship API",
     destinationCountry: "CA",
     weightOz: 6,
   });
@@ -167,7 +168,7 @@ test("shipping automation purchases provider labels through a live HTTP client",
   }
 });
 
-test("shipping automation applies Canada Post label defaults for live purchases", async (t) => {
+test("shipping automation applies Canada Post native payload defaults for live purchases", async (t) => {
   const labelEndpoint = await startLabelEndpoint(({ res }) => {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({
@@ -179,9 +180,21 @@ test("shipping automation applies Canada Post label defaults for live purchases"
 
   const { baseUrl, dbPath } = await startTestServer(t, { dirPrefix: "cardvault-canada-post-live-label-" });
   insertShippingProvider(dbPath, {
+    providerClient: "canada_post",
     labelPurchaseUrl: labelEndpoint.url,
     apiKeyHeader: "X-CP-KEY",
     apiKeyPrefix: "",
+    customerNumber: "1234567",
+    contractId: "0045678",
+    originPostalCode: "T2P 1J9",
+    shipFrom: {
+      name: "CardVault",
+      addressLine1: "1 Arena Way",
+      city: "Calgary",
+      province: "AB",
+      postalCode: "T2P 1J9",
+    },
+    packageDimensionsCm: { length: 16, width: 11, height: 1 },
     rates: [{
       service: "Canada Post Expedited Parcel",
       serviceCode: "DOM.EP",
@@ -195,6 +208,7 @@ test("shipping automation applies Canada Post label defaults for live purchases"
 
   const response = await postJson(baseUrl, `/api/automation/shipping/${orderId}`, {
     destinationCountry: "CA",
+    destinationPostalCode: "K1A 0B1",
     weightOz: 6,
   });
   assert.equal(response.status, 200);
@@ -205,10 +219,49 @@ test("shipping automation applies Canada Post label defaults for live purchases"
   assert.equal(labelEndpoint.requests[0].headers.authorization, undefined);
   assert.equal(labelEndpoint.requests[0].payload.provider, "Canada Post");
   assert.equal(labelEndpoint.requests[0].payload.serviceCode, "DOM.EP");
+  assert.equal(labelEndpoint.requests[0].payload.destination.postalCode, "K1A0B1");
+  assert.match(labelEndpoint.requests[0].payload.canadaPost.createShipmentXml, /<service-code>DOM\.EP<\/service-code>/);
+  assert.match(labelEndpoint.requests[0].payload.canadaPost.createShipmentXml, /<postal-code>K1A0B1<\/postal-code>/);
   assert.equal(shipment.label_status, "purchased");
   assert.equal(shipment.status, "shipped");
   assert.equal(shipment.tracking_number, "CP-LIVE-123");
   assert.equal(shipment.label_url, `labels/canada-post/CP-LIVE-123/${shipment.id}.pdf`);
+});
+
+test("shipping automation blocks Canada Post native labels until shipment requirements are complete", async (t) => {
+  const { baseUrl, dbPath } = await startTestServer(t, { dirPrefix: "cardvault-canada-post-preflight-" });
+  insertShippingProvider(dbPath, {
+    providerClient: "canada_post",
+    rates: [{
+      service: "Canada Post Expedited Parcel",
+      serviceCode: "DOM.EP",
+      countries: ["CA"],
+      maxWeightOz: 8,
+      cost: 9.75,
+      tracking: true,
+    }],
+  });
+  const { orderId } = await createOrderFixture(baseUrl, "canada-post-preflight");
+
+  const response = await postJson(baseUrl, `/api/automation/shipping/${orderId}`, {
+    destinationCountry: "CA",
+    weightOz: 6,
+  });
+  assert.equal(response.status, 200);
+  const shipment = await response.json();
+
+  assert.equal(shipment.label_status, "failed");
+  assert.equal(shipment.status, "exception");
+  assert.equal(shipment.tracking_number, null);
+
+  const queueResponse = await fetch(`${baseUrl}/api/action-queue`);
+  assert.equal(queueResponse.status, 200);
+  const retryAction = (await queueResponse.json()).find((entry) => entry.subjectId === orderId);
+  assert.equal(retryAction.queue, "shipping_exception");
+  assert.match(retryAction.reason, /Canada Post shipment preflight blocked/);
+  assert.match(retryAction.reason, /customer number/);
+  assert.match(retryAction.reason, /destination postal code/);
+  assert.doesNotMatch(retryAction.reason, /secret-provider-key|apiKey|api_key/);
 });
 
 test("shipping automation times out slow live provider label purchases", async (t) => {
@@ -235,10 +288,11 @@ test("shipping automation times out slow live provider label purchases", async (
       cost: 9.75,
       tracking: true,
     }],
-  });
+  }, "Generic Ship API");
   const { orderId } = await createOrderFixture(baseUrl, "live-timeout");
 
   const response = await postJson(baseUrl, `/api/automation/shipping/${orderId}`, {
+    provider: "Generic Ship API",
     destinationCountry: "CA",
     weightOz: 6,
   });
@@ -283,10 +337,11 @@ test("shipping automation records live provider label failures for retry", async
       cost: 9.75,
       tracking: true,
     }],
-  });
+  }, "Generic Ship API");
   const { orderId } = await createOrderFixture(baseUrl, "live-failed");
 
   const response = await postJson(baseUrl, `/api/automation/shipping/${orderId}`, {
+    provider: "Generic Ship API",
     destinationCountry: "CA",
     weightOz: 6,
   });
@@ -343,10 +398,11 @@ test("shipping automation truncates non-json live provider label errors", async 
       cost: 9.75,
       tracking: true,
     }],
-  });
+  }, "Generic Ship API");
   const { orderId } = await createOrderFixture(baseUrl, "live-html-error");
 
   const response = await postJson(baseUrl, `/api/automation/shipping/${orderId}`, {
+    provider: "Generic Ship API",
     destinationCountry: "CA",
     weightOz: 6,
   });

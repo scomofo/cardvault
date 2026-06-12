@@ -202,6 +202,16 @@ export async function testConfiguredProviderService(connection, context) {
     purchasedLabel = failedPurchase(error);
   }
 
+  if (purchasedLabel == null) {
+    return {
+      service: candidate.service,
+      endpointValidation: {
+        attempted: false,
+        ok: true,
+      },
+    };
+  }
+
   const service = normalizeProviderRate(
     connection,
     candidate.metadata,

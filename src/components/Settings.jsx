@@ -400,6 +400,17 @@ const DEFAULT_SHIPPING_PROVIDER = {
     apiBaseUrl: CANADA_POST_ENDPOINTS.sandbox,
     labelPurchaseUrl: "",
     labelUrlTemplate: CANADA_POST_LABEL_URL_TEMPLATE,
+    customerNumber: "",
+    contractId: "",
+    originPostalCode: "",
+    shipFrom: {
+      name: "",
+      addressLine1: "",
+      city: "",
+      province: "",
+      postalCode: "",
+    },
+    packageDimensionsCm: { length: 16, width: 11, height: 1 },
     apiKeyHeader: "Authorization",
     apiKeyPrefix: "Basic ",
     labelPurchaseTimeoutMs: 10000,
@@ -418,6 +429,8 @@ function cloneDefaultShippingProvider() {
     ...DEFAULT_SHIPPING_PROVIDER,
     metadata: {
       ...DEFAULT_SHIPPING_PROVIDER.metadata,
+      shipFrom: { ...DEFAULT_SHIPPING_PROVIDER.metadata.shipFrom },
+      packageDimensionsCm: { ...DEFAULT_SHIPPING_PROVIDER.metadata.packageDimensionsCm },
       rates: DEFAULT_SHIPPING_PROVIDER.metadata.rates.map((rate) => ({ ...rate, countries: [...rate.countries] })),
     },
   };
@@ -456,6 +469,26 @@ function ShippingProviderConnectionsSection() {
     setNewConn((current) => ({
       ...current,
       metadata: { ...current.metadata, ...updates },
+    }));
+  };
+
+  const updatePackageDimensions = (updates) => {
+    setNewConn((current) => ({
+      ...current,
+      metadata: {
+        ...current.metadata,
+        packageDimensionsCm: { ...(current.metadata.packageDimensionsCm || {}), ...updates },
+      },
+    }));
+  };
+
+  const updateShipFrom = (updates) => {
+    setNewConn((current) => ({
+      ...current,
+      metadata: {
+        ...current.metadata,
+        shipFrom: { ...(current.metadata.shipFrom || {}), ...updates },
+      },
     }));
   };
 
@@ -562,6 +595,42 @@ function ShippingProviderConnectionsSection() {
               <span className="text-xxs text-dim">Account Label</span>
               <input className="inp" value={newConn.metadata.accountLabel} onChange={(e) => setNewConn((p) => ({ ...p, metadata: { ...p.metadata, accountLabel: e.target.value } }))} placeholder="Main shipping account" />
             </label>
+            {isCanadaPostProvider && (
+              <>
+                <label className="fld">
+                  <span className="text-xxs text-dim">Customer Number</span>
+                  <input className="inp" value={newConn.metadata.customerNumber} onChange={(e) => updateMetadata({ customerNumber: e.target.value })} placeholder="Canada Post customer #" />
+                </label>
+                <label className="fld">
+                  <span className="text-xxs text-dim">Contract ID</span>
+                  <input className="inp" value={newConn.metadata.contractId} onChange={(e) => updateMetadata({ contractId: e.target.value })} placeholder="Contract ID" />
+                </label>
+                <label className="fld">
+                  <span className="text-xxs text-dim">Origin Postal</span>
+                  <input className="inp" value={newConn.metadata.originPostalCode} onChange={(e) => updateMetadata({ originPostalCode: e.target.value })} placeholder="T2P 1J9" />
+                </label>
+                <label className="fld">
+                  <span className="text-xxs text-dim">Origin Address</span>
+                  <input className="inp" value={newConn.metadata.shipFrom?.addressLine1 || ""} onChange={(e) => updateShipFrom({ addressLine1: e.target.value })} placeholder="Street address" />
+                </label>
+                <label className="fld">
+                  <span className="text-xxs text-dim">Origin City</span>
+                  <input className="inp" value={newConn.metadata.shipFrom?.city || ""} onChange={(e) => updateShipFrom({ city: e.target.value })} placeholder="Calgary" />
+                </label>
+                <label className="fld">
+                  <span className="text-xxs text-dim">Origin Province</span>
+                  <input className="inp" value={newConn.metadata.shipFrom?.province || ""} onChange={(e) => updateShipFrom({ province: e.target.value })} placeholder="AB" />
+                </label>
+                <label className="fld">
+                  <span className="text-xxs text-dim">Package L/W/H</span>
+                  <div className="flex gap-6">
+                    <input className="inp" type="number" min="0.1" step="0.1" value={newConn.metadata.packageDimensionsCm?.length ?? ""} onChange={(e) => updatePackageDimensions({ length: e.target.value === "" ? "" : Number(e.target.value) })} placeholder="L cm" />
+                    <input className="inp" type="number" min="0.1" step="0.1" value={newConn.metadata.packageDimensionsCm?.width ?? ""} onChange={(e) => updatePackageDimensions({ width: e.target.value === "" ? "" : Number(e.target.value) })} placeholder="W cm" />
+                    <input className="inp" type="number" min="0.1" step="0.1" value={newConn.metadata.packageDimensionsCm?.height ?? ""} onChange={(e) => updatePackageDimensions({ height: e.target.value === "" ? "" : Number(e.target.value) })} placeholder="H cm" />
+                  </div>
+                </label>
+              </>
+            )}
             <label className="fld">
               <span className="text-xxs text-dim">API Key</span>
               <input className="inp" type="password" value={newConn.apiKey} onChange={(e) => setNewConn((p) => ({ ...p, apiKey: e.target.value }))} placeholder="Provider key" autoComplete="off" />
