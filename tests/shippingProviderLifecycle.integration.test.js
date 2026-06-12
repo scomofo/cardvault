@@ -56,6 +56,29 @@ async function startLabelEndpoint(handler) {
   };
 }
 
+async function startXmlEndpoint(handler) {
+  const requests = [];
+  const server = createServer((req, res) => {
+    let body = "";
+    req.setEncoding("utf8");
+    req.on("data", (chunk) => {
+      body += chunk;
+    });
+    req.on("end", () => {
+      requests.push({ method: req.method, url: req.url, headers: req.headers, body });
+      handler({ req, res, body });
+    });
+  });
+
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address();
+  return {
+    requests,
+    baseUrl: `http://127.0.0.1:${port}`,
+    close: () => new Promise((resolve) => server.close(resolve)),
+  };
+}
+
 async function createOrderFixture(baseUrl, idPrefix, salePrice = 129.99) {
   const itemId = `${idPrefix}-item`;
   const listingId = `${idPrefix}-listing`;
@@ -226,6 +249,70 @@ test("shipping automation applies Canada Post native payload defaults for live p
   assert.equal(shipment.status, "shipped");
   assert.equal(shipment.tracking_number, "CP-LIVE-123");
   assert.equal(shipment.label_url, `labels/canada-post/CP-LIVE-123/${shipment.id}.pdf`);
+});
+
+test("shipping automation submits native Canada Post Create Shipment XML directly", async (t) => {
+  const canadaPostEndpoint = await startXmlEndpoint(({ req, res, body }) => {
+    assert.equal(req.method, "POST");
+    assert.equal(req.url, "/rs/1234567/1234567/shipment");
+    assert.match(req.headers.accept, /application\/vnd\.cpc\.shipment-v8\+xml/);
+    assert.match(req.headers["content-type"], /application\/vnd\.cpc\.shipment-v8\+xml/);
+    assert.equal(req.headers.authorization, "Basic secret-provider-key");
+    assert.match(body, /<shipment xmlns="http:\/\/www\.canadapost\.ca\/ws\/shipment-v8">/);
+    assert.match(body, /<postal-code>K1A0B1<\/postal-code>/);
+
+    res.writeHead(200, { "Content-Type": "application/vnd.cpc.shipment-v8+xml" });
+    res.end(`<?xml version="1.0" encoding="UTF-8"?>
+      <shipment-info xmlns="http://www.canadapost.ca/ws/shipment-v8">
+        <shipment-id>123456789</shipment-id>
+        <tracking-pin>CP123456789CA</tracking-pin>
+        <links>
+          <link rel="label" href="${canadaPostEndpoint.baseUrl}/rs/artifact/label-123" media-type="application/pdf"/>
+        </links>
+      </shipment-info>`);
+  });
+  t.after(canadaPostEndpoint.close);
+
+  const { baseUrl, dbPath } = await startTestServer(t, { dirPrefix: "cardvault-canada-post-native-direct-" });
+  insertShippingProvider(dbPath, {
+    providerClient: "canada_post",
+    labelPurchaseMode: "native",
+    apiBaseUrl: canadaPostEndpoint.baseUrl,
+    customerNumber: "1234567",
+    contractId: "0045678",
+    originPostalCode: "T2P 1J9",
+    shipFrom: {
+      name: "CardVault",
+      addressLine1: "1 Arena Way",
+      city: "Calgary",
+      province: "AB",
+      postalCode: "T2P 1J9",
+    },
+    packageDimensionsCm: { length: 16, width: 11, height: 1 },
+    rates: [{
+      service: "Canada Post Expedited Parcel",
+      serviceCode: "DOM.EP",
+      countries: ["CA"],
+      maxWeightOz: 8,
+      cost: 9.75,
+      tracking: true,
+    }],
+  });
+  const { orderId } = await createOrderFixture(baseUrl, "canada-post-native-direct");
+
+  const response = await postJson(baseUrl, `/api/automation/shipping/${orderId}`, {
+    destinationCountry: "CA",
+    destinationPostalCode: "K1A 0B1",
+    weightOz: 6,
+  });
+  assert.equal(response.status, 200);
+  const shipment = await response.json();
+
+  assert.equal(canadaPostEndpoint.requests.length, 1);
+  assert.equal(shipment.label_status, "purchased");
+  assert.equal(shipment.status, "shipped");
+  assert.equal(shipment.tracking_number, "CP123456789CA");
+  assert.equal(shipment.label_url, `${canadaPostEndpoint.baseUrl}/rs/artifact/label-123`);
 });
 
 test("shipping automation blocks Canada Post native labels until shipment requirements are complete", async (t) => {

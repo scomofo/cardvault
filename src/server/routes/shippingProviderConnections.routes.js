@@ -72,6 +72,7 @@ function normalizeProviderMetadata(provider, value) {
     providerClient: firstDefined(metadata.providerClient, metadata.provider_client, "canada_post"),
     environment,
     apiBaseUrl: firstDefined(metadata.apiBaseUrl, metadata.api_base_url, CANADA_POST_ENDPOINTS[environment]),
+    labelPurchaseMode: firstDefined(metadata.labelPurchaseMode, metadata.label_purchase_mode, "proxy"),
     customerNumber: firstDefined(metadata.customerNumber, metadata.customer_number, ""),
     contractId: firstDefined(metadata.contractId, metadata.contract_id, ""),
     originPostalCode: firstDefined(metadata.originPostalCode, metadata.origin_postal_code, ""),

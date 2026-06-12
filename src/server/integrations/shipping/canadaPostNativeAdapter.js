@@ -1,4 +1,5 @@
 const SHIPMENT_NAMESPACE = "http://www.canadapost.ca/ws/shipment-v8";
+const MANIFEST_NAMESPACE = "http://www.canadapost.ca/ws/manifest-v8";
 const OZ_TO_KG = 0.028349523125;
 
 function firstDefined(...values) {
@@ -192,16 +193,21 @@ function extractTag(xml, tagName) {
 }
 
 function extractLink(xml, rel) {
+  return extractLinks(xml, rel)[0] || null;
+}
+
+function extractLinks(xml, rel) {
+  const links = [];
   const linkPattern = /<[^:>/]*:?link\b([^>]*)\/?>/gi;
   let match;
   while ((match = linkPattern.exec(String(xml || ""))) !== null) {
     const attrs = match[1];
     if (new RegExp(`\\brel=["']${rel}["']`, "i").test(attrs)) {
       const href = attrs.match(/\bhref=["']([^"']+)["']/i);
-      return href ? href[1] : null;
+      if (href) links.push(href[1]);
     }
   }
-  return null;
+  return links;
 }
 
 export function parseCanadaPostCreateShipmentResponse(xml) {
@@ -210,5 +216,74 @@ export function parseCanadaPostCreateShipmentResponse(xml) {
     trackingNumber: extractTag(xml, "tracking-pin"),
     labelUrl: extractLink(xml, "label"),
     selfUrl: extractLink(xml, "self"),
+  };
+}
+
+export function buildCanadaPostTransmitShipmentsPayload({ metadata = {}, groupIds = [] } = {}) {
+  const customerNumber = field(metadata, "customerNumber", "customer_number");
+  const mailedBy = firstDefined(field(metadata, "mailedBy", "mailed_by"), customerNumber);
+  const originPostalCode = normalizePostalCode(field(metadata, "originPostalCode", "origin_postal_code"));
+  const origin = shipFrom(metadata);
+  const groups = Array.isArray(groupIds) ? groupIds.filter(Boolean) : [];
+  const missing = [];
+
+  if (!customerNumber) missing.push("customerNumber");
+  if (!originPostalCode) missing.push("originPostalCode");
+  if (!groups.length) missing.push("groupIds");
+  if (
+    !firstDefined(origin.addressLine1, origin.address_line_1)
+    || !origin.city
+    || !firstDefined(origin.province, origin.provState, origin.prov_state)
+  ) {
+    missing.push("originAddress");
+  }
+
+  const preflight = {
+    ok: missing.length === 0,
+    missing,
+    message: missing.length
+      ? `Canada Post manifest preflight blocked: missing ${missing.map(missingLabel).join(", ")}`
+      : "Canada Post manifest preflight ready",
+  };
+  if (!preflight.ok) return { preflight, xml: null, endpointPath: null };
+
+  const paymentMethod = firstDefined(field(metadata, "paymentMethod", "payment_method"), "Account");
+  const detailedManifests = firstDefined(field(metadata, "detailedManifests", "detailed_manifests"), true);
+  const groupXml = groups.map((groupId) => tag("group-id", groupId, "      ")).join("\n");
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<transmit-set xmlns="${MANIFEST_NAMESPACE}">
+  <group-ids>
+${groupXml}
+  </group-ids>
+  <requested-shipping-point>${escapeXml(originPostalCode)}</requested-shipping-point>
+  <method-of-payment>${escapeXml(paymentMethod)}</method-of-payment>
+  <manifest-address>
+${tag("manifest-company", origin.company || origin.name || "CardVault", "    ")}
+${tag("phone-number", origin.phone || "0000000000", "    ")}
+    <address-details>
+${tag("address-line-1", origin.addressLine1 || origin.address_line_1 || "", "      ")}
+${tag("city", origin.city || "", "      ")}
+${tag("prov-state", origin.province || origin.provState || origin.prov_state || "", "      ")}
+${tag("postal-zip-code", normalizePostalCode(origin.postalCode || origin.postal_code || originPostalCode), "      ")}
+    </address-details>
+  </manifest-address>
+${tag("detailed-manifests", detailedManifests ? "true" : "false", "  ")}
+</transmit-set>`;
+
+  return {
+    preflight,
+    xml,
+    endpointPath: `/rs/${encodeURIComponent(String(customerNumber))}/${encodeURIComponent(String(mailedBy))}/manifest`,
+  };
+}
+
+export function parseCanadaPostManifestLinks(xml) {
+  return {
+    poNumber: extractTag(xml, "po-number"),
+    manifestUrls: extractLinks(xml, "manifest"),
+    artifactUrls: extractLinks(xml, "artifact"),
+    detailsUrls: extractLinks(xml, "details"),
+    selfUrls: extractLinks(xml, "self"),
   };
 }

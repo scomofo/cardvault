@@ -65,6 +65,7 @@ test("settings exposes Canada Post production connection profile defaults", asyn
   assert.match(settings, /production:\s*"https:\/\/soa-gw\.canadapost\.ca"/);
   assert.match(settings, /providerClient:\s*"canada_post"/);
   assert.match(settings, /environment:\s*"sandbox"/);
+  assert.match(settings, /labelPurchaseMode:\s*"proxy"/);
   assert.match(settings, /apiKeyPrefix:\s*"Basic "/);
   assert.match(settings, /const\s+CANADA_POST_LABEL_URL_TEMPLATE\s*=\s*"labels\/canada-post\/\{trackingNumber\}\/\{shipmentId\}\.pdf"/);
   assert.match(settings, /labelUrlTemplate:\s*CANADA_POST_LABEL_URL_TEMPLATE/);
@@ -81,6 +82,8 @@ test("settings exposes Canada Post production connection profile defaults", asyn
   assert.match(settings, /Package L\/W\/H/);
   assert.match(settings, /Canada Post Sandbox/);
   assert.match(settings, /Canada Post Production/);
+  assert.match(settings, /Purchase Mode/);
+  assert.match(settings, /Native Canada Post/);
 });
 
 test("settings keeps shipping provider countries input as raw text", async () => {

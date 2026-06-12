@@ -7,6 +7,9 @@ const DEFAULT_LABEL_PURCHASE_TIMEOUT_MS = 10000;
 const PROVIDER_ERROR_TEXT_LIMIT = 200;
 const CANADA_POST_CLIENT_KEY = "canada_post";
 const CANADA_POST_LABEL_URL_TEMPLATE = "labels/canada-post/{trackingNumber}/{shipmentId}.pdf";
+const CANADA_POST_SHIPMENT_MEDIA_TYPE = "application/vnd.cpc.shipment-v8+xml";
+const CANADA_POST_DEVELOPMENT_BASE_URL = "https://ct.soa-gw.canadapost.ca";
+const CANADA_POST_PRODUCTION_BASE_URL = "https://soa-gw.canadapost.ca";
 const CANADA_POST_HTTP_DEFAULTS = {
   apiKeyHeader: "Authorization",
   apiKeyPrefix: "Basic ",
@@ -143,6 +146,36 @@ function purchasePayload({ connection, service, shipment }) {
   };
 }
 
+function nativeCanadaPostEnabled(metadata = {}, rate = {}) {
+  const mode = firstDefined(
+    rate.labelPurchaseMode,
+    rate.label_purchase_mode,
+    metadata.labelPurchaseMode,
+    metadata.label_purchase_mode,
+  );
+  return String(mode || "").trim().toLowerCase() === "native";
+}
+
+function canadaPostBaseUrl(metadata = {}) {
+  const configuredBase = firstDefined(
+    metadata.canadaPostBaseUrl,
+    metadata.canada_post_base_url,
+    metadata.apiBaseUrl,
+    metadata.api_base_url,
+  );
+  const environment = String(firstDefined(metadata.environment, metadata.env, "sandbox")).toLowerCase();
+  const base = configuredBase || (environment === "production"
+    ? CANADA_POST_PRODUCTION_BASE_URL
+    : CANADA_POST_DEVELOPMENT_BASE_URL);
+  try {
+    const url = new URL(base);
+    if (!["http:", "https:"].includes(url.protocol)) return null;
+    return url;
+  } catch {
+    return null;
+  }
+}
+
 async function purchaseLabelViaHttp({ connection, metadata, rate, service, shipment, parseCanadaPostXml = false }) {
   const url = labelPurchaseUrl(metadata, rate);
   if (!url) return null;
@@ -186,13 +219,65 @@ async function purchaseLabelViaHttp({ connection, metadata, rate, service, shipm
   }
 }
 
+async function purchaseLabelViaNativeCanadaPost({ connection, metadata, rate, nativePayload }) {
+  const baseUrl = canadaPostBaseUrl(metadata);
+  if (!baseUrl) return failedPurchase("Invalid Canada Post base URL");
+
+  const endpoint = new URL(nativePayload.endpointPath, baseUrl);
+  const headers = {
+    Accept: CANADA_POST_SHIPMENT_MEDIA_TYPE,
+    "Content-Type": CANADA_POST_SHIPMENT_MEDIA_TYPE,
+  };
+  Object.assign(headers, providerAuthHeaders(connection, metadata, rate, "Basic "));
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), labelPurchaseTimeoutMs(metadata, rate));
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: nativePayload.xml,
+      signal: controller.signal,
+    });
+    const payload = await readProviderPayload(response, { parseCanadaPostXml: true });
+    if (!response.ok) {
+      return failedPurchase(firstDefined(payload.error, payload.message, `Canada Post Create Shipment failed (${response.status})`));
+    }
+    if (!payload.trackingNumber && !payload.providerShipmentId && !payload.labelUrl) {
+      return failedPurchase("Canada Post Create Shipment response did not include shipment or label details");
+    }
+    return {
+      labelStatus: "purchased",
+      shipmentStatus: "shipped",
+      ...payload,
+    };
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      return failedPurchase("Canada Post Create Shipment timed out");
+    }
+    return failedPurchase(error?.message);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 async function purchaseLabelViaCanadaPost(input) {
   const url = labelPurchaseUrl(input.metadata, input.rate);
-  if (!url && input.shipment?.dryRun === true) return null;
+  const nativeMode = nativeCanadaPostEnabled(input.metadata, input.rate);
+  if (input.shipment?.dryRun === true && (!url || nativeMode)) return null;
 
   const nativePayload = buildCanadaPostCreateShipmentPayload(input);
   if (!nativePayload.preflight.ok) {
     return failedPurchase(nativePayload.preflight.message);
+  }
+
+  if (nativeMode) {
+    return purchaseLabelViaNativeCanadaPost({
+      ...input,
+      metadata: mergeDefaults(CANADA_POST_HTTP_DEFAULTS, input.metadata),
+      nativePayload,
+    });
   }
 
   if (!url) {

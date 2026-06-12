@@ -20,7 +20,7 @@ Status values:
 | Profit tracking | implemented | `services/dashboard/kpiService.js` |
 | Inventory aging alerts | implemented | `services/dashboard/actionQueueService.js` |
 
-**Shipping partial notes:** automation module wires into the order flow, uses configured `shipping_provider_connections` rate/label metadata when available, and can execute live label purchases through a registered provider client or generic HTTP label endpoint. Canada Post now has first-class sandbox/production profile defaults, Basic-auth dry-run validation, redacted diagnostics, retry queue context, native shipment preflight, and Create Shipment XML payload/response helpers. The deterministic Canada Post fallback remains for offline use. A certified native Canada Post Create Shipment submission path still requires carrier approval plus manifest/transmit workflow completion.
+**Shipping partial notes:** automation module wires into the order flow, uses configured `shipping_provider_connections` rate/label metadata when available, and can execute live label purchases through a registered provider client or generic HTTP label endpoint. Canada Post now has first-class sandbox/production profile defaults, Basic-auth dry-run validation, redacted diagnostics, retry queue context, native shipment preflight, direct native Create Shipment XML submission when explicitly enabled, label response parsing, and Transmit Shipments/Get Manifest XML helper coverage. The deterministic Canada Post fallback remains for offline use. Full production completion still requires carrier approval plus an operator-facing manifest/transmit workflow that retrieves and stores manifest artifacts.
 
 ## Tier 2 — Decision engine and automation
 

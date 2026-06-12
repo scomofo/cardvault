@@ -11,7 +11,9 @@ import {
 } from "../src/server/integrations/shipping/providerClientRegistry.js";
 import {
   buildCanadaPostCreateShipmentPayload,
+  buildCanadaPostTransmitShipmentsPayload,
   parseCanadaPostCreateShipmentResponse,
+  parseCanadaPostManifestLinks,
   validateCanadaPostShipmentReadiness,
 } from "../src/server/integrations/shipping/canadaPostNativeAdapter.js";
 
@@ -226,4 +228,51 @@ test("Canada Post native adapter parses Create Shipment response links", () => {
   assert.equal(parsed.shipmentId, "123456789");
   assert.equal(parsed.trackingNumber, "CP123456789CA");
   assert.equal(parsed.labelUrl, "https://example.test/artifact/label-1");
+});
+
+test("Canada Post native adapter builds Transmit Shipments XML", () => {
+  const payload = buildCanadaPostTransmitShipmentsPayload({
+    metadata: {
+      customerNumber: "1234567",
+      originPostalCode: "T2P 1J9",
+      paymentMethod: "Account",
+      shipFrom: {
+        name: "CardVault Shipping",
+        addressLine1: "1 Arena Way",
+        city: "Calgary",
+        province: "AB",
+        postalCode: "T2P 1J9",
+        phone: "4035550101",
+      },
+    },
+    groupIds: ["cv-2026-06-12"],
+  });
+
+  assert.equal(payload.preflight.ok, true);
+  assert.equal(payload.endpointPath, "/rs/1234567/1234567/manifest");
+  assert.match(payload.xml, /<transmit-set xmlns="http:\/\/www\.canadapost\.ca\/ws\/manifest-v8">/);
+  assert.match(payload.xml, /<group-id>cv-2026-06-12<\/group-id>/);
+  assert.match(payload.xml, /<requested-shipping-point>T2P1J9<\/requested-shipping-point>/);
+  assert.match(payload.xml, /<method-of-payment>Account<\/method-of-payment>/);
+  assert.match(payload.xml, /<detailed-manifests>true<\/detailed-manifests>/);
+});
+
+test("Canada Post native adapter parses manifest and artifact links", () => {
+  const transmitLinks = parseCanadaPostManifestLinks(`<?xml version="1.0" encoding="UTF-8"?>
+    <manifests xmlns="http://www.canadapost.ca/ws/manifest-v8">
+      <link rel="manifest" href="https://example.test/rs/1234567/1234567/manifest/987" media-type="application/vnd.cpc.manifest-v8+xml"/>
+    </manifests>`);
+  const manifestLinks = parseCanadaPostManifestLinks(`<?xml version="1.0" encoding="UTF-8"?>
+    <manifest xmlns="http://www.canadapost.ca/ws/manifest-v8">
+      <po-number>PO12345</po-number>
+      <links>
+        <link rel="self" href="https://example.test/manifest/987" media-type="application/vnd.cpc.manifest-v8+xml"/>
+        <link rel="artifact" href="https://example.test/rs/artifact/manifest-987" media-type="application/pdf"/>
+      </links>
+    </manifest>`);
+
+  assert.deepEqual(transmitLinks.manifestUrls, ["https://example.test/rs/1234567/1234567/manifest/987"]);
+  assert.equal(manifestLinks.poNumber, "PO12345");
+  assert.deepEqual(manifestLinks.artifactUrls, ["https://example.test/rs/artifact/manifest-987"]);
+  assert.deepEqual(manifestLinks.selfUrls, ["https://example.test/manifest/987"]);
 });

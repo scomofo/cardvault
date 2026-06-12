@@ -398,6 +398,7 @@ const DEFAULT_SHIPPING_PROVIDER = {
     providerClient: "canada_post",
     environment: "sandbox",
     apiBaseUrl: CANADA_POST_ENDPOINTS.sandbox,
+    labelPurchaseMode: "proxy",
     labelPurchaseUrl: "",
     labelUrlTemplate: CANADA_POST_LABEL_URL_TEMPLATE,
     customerNumber: "",
@@ -588,6 +589,15 @@ function ShippingProviderConnectionsSection() {
                 <select className="inp" value={newConn.metadata.environment || "sandbox"} onChange={(e) => updateCanadaPostEnvironment(e.target.value)}>
                   <option value="sandbox">Canada Post Sandbox</option>
                   <option value="production">Canada Post Production</option>
+                </select>
+              </label>
+            )}
+            {isCanadaPostProvider && (
+              <label className="fld">
+                <span className="text-xxs text-dim">Purchase Mode</span>
+                <select className="inp" value={newConn.metadata.labelPurchaseMode || "proxy"} onChange={(e) => updateMetadata({ labelPurchaseMode: e.target.value })}>
+                  <option value="proxy">Certified Proxy Endpoint</option>
+                  <option value="native">Native Canada Post</option>
                 </select>
               </label>
             )}
