@@ -549,7 +549,7 @@ function ShippingProviderConnectionsSection() {
             </label>
             <label className="fld">
               <span className="text-xxs text-dim">Timeout (ms)</span>
-              <input className="inp" type="number" min="1" step="100" value={newConn.metadata.labelPurchaseTimeoutMs} onChange={(e) => updateMetadata({ labelPurchaseTimeoutMs: Number(e.target.value) || 10000 })} />
+              <input className="inp" type="number" min="1" step="100" value={newConn.metadata.labelPurchaseTimeoutMs} onChange={(e) => updateMetadata({ labelPurchaseTimeoutMs: e.target.value === "" ? "" : Number(e.target.value) })} />
             </label>
             <label className="fld">
               <span className="text-xxs text-dim">Service</span>
