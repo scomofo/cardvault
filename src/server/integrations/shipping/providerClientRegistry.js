@@ -1,5 +1,7 @@
 const DEFAULT_LABEL_PURCHASE_TIMEOUT_MS = 10000;
 const PROVIDER_ERROR_TEXT_LIMIT = 200;
+const CANADA_POST_CLIENT_KEY = "canada_post";
+const CANADA_POST_LABEL_URL_TEMPLATE = "labels/canada-post/{trackingNumber}/{shipmentId}.pdf";
 
 function firstDefined(...values) {
   return values.find((value) => value != null && value !== "");
@@ -14,17 +16,31 @@ function labelPurchaseUrl(metadata = {}, rate = {}) {
   );
 }
 
-function providerClientKey(metadata = {}, rate = {}) {
+function normalizeClientKey(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function normalizeProviderKey(value) {
+  return normalizeClientKey(value)
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function providerClientKey(connection = {}, metadata = {}, rate = {}) {
   const url = labelPurchaseUrl(metadata, rate);
-  return String(firstDefined(
+  const configuredClient = firstDefined(
     rate.providerClient,
     rate.provider_client,
     metadata.providerClient,
     metadata.provider_client,
     rate.client,
     metadata.client,
-    url ? "generic_http" : null,
-  ) || "").trim().toLowerCase();
+  );
+  if (configuredClient) return normalizeClientKey(configuredClient);
+  if (!url) return "";
+  return normalizeProviderKey(connection.provider) === CANADA_POST_CLIENT_KEY
+    ? CANADA_POST_CLIENT_KEY
+    : "generic_http";
 }
 
 function failedPurchase(error) {
@@ -129,7 +145,21 @@ async function purchaseLabelViaHttp({ connection, metadata, rate, service, shipm
   }
 }
 
+async function purchaseLabelViaCanadaPost(input) {
+  const purchase = await purchaseLabelViaHttp(input);
+  if (!purchase || purchase.error) return purchase;
+
+  const status = String(firstDefined(purchase.labelStatus, purchase.label_status, purchase.status, "")).toLowerCase();
+  if (status === "failed" || firstDefined(purchase.labelUrl, purchase.label_url)) return purchase;
+
+  return {
+    ...purchase,
+    labelUrl: CANADA_POST_LABEL_URL_TEMPLATE,
+  };
+}
+
 const builtinClients = new Map([
+  [CANADA_POST_CLIENT_KEY, { purchaseLabel: purchaseLabelViaCanadaPost }],
   ["generic_http", { purchaseLabel: purchaseLabelViaHttp }],
 ]);
 const providerClients = new Map(builtinClients);
@@ -150,7 +180,7 @@ export function resetShippingProviderClientsForTests() {
   }
 }
 
-export function resolveShippingProviderClient(_connection, metadata = {}, rate = {}) {
-  const key = providerClientKey(metadata, rate);
+export function resolveShippingProviderClient(connection, metadata = {}, rate = {}) {
+  const key = providerClientKey(connection, metadata, rate);
   return key ? providerClients.get(key) || null : null;
 }

@@ -167,6 +167,50 @@ test("shipping automation purchases provider labels through a live HTTP client",
   }
 });
 
+test("shipping automation applies Canada Post label defaults for live purchases", async (t) => {
+  const labelEndpoint = await startLabelEndpoint(({ res }) => {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      labelStatus: "purchased",
+      trackingNumber: "CP-LIVE-123",
+    }));
+  });
+  t.after(labelEndpoint.close);
+
+  const { baseUrl, dbPath } = await startTestServer(t, { dirPrefix: "cardvault-canada-post-live-label-" });
+  insertShippingProvider(dbPath, {
+    labelPurchaseUrl: labelEndpoint.url,
+    apiKeyHeader: "X-CP-KEY",
+    apiKeyPrefix: "",
+    rates: [{
+      service: "Canada Post Expedited Parcel",
+      serviceCode: "DOM.EP",
+      countries: ["CA"],
+      maxWeightOz: 8,
+      cost: 9.75,
+      tracking: true,
+    }],
+  });
+  const { orderId } = await createOrderFixture(baseUrl, "canada-post-live");
+
+  const response = await postJson(baseUrl, `/api/automation/shipping/${orderId}`, {
+    destinationCountry: "CA",
+    weightOz: 6,
+  });
+  assert.equal(response.status, 200);
+  const shipment = await response.json();
+
+  assert.equal(labelEndpoint.requests.length, 1);
+  assert.equal(labelEndpoint.requests[0].headers["x-cp-key"], "secret-provider-key");
+  assert.equal(labelEndpoint.requests[0].headers.authorization, undefined);
+  assert.equal(labelEndpoint.requests[0].payload.provider, "Canada Post");
+  assert.equal(labelEndpoint.requests[0].payload.serviceCode, "DOM.EP");
+  assert.equal(shipment.label_status, "purchased");
+  assert.equal(shipment.status, "shipped");
+  assert.equal(shipment.tracking_number, "CP-LIVE-123");
+  assert.equal(shipment.label_url, `labels/canada-post/CP-LIVE-123/${shipment.id}.pdf`);
+});
+
 test("shipping automation times out slow live provider label purchases", async (t) => {
   const labelEndpoint = await startLabelEndpoint(({ res }) => {
     setTimeout(() => {
