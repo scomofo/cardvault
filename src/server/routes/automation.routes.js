@@ -1,4 +1,7 @@
 import { requireJsonBody } from "../validation/common.js";
+import { requireProtectedConfigWrite } from "../auth.js";
+import { get } from "../database.js";
+import { transmitCanadaPostManifest } from "../integrations/shipping/providerClientRegistry.js";
 import { automateActionQueue } from "../services/automation/actionQueueAutomation.js";
 import { runAcquisitionDecisionAutomation } from "../services/automation/acquisitionDecisionAutomation.js";
 import { runAgingRepricingAutomation } from "../services/automation/agingRepricingAutomation.js";
@@ -12,6 +15,29 @@ import { automateListingGeneration } from "../services/automation/listingGenerat
 import { runMarketTrendAutomation } from "../services/automation/marketTrendAutomation.js";
 import { addItemToBatch, createIntakeBatch, finalizeIntakeBatch, processBatchItem } from "../services/automation/scanIntakeBulkAutomation.js";
 import { automateShipment } from "../services/automation/shippingAutomation.js";
+
+function parseJson(value, fallback = {}) {
+  if (!value) return fallback;
+  if (typeof value === "object") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function findCanadaPostConnection(connectionId) {
+  if (connectionId) {
+    return get("SELECT * FROM shipping_provider_connections WHERE id = ?", [connectionId]);
+  }
+  return get(
+    `SELECT *
+     FROM shipping_provider_connections
+     WHERE lower(provider) = 'canada post'
+     ORDER BY updated_at DESC, created_at DESC
+     LIMIT 1`,
+  );
+}
 
 export function registerAutomationRoutes(app) {
   app.post("/api/automation/identify-price/:itemId", requireJsonBody, async (req, res) => {
@@ -47,6 +73,21 @@ export function registerAutomationRoutes(app) {
   app.post("/api/automation/aging-repricing", requireJsonBody, (req, res) => {
     try {
       res.json(runAgingRepricingAutomation(req.body));
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/automation/shipping/canada-post/manifest", requireProtectedConfigWrite, requireJsonBody, async (req, res) => {
+    try {
+      const groupIds = Array.isArray(req.body.groupIds) ? req.body.groupIds.filter(Boolean) : [];
+      if (groupIds.length === 0) return res.status(400).json({ error: "groupIds required" });
+
+      const connection = findCanadaPostConnection(req.body.connectionId || req.body.connection_id || null);
+      if (!connection) return res.status(404).json({ error: "Canada Post shipping provider connection not found" });
+
+      const metadata = parseJson(connection.metadata);
+      res.json(await transmitCanadaPostManifest({ connection, metadata, groupIds }));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

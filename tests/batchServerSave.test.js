@@ -57,6 +57,13 @@ test("settings exposes shipping provider connection management", async () => {
   assert.match(settings, /type="password"[\s\S]*value=\{newConn\.apiKey\}/);
 });
 
+test("automation API exposes Canada Post manifest transmit helper", async () => {
+  const api = await readFile(new URL("../src/lib/api.js", import.meta.url), "utf8");
+
+  assert.match(api, /transmitCanadaPostManifest:\s*\(data\)\s*=>/);
+  assert.match(api, /\/automation\/shipping\/canada-post\/manifest/);
+});
+
 test("settings exposes Canada Post production connection profile defaults", async () => {
   const settings = await readFile(new URL("../src/components/Settings.jsx", import.meta.url), "utf8");
 

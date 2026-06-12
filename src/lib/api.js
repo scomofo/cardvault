@@ -121,6 +121,8 @@ export const automationAPI = {
     request("/automation/pricing/refresh-all", { method: "POST", body: data }),
   automateShipment: (orderId, data) =>
     request(`/automation/shipping/${orderId}`, { method: "POST", body: data }),
+  transmitCanadaPostManifest: (data) =>
+    request("/automation/shipping/canada-post/manifest", { method: "POST", body: data }),
   actionQueue: () => request("/automation/action-queue"),
   duplicates: (params) => request(`/automation/duplicates${toQuery(params)}`),
   marketTrends: () => request("/automation/market-trends", { method: "POST" }),

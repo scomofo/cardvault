@@ -315,6 +315,87 @@ test("shipping automation submits native Canada Post Create Shipment XML directl
   assert.equal(shipment.label_url, `${canadaPostEndpoint.baseUrl}/rs/artifact/label-123`);
 });
 
+test("shipping automation transmits Canada Post manifest and retrieves artifacts", async (t) => {
+  const canadaPostEndpoint = await startXmlEndpoint(({ req, res, body }) => {
+    if (req.method === "POST" && req.url === "/rs/1234567/1234567/manifest") {
+      assert.match(req.headers.accept, /application\/vnd\.cpc\.manifest-v8\+xml/);
+      assert.match(req.headers["content-type"], /application\/vnd\.cpc\.manifest-v8\+xml/);
+      assert.equal(req.headers.authorization, "Basic secret-provider-key");
+      assert.match(body, /<group-id>cv-2026-06-12<\/group-id>/);
+      res.writeHead(200, { "Content-Type": "application/vnd.cpc.manifest-v8+xml" });
+      res.end(`<?xml version="1.0" encoding="UTF-8"?>
+        <manifests xmlns="http://www.canadapost.ca/ws/manifest-v8">
+          <link rel="manifest" href="${canadaPostEndpoint.baseUrl}/rs/1234567/1234567/manifest/987" media-type="application/vnd.cpc.manifest-v8+xml"/>
+        </manifests>`);
+      return;
+    }
+
+    if (req.method === "GET" && req.url === "/rs/1234567/1234567/manifest/987") {
+      assert.equal(req.headers.authorization, "Basic secret-provider-key");
+      res.writeHead(200, { "Content-Type": "application/vnd.cpc.manifest-v8+xml" });
+      res.end(`<?xml version="1.0" encoding="UTF-8"?>
+        <manifest xmlns="http://www.canadapost.ca/ws/manifest-v8">
+          <po-number>PO12345</po-number>
+          <links>
+            <link rel="artifact" href="${canadaPostEndpoint.baseUrl}/rs/artifact/manifest-987" media-type="application/pdf"/>
+          </links>
+        </manifest>`);
+      return;
+    }
+
+    if (req.method === "GET" && req.url === "/rs/artifact/manifest-987") {
+      assert.equal(req.headers.authorization, "Basic secret-provider-key");
+      res.writeHead(200, { "Content-Type": "application/pdf" });
+      res.end("%PDF-1.4 manifest");
+      return;
+    }
+
+    res.writeHead(404, { "Content-Type": "text/plain" });
+    res.end("not found");
+  });
+  t.after(canadaPostEndpoint.close);
+
+  const { baseUrl, dbPath } = await startTestServer(t, { dirPrefix: "cardvault-canada-post-manifest-" });
+  insertShippingProvider(dbPath, {
+    providerClient: "canada_post",
+    labelPurchaseMode: "native",
+    apiBaseUrl: canadaPostEndpoint.baseUrl,
+    customerNumber: "1234567",
+    originPostalCode: "T2P 1J9",
+    shipFrom: {
+      name: "CardVault",
+      addressLine1: "1 Arena Way",
+      city: "Calgary",
+      province: "AB",
+      postalCode: "T2P 1J9",
+    },
+    rates: [{
+      service: "Canada Post Expedited Parcel",
+      serviceCode: "DOM.EP",
+      countries: ["CA"],
+      maxWeightOz: 8,
+      cost: 9.75,
+      tracking: true,
+    }],
+  });
+
+  const response = await postJson(baseUrl, "/api/automation/shipping/canada-post/manifest", {
+    connectionId: "canada-post-provider",
+    groupIds: ["cv-2026-06-12"],
+  });
+  assert.equal(response.status, 200);
+  const manifest = await response.json();
+
+  assert.equal(canadaPostEndpoint.requests.length, 3);
+  assert.deepEqual(manifest.groupIds, ["cv-2026-06-12"]);
+  assert.deepEqual(manifest.manifestUrls, [`${canadaPostEndpoint.baseUrl}/rs/1234567/1234567/manifest/987`]);
+  assert.deepEqual(manifest.artifactUrls, [`${canadaPostEndpoint.baseUrl}/rs/artifact/manifest-987`]);
+  assert.equal(manifest.poNumbers[0], "PO12345");
+  assert.equal(manifest.artifacts[0].contentType, "application/pdf");
+  assert.equal(Buffer.from(manifest.artifacts[0].base64, "base64").toString("utf8"), "%PDF-1.4 manifest");
+  assert.equal(JSON.stringify(manifest).includes("secret-provider-key"), false);
+});
+
 test("shipping automation blocks Canada Post native labels until shipment requirements are complete", async (t) => {
   const { baseUrl, dbPath } = await startTestServer(t, { dirPrefix: "cardvault-canada-post-preflight-" });
   insertShippingProvider(dbPath, {

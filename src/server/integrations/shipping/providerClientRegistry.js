@@ -1,6 +1,8 @@
 import {
   buildCanadaPostCreateShipmentPayload,
+  buildCanadaPostTransmitShipmentsPayload,
   parseCanadaPostCreateShipmentResponse,
+  parseCanadaPostManifestLinks,
 } from "./canadaPostNativeAdapter.js";
 
 const DEFAULT_LABEL_PURCHASE_TIMEOUT_MS = 10000;
@@ -8,6 +10,7 @@ const PROVIDER_ERROR_TEXT_LIMIT = 200;
 const CANADA_POST_CLIENT_KEY = "canada_post";
 const CANADA_POST_LABEL_URL_TEMPLATE = "labels/canada-post/{trackingNumber}/{shipmentId}.pdf";
 const CANADA_POST_SHIPMENT_MEDIA_TYPE = "application/vnd.cpc.shipment-v8+xml";
+const CANADA_POST_MANIFEST_MEDIA_TYPE = "application/vnd.cpc.manifest-v8+xml";
 const CANADA_POST_DEVELOPMENT_BASE_URL = "https://ct.soa-gw.canadapost.ca";
 const CANADA_POST_PRODUCTION_BASE_URL = "https://soa-gw.canadapost.ca";
 const CANADA_POST_HTTP_DEFAULTS = {
@@ -260,6 +263,130 @@ async function purchaseLabelViaNativeCanadaPost({ connection, metadata, rate, na
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+function resolveCanadaPostLink(baseUrl, href) {
+  try {
+    const url = new URL(href, baseUrl);
+    if (!["http:", "https:"].includes(url.protocol)) return null;
+    if (url.origin !== baseUrl.origin) return null;
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchCanadaPostResource({ url, headers, timeoutMs, accept }) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { ...headers, Accept: accept },
+      signal: controller.signal,
+    });
+    const contentType = response.headers.get("content-type") || "";
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (!response.ok) {
+      const errorText = truncateProviderError(bytes.toString("utf8"));
+      throw new Error(errorText || `Canada Post request failed (${response.status})`);
+    }
+    return { bytes, contentType };
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error("Canada Post manifest request timed out", { cause: error });
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+export async function transmitCanadaPostManifest({ connection, metadata = {}, groupIds = [] } = {}) {
+  const baseUrl = canadaPostBaseUrl(metadata);
+  if (!baseUrl) throw new Error("Invalid Canada Post base URL");
+
+  const payload = buildCanadaPostTransmitShipmentsPayload({ metadata, groupIds });
+  if (!payload.preflight.ok) throw new Error(payload.preflight.message);
+
+  const timeoutMs = labelPurchaseTimeoutMs(metadata, {});
+  const authHeaders = providerAuthHeaders(connection, mergeDefaults(CANADA_POST_HTTP_DEFAULTS, metadata), {}, "Basic ");
+  const manifestHeaders = {
+    ...authHeaders,
+    Accept: CANADA_POST_MANIFEST_MEDIA_TYPE,
+    "Content-Type": CANADA_POST_MANIFEST_MEDIA_TYPE,
+  };
+
+  const transmitUrl = new URL(payload.endpointPath, baseUrl);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  let transmitText;
+  try {
+    const response = await fetch(transmitUrl, {
+      method: "POST",
+      headers: manifestHeaders,
+      body: payload.xml,
+      signal: controller.signal,
+    });
+    transmitText = await response.text();
+    if (!response.ok) {
+      throw new Error(truncateProviderError(transmitText) || `Canada Post Transmit Shipments failed (${response.status})`);
+    }
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error("Canada Post Transmit Shipments timed out", { cause: error });
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  const transmitLinks = parseCanadaPostManifestLinks(transmitText);
+  const manifestUrls = [];
+  const artifactUrls = [];
+  const poNumbers = [];
+  const artifacts = [];
+
+  for (const href of transmitLinks.manifestUrls) {
+    const manifestUrl = resolveCanadaPostLink(baseUrl, href);
+    if (!manifestUrl) continue;
+    manifestUrls.push(manifestUrl.href);
+    const manifestResource = await fetchCanadaPostResource({
+      url: manifestUrl,
+      headers: authHeaders,
+      timeoutMs,
+      accept: CANADA_POST_MANIFEST_MEDIA_TYPE,
+    });
+    const manifestLinks = parseCanadaPostManifestLinks(manifestResource.bytes.toString("utf8"));
+    if (manifestLinks.poNumber) poNumbers.push(manifestLinks.poNumber);
+
+    for (const artifactHref of manifestLinks.artifactUrls) {
+      const artifactUrl = resolveCanadaPostLink(baseUrl, artifactHref);
+      if (!artifactUrl) continue;
+      artifactUrls.push(artifactUrl.href);
+      const artifact = await fetchCanadaPostResource({
+        url: artifactUrl,
+        headers: authHeaders,
+        timeoutMs,
+        accept: "application/pdf",
+      });
+      artifacts.push({
+        url: artifactUrl.href,
+        contentType: artifact.contentType,
+        bytes: artifact.bytes.length,
+        base64: artifact.bytes.toString("base64"),
+      });
+    }
+  }
+
+  return {
+    ok: true,
+    groupIds: Array.isArray(groupIds) ? groupIds : [],
+    manifestUrls,
+    artifactUrls,
+    poNumbers,
+    artifacts,
+  };
 }
 
 async function purchaseLabelViaCanadaPost(input) {
