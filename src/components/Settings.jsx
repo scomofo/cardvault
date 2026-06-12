@@ -282,14 +282,34 @@ function MacAppSection() {
   );
 }
 
+const HANDOFF_MARKETPLACES = new Set(["comc", "consignment"]);
+
+function cloneDefaultMarketplaceConnection() {
+  return {
+    marketplace: "ebay",
+    accountLabel: "",
+    shopName: "",
+    accessToken: "",
+    metadata: {
+      handoffSubmissionUrl: "",
+      handoffStatusUrl: "",
+      apiKeyHeader: "Authorization",
+      apiKeyPrefix: "Bearer ",
+      handoffSubmissionTimeoutMs: 10000,
+      handoffStatusTimeoutMs: 10000,
+    },
+  };
+}
+
 function MarketplaceConnectionsSection() {
   const toast = useToast();
   const [connections, setConnections] = useState([]);
   const [marketplaces, setMarketplaces] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
-  const [newConn, setNewConn] = useState({ marketplace: "ebay", accountLabel: "", shopName: "" });
+  const [newConn, setNewConn] = useState(cloneDefaultMarketplaceConnection);
   const [saving, setSaving] = useState(false);
+  const isHandoffMarketplace = HANDOFF_MARKETPLACES.has(String(newConn.marketplace).toLowerCase());
 
   useEffect(() => {
     Promise.all([
@@ -302,14 +322,28 @@ function MarketplaceConnectionsSection() {
     });
   }, []);
 
+  const updateMarketplaceMetadata = (updates) => {
+    setNewConn((current) => ({
+      ...current,
+      metadata: { ...current.metadata, ...updates },
+    }));
+  };
+
   const saveConnection = async () => {
     if (!newConn.marketplace) return;
     setSaving(true);
     try {
-      const result = await marketplacesAPI.connect(newConn);
+      const connectionPayload = {
+        marketplace: newConn.marketplace,
+        accountLabel: newConn.accountLabel,
+        shopName: newConn.shopName,
+      };
+      if (isHandoffMarketplace) connectionPayload.metadata = newConn.metadata;
+      if (isHandoffMarketplace && newConn.accessToken) connectionPayload.accessToken = newConn.accessToken;
+      const result = await marketplacesAPI.connect(connectionPayload);
       setConnections((p) => [...p, result]);
       setShowAdd(false);
-      setNewConn({ marketplace: "ebay", accountLabel: "", shopName: "" });
+      setNewConn(cloneDefaultMarketplaceConnection());
       toast.success("Marketplace connection saved");
     } catch (e) {
       toast.error(e.message || "Failed to connect");
@@ -350,7 +384,7 @@ function MarketplaceConnectionsSection() {
       {showAdd && (
         <div className="fade mt-10" style={{ padding: 12, background: "var(--acc-bg)", borderRadius: "var(--radius)", border: "1px solid var(--acc-brd)" }}>
           <div className="text-xxs text-dim mb-8">
-            This section saves account labels and shop metadata for publishing workflows. Use the dedicated eBay connection above for real OAuth credentials.
+            Save partner account metadata for publishing, exports, and external handoff submission workflows.
           </div>
           <div className="form-grid mt-4">
             <label className="fld">
@@ -371,6 +405,38 @@ function MarketplaceConnectionsSection() {
               <span className="text-xxs text-dim">Shop Name (optional)</span>
               <input className="inp" placeholder="my-store" value={newConn.shopName} onChange={(e) => setNewConn((p) => ({ ...p, shopName: e.target.value }))} />
             </label>
+            {isHandoffMarketplace && (
+              <>
+                <label className="fld">
+                  <span className="text-xxs text-dim">Access Token</span>
+                  <input className="inp" type="password" value={newConn.accessToken} onChange={(e) => setNewConn((p) => ({ ...p, accessToken: e.target.value }))} placeholder="Partner API token" autoComplete="off" />
+                </label>
+                <label className="fld">
+                  <span className="text-xxs text-dim">Handoff Submission URL</span>
+                  <input className="inp" value={newConn.metadata.handoffSubmissionUrl} onChange={(e) => updateMarketplaceMetadata({ handoffSubmissionUrl: e.target.value })} placeholder="https://partner.example/handoffs/{listingId}" />
+                </label>
+                <label className="fld">
+                  <span className="text-xxs text-dim">Handoff Status URL</span>
+                  <input className="inp" value={newConn.metadata.handoffStatusUrl} onChange={(e) => updateMarketplaceMetadata({ handoffStatusUrl: e.target.value })} placeholder="https://partner.example/handoffs/{listingId}/status" />
+                </label>
+                <label className="fld">
+                  <span className="text-xxs text-dim">Auth Header</span>
+                  <input className="inp" value={newConn.metadata.apiKeyHeader} onChange={(e) => updateMarketplaceMetadata({ apiKeyHeader: e.target.value })} placeholder="Authorization" />
+                </label>
+                <label className="fld">
+                  <span className="text-xxs text-dim">Auth Prefix</span>
+                  <input className="inp" value={newConn.metadata.apiKeyPrefix} onChange={(e) => updateMarketplaceMetadata({ apiKeyPrefix: e.target.value })} placeholder="Bearer " />
+                </label>
+                <label className="fld">
+                  <span className="text-xxs text-dim">Submission Timeout (ms)</span>
+                  <input className="inp" type="number" min="1" step="100" value={newConn.metadata.handoffSubmissionTimeoutMs} onChange={(e) => updateMarketplaceMetadata({ handoffSubmissionTimeoutMs: e.target.value === "" ? "" : Number(e.target.value) })} />
+                </label>
+                <label className="fld">
+                  <span className="text-xxs text-dim">Status Timeout (ms)</span>
+                  <input className="inp" type="number" min="1" step="100" value={newConn.metadata.handoffStatusTimeoutMs} onChange={(e) => updateMarketplaceMetadata({ handoffStatusTimeoutMs: e.target.value === "" ? "" : Number(e.target.value) })} />
+                </label>
+              </>
+            )}
           </div>
           <div className="flex gap-8 mt-8">
             <button className="btn btn-primary btn-sm" onClick={saveConnection} disabled={saving}>

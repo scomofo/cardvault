@@ -37,6 +37,18 @@ test("dealer mode selected listing export tolerates missing listings while loadi
   );
 });
 
+test("dealer mode exposes direct marketplace handoff submission", async () => {
+  const api = await readFile(new URL("../src/lib/api.js", import.meta.url), "utf8");
+  const dealerModeView = await readFile(new URL("../src/components/DealerModeView.jsx", import.meta.url), "utf8");
+
+  assert.match(api, /submitHandoff:\s*\(data\)\s*=>\s*request\("\/marketplaces\/handoff\/submit",\s*\{\s*method:\s*"POST",\s*body:\s*data\s*\}\)/);
+  assert.match(dealerModeView, /const\s+HANDOFF_PLATFORMS\s*=\s*new Set\(\["comc",\s*"consignment"\]\)/);
+  assert.match(dealerModeView, /const\s+\[submittingHandoff,\s*setSubmittingHandoff\]\s*=\s*useState\(false\)/);
+  assert.match(dealerModeView, /selectedHandoffListingIds/);
+  assert.match(dealerModeView, /marketplacesAPI\.submitHandoff\(\{\s*marketplace:\s*exportPlatform,\s*listingIds:\s*selectedHandoffListingIds,?\s*\}\)/s);
+  assert.match(dealerModeView, /Submit Handoff/);
+});
+
 test("settings exposes shipping provider connection management", async () => {
   const api = await readFile(new URL("../src/lib/api.js", import.meta.url), "utf8");
   const settings = await readFile(new URL("../src/components/Settings.jsx", import.meta.url), "utf8");
@@ -55,6 +67,29 @@ test("settings exposes shipping provider connection management", async () => {
   assert.doesNotMatch(settings, /labelPurchaseTimeoutMs:\s*Number\(e\.target\.value\)\s*\|\|\s*10000/);
   assert.match(settings, /endpointValidation\?\.attempted/);
   assert.match(settings, /type="password"[\s\S]*value=\{newConn\.apiKey\}/);
+});
+
+test("settings exposes marketplace handoff connection configuration", async () => {
+  const settings = await readFile(new URL("../src/components/Settings.jsx", import.meta.url), "utf8");
+
+  assert.match(settings, /function\s+cloneDefaultMarketplaceConnection\(\)/);
+  assert.match(settings, /accessToken:\s*""/);
+  assert.match(settings, /handoffSubmissionUrl:\s*""/);
+  assert.match(settings, /handoffStatusUrl:\s*""/);
+  assert.match(settings, /apiKeyHeader:\s*"Authorization"/);
+  assert.match(settings, /apiKeyPrefix:\s*"Bearer "/);
+  assert.match(settings, /handoffSubmissionTimeoutMs:\s*10000/);
+  assert.match(settings, /handoffStatusTimeoutMs:\s*10000/);
+  assert.match(settings, /const\s+connectionPayload\s*=\s*\{/);
+  assert.match(settings, /marketplacesAPI\.connect\(connectionPayload\)/);
+  assert.match(settings, /value=\{newConn\.accessToken\}/);
+  assert.match(settings, /Handoff Submission URL/);
+  assert.match(settings, /Handoff Status URL/);
+  assert.match(settings, /Auth Header/);
+  assert.match(settings, /Auth Prefix/);
+  assert.match(settings, /Submission Timeout \(ms\)/);
+  assert.match(settings, /Status Timeout \(ms\)/);
+  assert.match(settings, /handoffSubmissionTimeoutMs:\s*e\.target\.value\s*===\s*""\s*\?\s*""\s*:\s*Number\(e\.target\.value\)/);
 });
 
 test("automation API exposes Canada Post manifest transmit helper", async () => {

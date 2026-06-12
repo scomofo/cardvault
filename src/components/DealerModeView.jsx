@@ -51,6 +51,7 @@ const STATUS_FILTERS = [
 ];
 
 const EXPORTABLE_LISTING_STATUSES = new Set(["draft", "active", "revised"]);
+const HANDOFF_PLATFORMS = new Set(["comc", "consignment"]);
 
 function daysSince(dateStr) {
   if (!dateStr) return 0;
@@ -67,6 +68,7 @@ export default function DealerModeView() {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [submittingHandoff, setSubmittingHandoff] = useState(false);
 
   const [selected, setSelected] = useState(new Set());
   const [exportPlatform, setExportPlatform] = useState("ebay");
@@ -118,17 +120,27 @@ export default function DealerModeView() {
     [catalog, selected],
   );
 
-  const selectedListingIds = useMemo(() => {
+  const selectedPlatformListings = useMemo(() => {
     const selectedCardIds = new Set(selectedCards.map((card) => card.id));
     return (listings || [])
       .filter((listing) => {
         const cardId = listing.cardId || listing.card_id;
-        const status = String(listing.publishStatus || listing.publish_status || listing.status || "").toLowerCase();
-        return selectedCardIds.has(cardId)
-          && EXPORTABLE_LISTING_STATUSES.has(status);
-      })
-      .map((listing) => listing.id);
-  }, [listings, selectedCards]);
+        const platform = String(listing.marketplace || listing.platform || "").toLowerCase();
+        return selectedCardIds.has(cardId) && (!platform || platform === exportPlatform);
+      });
+  }, [exportPlatform, listings, selectedCards]);
+
+  const selectedListingIds = useMemo(() => selectedPlatformListings
+    .filter((listing) => {
+      const status = String(listing.publishStatus || listing.publish_status || listing.status || "").toLowerCase();
+      return EXPORTABLE_LISTING_STATUSES.has(status);
+    })
+    .map((listing) => listing.id), [selectedPlatformListings]);
+
+  const selectedHandoffListingIds = useMemo(
+    () => selectedPlatformListings.map((listing) => listing.id),
+    [selectedPlatformListings],
+  );
 
   const allFilteredSelected = useMemo(
     () => filtered.length > 0 && filtered.every((c) => selected.has(c.id)),
@@ -136,6 +148,7 @@ export default function DealerModeView() {
   );
 
   const exportPlatformLabel = DEALER_EXPORT_PLATFORMS.find((platform) => platform.v === exportPlatform)?.l || exportPlatform;
+  const isHandoffPlatform = HANDOFF_PLATFORMS.has(exportPlatform);
 
   // Actions
   function toggleSelect(id) {
@@ -246,6 +259,28 @@ export default function DealerModeView() {
     toast.success(cards.length + " cards exported to CSV");
   }
 
+  async function submitSelectedHandoffs() {
+    if (selectedCards.length === 0) { toast.error("Select cards first"); return; }
+    if (selectedHandoffListingIds.length === 0) {
+      toast.error(`No ${exportPlatformLabel} listings selected. Generate listings first.`);
+      return;
+    }
+
+    setSubmittingHandoff(true);
+    try {
+      const result = await marketplacesAPI.submitHandoff({
+        marketplace: exportPlatform,
+        listingIds: selectedHandoffListingIds,
+      });
+      const submittedCount = result.handoff?.listingIds?.length || 0;
+      toast.success(`Submitted ${submittedCount} ${exportPlatformLabel} handoff${submittedCount === 1 ? "" : "s"}`);
+    } catch (error) {
+      toast.error("Handoff submission failed: " + error.message);
+    } finally {
+      setSubmittingHandoff(false);
+    }
+  }
+
   function saveInlinePrice(id) {
     const price = parseFloat(editPrice);
     if (isNaN(price) || price < 0) { toast.error("Invalid price"); return; }
@@ -326,18 +361,25 @@ export default function DealerModeView() {
           {busy ? "Listing..." : `List Selected (${selected.size})`}
         </button>
         {useServer && (
-          <select style={s.select} value={exportPlatform} onChange={(e) => setExportPlatform(e.target.value)} disabled={exporting}>
+          <select style={s.select} value={exportPlatform} onChange={(e) => setExportPlatform(e.target.value)} disabled={exporting || submittingHandoff}>
             {DEALER_EXPORT_PLATFORMS.map((platform) => <option key={platform.v} value={platform.v}>{platform.l}</option>)}
           </select>
         )}
-        <button style={s.btnOutline} onClick={exportSelected} disabled={selected.size === 0 || exporting}>
+        <button style={s.btnOutline} onClick={exportSelected} disabled={selected.size === 0 || exporting || submittingHandoff}>
           {exporting ? "Exporting..." : useServer ? `Export ${exportPlatformLabel} CSV` : "Export CSV"}
         </button>
+        {useServer && isHandoffPlatform && (
+          <button style={s.btnOutline} onClick={submitSelectedHandoffs} disabled={selected.size === 0 || exporting || submittingHandoff}>
+            {submittingHandoff ? "Submitting..." : "Submit Handoff"}
+          </button>
+        )}
         <button style={s.btnOutline} onClick={selectAll}>
           {allFilteredSelected ? "Deselect All" : "Select All"} ({filtered.length})
         </button>
         <span style={{ color: "#6b7280", fontSize: 12, alignSelf: "center", marginLeft: "auto" }}>
-          {useServer && selected.size > 0
+          {useServer && isHandoffPlatform && selected.size > 0
+            ? `${selectedHandoffListingIds.length}/${selected.size} handoff listings`
+            : useServer && selected.size > 0
             ? `${selectedListingIds.length}/${selected.size} exportable`
             : `${filtered.length} of ${catalog.length} cards`}
         </span>

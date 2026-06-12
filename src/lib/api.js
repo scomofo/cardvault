@@ -159,6 +159,7 @@ export const marketplacesAPI = {
   sync: (data) => request("/marketplaces/sync", { method: "POST", body: data }),
   channels: (listingId) => request(`/marketplaces/listings/${listingId}/channels`),
   export: (data) => request("/marketplaces/export", { method: "POST", body: data }),
+  submitHandoff: (data) => request("/marketplaces/handoff/submit", { method: "POST", body: data }),
 };
 
 export const shippingProvidersAPI = {
