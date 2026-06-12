@@ -20,7 +20,7 @@ Status values:
 | Profit tracking | implemented | `services/dashboard/kpiService.js` |
 | Inventory aging alerts | implemented | `services/dashboard/actionQueueService.js` |
 
-**Shipping partial notes:** automation module wires into the order flow, uses configured `shipping_provider_connections` rate/label metadata when available, and can execute live label purchases through a registered provider client or generic HTTP label endpoint. The deterministic Canada Post fallback remains for offline use. Carrier-specific production adapters still require real provider credentials and endpoint configuration.
+**Shipping partial notes:** automation module wires into the order flow, uses configured `shipping_provider_connections` rate/label metadata when available, and can execute live label purchases through a registered provider client or generic HTTP label endpoint. Canada Post now has first-class sandbox/production profile defaults, Basic-auth dry-run validation, redacted diagnostics, and retry queue context. The deterministic Canada Post fallback remains for offline use. A native Canada Post XML Create Shipment adapter still requires full origin/destination shipment data and carrier certification.
 
 ## Tier 2 — Decision engine and automation
 

@@ -247,6 +247,70 @@ test("shipping provider connection test honors snake_case auth metadata for dry-
   assert.doesNotMatch(JSON.stringify(testResult.payload), /secret-provider-key|apiKey|api_key/);
 });
 
+test("shipping provider connection test applies Canada Post defaults and diagnostics", async (t) => {
+  const labelEndpoint = await startLabelEndpoint(({ req, res }) => {
+    if (req.headers.authorization !== "Basic encoded-canada-post-key") {
+      res.writeHead(401, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Missing Canada Post Basic auth" }));
+      return;
+    }
+
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      labelStatus: "purchased",
+      trackingNumber: "CP-DRY-RUN-123",
+    }));
+  });
+  t.after(labelEndpoint.close);
+
+  const { baseUrl } = await startTestServer(t, { dirPrefix: "cardvault-shipping-canada-post-defaults-" });
+  const createResult = await requestJson(baseUrl, "/api/shipping-provider-connections", {
+    method: "POST",
+    body: {
+      provider: "Canada Post",
+      apiKey: "encoded-canada-post-key",
+      metadata: {
+        environment: "production",
+        labelPurchaseUrl: labelEndpoint.url,
+        rates: [{
+          service: "Canada Post Expedited Parcel",
+          serviceCode: "DOM.EP",
+          countries: ["CA"],
+          cost: 9.75,
+          tracking: true,
+        }],
+      },
+    },
+  });
+  assert.equal(createResult.response.status, 201);
+  assert.equal(createResult.payload.metadata.providerClient, "canada_post");
+  assert.equal(createResult.payload.metadata.environment, "production");
+  assert.equal(createResult.payload.metadata.apiBaseUrl, "https://soa-gw.canadapost.ca");
+  assert.equal(createResult.payload.metadata.labelUrlTemplate, "labels/canada-post/{trackingNumber}/{shipmentId}.pdf");
+  assert.doesNotMatch(JSON.stringify(createResult.payload), /encoded-canada-post-key|apiKey|api_key|Basic/);
+
+  const testResult = await requestJson(baseUrl, `/api/shipping-provider-connections/${createResult.payload.id}/test`, {
+    method: "POST",
+    body: { country: "CA", salePrice: 100, weightOz: 3 },
+  });
+
+  assert.equal(testResult.response.status, 200);
+  assert.equal(testResult.payload.ok, true);
+  assert.equal(testResult.payload.endpointValidation.ok, true);
+  assert.equal(testResult.payload.endpointValidation.trackingNumber, "CP-DRY-RUN-123");
+  assert.equal(testResult.payload.endpointValidation.labelUrl, "labels/canada-post/CP-DRY-RUN-123/connection-test.pdf");
+  assert.deepEqual(testResult.payload.diagnostics, {
+    providerClient: "canada_post",
+    environment: "production",
+    endpointConfigured: true,
+    endpointHost: "127.0.0.1",
+  });
+  assert.equal(labelEndpoint.requests.length, 1);
+  assert.equal(labelEndpoint.requests[0].payload.provider, "Canada Post");
+  assert.equal(labelEndpoint.requests[0].payload.dryRun, true);
+  assert.doesNotMatch(JSON.stringify(testResult.payload), /encoded-canada-post-key|apiKey|api_key|Basic/);
+});
+
 test("shipping provider connection test returns sanitized live endpoint failures", async (t) => {
   const longProxyError = `<html>${"x".repeat(220)}END-OF-LONG-PROXY-PAGE</html>`;
   const labelEndpoint = await startLabelEndpoint(({ res }) => {
@@ -296,6 +360,32 @@ test("shipping provider connection test returns sanitized live endpoint failures
   } finally {
     db.close();
   }
+});
+
+test("shipping provider connection routes reject unsupported label endpoint protocols", async (t) => {
+  const { baseUrl } = await startTestServer(t, { dirPrefix: "cardvault-shipping-invalid-endpoint-" });
+
+  const createResult = await requestJson(baseUrl, "/api/shipping-provider-connections", {
+    method: "POST",
+    body: {
+      provider: "Canada Post",
+      apiKey: "secret-provider-key",
+      metadata: {
+        labelPurchaseUrl: "ftp://carrier.example/labels",
+        rates: [{
+          service: "Canada Post Expedited Parcel",
+          serviceCode: "DOM.EP",
+          countries: ["CA"],
+          cost: 9.75,
+          tracking: true,
+        }],
+      },
+    },
+  });
+
+  assert.equal(createResult.response.status, 400);
+  assert.match(createResult.payload.error, /labelPurchaseUrl must use http or https/i);
+  assert.doesNotMatch(JSON.stringify(createResult.payload), /secret-provider-key|apiKey|api_key/);
 });
 
 test("shipping provider connection test handles null metadata without crashing", async (t) => {

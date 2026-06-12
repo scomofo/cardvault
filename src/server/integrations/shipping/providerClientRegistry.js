@@ -2,6 +2,10 @@ const DEFAULT_LABEL_PURCHASE_TIMEOUT_MS = 10000;
 const PROVIDER_ERROR_TEXT_LIMIT = 200;
 const CANADA_POST_CLIENT_KEY = "canada_post";
 const CANADA_POST_LABEL_URL_TEMPLATE = "labels/canada-post/{trackingNumber}/{shipmentId}.pdf";
+const CANADA_POST_HTTP_DEFAULTS = {
+  apiKeyHeader: "Authorization",
+  apiKeyPrefix: "Basic ",
+};
 
 function firstDefined(...values) {
   return values.find((value) => value != null && value !== "");
@@ -41,6 +45,14 @@ function providerClientKey(connection = {}, metadata = {}, rate = {}) {
   return normalizeProviderKey(connection.provider) === CANADA_POST_CLIENT_KEY
     ? CANADA_POST_CLIENT_KEY
     : "generic_http";
+}
+
+function mergeDefaults(defaults, value = {}) {
+  const merged = { ...defaults };
+  for (const [key, entry] of Object.entries(value || {})) {
+    if (entry !== undefined && entry !== null) merged[key] = entry;
+  }
+  return merged;
 }
 
 function failedPurchase(error) {
@@ -146,7 +158,10 @@ async function purchaseLabelViaHttp({ connection, metadata, rate, service, shipm
 }
 
 async function purchaseLabelViaCanadaPost(input) {
-  const purchase = await purchaseLabelViaHttp(input);
+  const purchase = await purchaseLabelViaHttp({
+    ...input,
+    metadata: mergeDefaults(CANADA_POST_HTTP_DEFAULTS, input.metadata),
+  });
   if (!purchase || purchase.error) return purchase;
 
   const status = String(firstDefined(purchase.labelStatus, purchase.label_status, purchase.status, "")).toLowerCase();

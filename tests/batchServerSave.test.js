@@ -57,6 +57,21 @@ test("settings exposes shipping provider connection management", async () => {
   assert.match(settings, /type="password"[\s\S]*value=\{newConn\.apiKey\}/);
 });
 
+test("settings exposes Canada Post production connection profile defaults", async () => {
+  const settings = await readFile(new URL("../src/components/Settings.jsx", import.meta.url), "utf8");
+
+  assert.match(settings, /CANADA_POST_ENDPOINTS/);
+  assert.match(settings, /sandbox:\s*"https:\/\/ct\.soa-gw\.canadapost\.ca"/);
+  assert.match(settings, /production:\s*"https:\/\/soa-gw\.canadapost\.ca"/);
+  assert.match(settings, /providerClient:\s*"canada_post"/);
+  assert.match(settings, /environment:\s*"sandbox"/);
+  assert.match(settings, /apiKeyPrefix:\s*"Basic "/);
+  assert.match(settings, /const\s+CANADA_POST_LABEL_URL_TEMPLATE\s*=\s*"labels\/canada-post\/\{trackingNumber\}\/\{shipmentId\}\.pdf"/);
+  assert.match(settings, /labelUrlTemplate:\s*CANADA_POST_LABEL_URL_TEMPLATE/);
+  assert.match(settings, /Canada Post Sandbox/);
+  assert.match(settings, /Canada Post Production/);
+});
+
 test("settings keeps shipping provider countries input as raw text", async () => {
   const settings = await readFile(new URL("../src/components/Settings.jsx", import.meta.url), "utf8");
 

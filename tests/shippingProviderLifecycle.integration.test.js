@@ -303,6 +303,9 @@ test("shipping automation records live provider label failures for retry", async
   const retryAction = (await queueResponse.json()).find((entry) => entry.subjectId === orderId);
   assert.equal(retryAction.queue, "shipping_exception");
   assert.equal(retryAction.suggestedAction, "retry_shipment");
+  assert.match(retryAction.reason, /Canada Post Expedited Parcel/);
+  assert.match(retryAction.reason, /Carrier purchase endpoint unavailable/);
+  assert.doesNotMatch(retryAction.reason, /secret-provider-key|apiKey|api_key/);
 
   const db = new Database(dbPath, { readonly: true });
   try {

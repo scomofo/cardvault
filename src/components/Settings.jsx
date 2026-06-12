@@ -384,14 +384,24 @@ function MarketplaceConnectionsSection() {
   );
 }
 
+const CANADA_POST_ENDPOINTS = {
+  sandbox: "https://ct.soa-gw.canadapost.ca",
+  production: "https://soa-gw.canadapost.ca",
+};
+const CANADA_POST_LABEL_URL_TEMPLATE = "labels/canada-post/{trackingNumber}/{shipmentId}.pdf";
+
 const DEFAULT_SHIPPING_PROVIDER = {
   provider: "Canada Post",
   apiKey: "",
   metadata: {
     accountLabel: "",
+    providerClient: "canada_post",
+    environment: "sandbox",
+    apiBaseUrl: CANADA_POST_ENDPOINTS.sandbox,
     labelPurchaseUrl: "",
+    labelUrlTemplate: CANADA_POST_LABEL_URL_TEMPLATE,
     apiKeyHeader: "Authorization",
-    apiKeyPrefix: "Bearer ",
+    apiKeyPrefix: "Basic ",
     labelPurchaseTimeoutMs: 10000,
     rates: [{
       service: "Canada Post Expedited Parcel",
@@ -423,6 +433,7 @@ function ShippingProviderConnectionsSection() {
   const [saving, setSaving] = useState(false);
   const [testingId, setTestingId] = useState(null);
   const rate = newConn.metadata.rates[0];
+  const isCanadaPostProvider = newConn.provider.trim().toLowerCase() === "canada post";
 
   useEffect(() => {
     shippingProvidersAPI.connections()
@@ -446,6 +457,17 @@ function ShippingProviderConnectionsSection() {
       ...current,
       metadata: { ...current.metadata, ...updates },
     }));
+  };
+
+  const updateCanadaPostEnvironment = (environment) => {
+    updateMetadata({
+      providerClient: "canada_post",
+      environment,
+      apiBaseUrl: CANADA_POST_ENDPOINTS[environment] || CANADA_POST_ENDPOINTS.sandbox,
+      apiKeyHeader: "Authorization",
+      apiKeyPrefix: "Basic ",
+      labelUrlTemplate: CANADA_POST_LABEL_URL_TEMPLATE,
+    });
   };
 
   const saveConnection = async () => {
@@ -527,6 +549,15 @@ function ShippingProviderConnectionsSection() {
               <span className="text-xxs text-dim">Provider</span>
               <input className="inp" value={newConn.provider} onChange={(e) => setNewConn((p) => ({ ...p, provider: e.target.value }))} placeholder="Canada Post" />
             </label>
+            {isCanadaPostProvider && (
+              <label className="fld">
+                <span className="text-xxs text-dim">Environment</span>
+                <select className="inp" value={newConn.metadata.environment || "sandbox"} onChange={(e) => updateCanadaPostEnvironment(e.target.value)}>
+                  <option value="sandbox">Canada Post Sandbox</option>
+                  <option value="production">Canada Post Production</option>
+                </select>
+              </label>
+            )}
             <label className="fld">
               <span className="text-xxs text-dim">Account Label</span>
               <input className="inp" value={newConn.metadata.accountLabel} onChange={(e) => setNewConn((p) => ({ ...p, metadata: { ...p.metadata, accountLabel: e.target.value } }))} placeholder="Main shipping account" />
