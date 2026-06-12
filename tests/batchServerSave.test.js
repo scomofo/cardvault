@@ -92,6 +92,16 @@ test("settings exposes marketplace handoff connection configuration", async () =
   assert.match(settings, /handoffSubmissionTimeoutMs:\s*e\.target\.value\s*===\s*""\s*\?\s*""\s*:\s*Number\(e\.target\.value\)/);
 });
 
+test("roadmap reflects completed handoff operator UX and remaining partner validation", async () => {
+  const roadmap = await readFile(new URL("../docs/Roadmap.md", import.meta.url), "utf8");
+  const roadmapData = await readFile(new URL("../src/server/services/dashboard/roadmapData.js", import.meta.url), "utf8");
+
+  assert.match(roadmapData, /Consignment \/ COMC integrations",\s*status:\s*"partial"/);
+  assert.match(roadmap, /operator UX for direct submissions is implemented/);
+  assert.match(roadmap, /partner-specific live validation/);
+  assert.doesNotMatch(roadmap, /operator UX for triggering direct submissions/);
+});
+
 test("automation API exposes Canada Post manifest transmit helper", async () => {
   const api = await readFile(new URL("../src/lib/api.js", import.meta.url), "utf8");
 

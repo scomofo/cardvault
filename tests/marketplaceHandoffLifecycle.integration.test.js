@@ -408,3 +408,42 @@ test("configured partner submission posts COMC handoff and records submission re
     db.close();
   }
 });
+
+test("direct handoff submission reports missing partner configuration before mutating channel", async (t) => {
+  const { baseUrl } = await startTestServer(t, { dirPrefix: "cardvault-comc-submit-config-" });
+  const connectionResponse = await postJson(baseUrl, "/api/marketplace-connections", {
+    marketplace: "comc",
+    accountLabel: "COMC partner API",
+    accessToken: "partner-secret",
+    metadata: {},
+  });
+  assert.equal(connectionResponse.status, 201);
+  const connection = await connectionResponse.json();
+
+  const { listingId } = await createHandoffListing(baseUrl, {
+    idPrefix: "comc-submit-config",
+    marketplace: "comc",
+    cardName: "Sidney Crosby",
+    marketPrice: 95,
+    connectionId: connection.id,
+  });
+
+  assert.equal((await postJson(baseUrl, "/api/marketplaces/export", {
+    marketplace: "comc",
+    listingIds: [listingId],
+  })).status, 200);
+
+  const submitResponse = await postJson(baseUrl, "/api/marketplaces/handoff/submit", {
+    marketplace: "comc",
+    listingIds: [listingId],
+  });
+  assert.equal(submitResponse.status, 400);
+  const payload = await submitResponse.json();
+  assert.equal(payload.error, "COMC handoff submission is not configured. Add a Handoff Submission URL in Settings > Marketplace Connections before submitting live handoffs.");
+
+  const channel = await getMarketplaceChannel(baseUrl, listingId, "comc");
+  assert.equal(channel.status, "handoff_exported");
+  const overrides = JSON.parse(channel.overrides);
+  assert.equal(overrides.handoff.submissionStatus, "exported");
+  assert.equal(overrides.handoff.note, undefined);
+});

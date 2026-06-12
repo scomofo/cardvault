@@ -28,6 +28,10 @@ function parseJsonObject(value) {
   }
 }
 
+function firstDefined(...values) {
+  return values.find((value) => value != null && value !== "");
+}
+
 function normalizeHandoffStatus(status) {
   const normalized = String(status || "").trim().toLowerCase();
   const withoutPrefix = normalized.startsWith("handoff_") ? normalized.slice("handoff_".length) : normalized;
@@ -48,6 +52,28 @@ function normalizeHandoffMarketplace(marketplace) {
     throw new Error("Marketplace does not support external handoff lifecycle");
   }
   return normalizedMarketplace;
+}
+
+function handoffMarketplaceLabel(marketplace) {
+  return marketplace === "comc" ? "COMC" : "Consignment";
+}
+
+function handoffSubmissionUrl(metadata = {}) {
+  return firstDefined(
+    metadata.handoffSubmissionUrl,
+    metadata.handoff_submission_url,
+    metadata.submissionUrl,
+    metadata.submission_url,
+  );
+}
+
+function assertHandoffSubmissionConfigured(marketplace, channel, connection) {
+  const metadata = parseJsonObject(connection?.metadata);
+  if (connection && handoffSubmissionUrl(metadata)) return;
+  const error = new Error(`${handoffMarketplaceLabel(marketplace)} handoff submission is not configured. Add a Handoff Submission URL in Settings > Marketplace Connections before submitting live handoffs.`);
+  error.code = "HANDOFF_SUBMISSION_NOT_CONFIGURED";
+  error.listingId = channel.listing_id;
+  throw error;
 }
 
 function upsertChannel({ listingId, marketplace, connectionId, externalListingId, status, payload, publishError }) {
@@ -379,6 +405,7 @@ export async function submitMarketplaceHandoffs({ marketplace, listingIds = [] }
       ? get(`SELECT * FROM marketplace_connections WHERE id = ?`, [channel.connection_id])
       : null;
 
+    assertHandoffSubmissionConfigured(normalizedMarketplace, channel, connection);
     try {
       const result = await adapter.submitHandoff(channelListingForHandoff(listing, channel), { channel, connection });
       results.push(persistHandoffSubmission(channel, result));

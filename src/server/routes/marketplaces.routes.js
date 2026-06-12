@@ -142,6 +142,9 @@ export function registerMarketplaceRoutes(app) {
       if (!marketplace) return res.status(400).json({ error: "marketplace required" });
       res.json(await submitMarketplaceHandoffs({ marketplace, listingIds: listingIds || [] }));
     } catch (error) {
+      if (error.code === "HANDOFF_SUBMISSION_NOT_CONFIGURED") {
+        return res.status(400).json({ error: error.message });
+      }
       res.status(500).json({ error: error.message });
     }
   });
