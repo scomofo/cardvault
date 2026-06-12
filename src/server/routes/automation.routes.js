@@ -1,6 +1,6 @@
 import { requireJsonBody } from "../validation/common.js";
 import { requireProtectedConfigWrite } from "../auth.js";
-import { get } from "../database.js";
+import { all, get, run, runInImmediateTransaction } from "../database.js";
 import { transmitCanadaPostManifest } from "../integrations/shipping/providerClientRegistry.js";
 import { automateActionQueue } from "../services/automation/actionQueueAutomation.js";
 import { runAcquisitionDecisionAutomation } from "../services/automation/acquisitionDecisionAutomation.js";
@@ -15,6 +15,9 @@ import { automateListingGeneration } from "../services/automation/listingGenerat
 import { runMarketTrendAutomation } from "../services/automation/marketTrendAutomation.js";
 import { addItemToBatch, createIntakeBatch, finalizeIntakeBatch, processBatchItem } from "../services/automation/scanIntakeBulkAutomation.js";
 import { automateShipment } from "../services/automation/shippingAutomation.js";
+import { uid } from "./shared.js";
+
+const MANIFEST_ARTIFACT_STORAGE_LIMIT_BYTES = 5 * 1024 * 1024;
 
 function parseJson(value, fallback = {}) {
   if (!value) return fallback;
@@ -37,6 +40,157 @@ function findCanadaPostConnection(connectionId) {
      ORDER BY updated_at DESC, created_at DESC
      LIMIT 1`,
   );
+}
+
+function jsonArray(value) {
+  return JSON.stringify(Array.isArray(value) ? value : []);
+}
+
+function parseJsonArray(value) {
+  const parsed = parseJson(value, []);
+  return Array.isArray(parsed) ? parsed : [];
+}
+
+function truncateError(value) {
+  const text = String(value || "Canada Post manifest failed");
+  return text.length > 500 ? `${text.slice(0, 500)}...` : text;
+}
+
+function canadaPostManifestArtifactUrl(runId, artifactId) {
+  return `/api/automation/shipping/canada-post/manifests/${encodeURIComponent(runId)}/artifacts/${encodeURIComponent(artifactId)}`;
+}
+
+function createCanadaPostManifestRun({ connectionId, groupIds }) {
+  const id = uid();
+  run(
+    `INSERT INTO canada_post_manifest_runs
+     (id, connection_id, status, group_ids, created_at, updated_at)
+     VALUES (?, ?, 'running', ?, datetime('now'), datetime('now'))`,
+    [id, connectionId || null, jsonArray(groupIds)],
+  );
+  return id;
+}
+
+function markCanadaPostManifestRunFailed(runId, error) {
+  run(
+    `UPDATE canada_post_manifest_runs
+     SET status = 'failed', error = ?, completed_at = datetime('now'), updated_at = datetime('now')
+     WHERE id = ?`,
+    [truncateError(error?.message || error), runId],
+  );
+}
+
+function artifactBuffer(artifact) {
+  if (Buffer.isBuffer(artifact?.content)) return artifact.content;
+  if (artifact?.base64) return Buffer.from(String(artifact.base64), "base64");
+  return Buffer.alloc(0);
+}
+
+function persistCanadaPostManifestResult({ runId, result }) {
+  return runInImmediateTransaction((db) => {
+    db.prepare(
+      `UPDATE canada_post_manifest_runs
+       SET status = 'completed',
+           manifest_urls = ?,
+           artifact_urls = ?,
+           po_numbers = ?,
+           error = NULL,
+           completed_at = datetime('now'),
+           updated_at = datetime('now')
+       WHERE id = ?`,
+    ).run(
+      jsonArray(result.manifestUrls),
+      jsonArray(result.artifactUrls),
+      jsonArray(result.poNumbers),
+      runId,
+    );
+
+    const insertArtifact = db.prepare(
+      `INSERT INTO canada_post_manifest_artifacts
+       (id, manifest_run_id, source_url, content_type, byte_size, content, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
+    );
+    const artifacts = (Array.isArray(result.artifacts) ? result.artifacts : []).map((artifact) => {
+      const content = artifactBuffer(artifact);
+      if (content.length > MANIFEST_ARTIFACT_STORAGE_LIMIT_BYTES) {
+        throw new Error("Canada Post manifest artifact exceeds the 5 MB storage limit");
+      }
+      const id = uid();
+      const contentType = artifact.contentType || artifact.content_type || "application/pdf";
+      insertArtifact.run(id, runId, artifact.url || null, contentType, content.length, content);
+      return {
+        ...artifact,
+        id,
+        contentType,
+        bytes: content.length,
+        downloadUrl: canadaPostManifestArtifactUrl(runId, id),
+      };
+    });
+
+    return {
+      ...result,
+      id: runId,
+      artifacts,
+    };
+  });
+}
+
+function publicManifestArtifact(row, runId) {
+  return {
+    id: row.id,
+    sourceUrl: row.source_url,
+    contentType: row.content_type || "application/pdf",
+    bytes: Number(row.byte_size) || 0,
+    createdAt: row.created_at,
+    downloadUrl: canadaPostManifestArtifactUrl(runId, row.id),
+  };
+}
+
+function publicManifestRun(row, artifacts) {
+  const metadata = parseJson(row.metadata);
+  return {
+    id: row.id,
+    connectionId: row.connection_id,
+    provider: row.provider || "Canada Post",
+    accountLabel: metadata.accountLabel || metadata.account_label || null,
+    status: row.status,
+    groupIds: parseJsonArray(row.group_ids),
+    manifestUrls: parseJsonArray(row.manifest_urls),
+    artifactUrls: parseJsonArray(row.artifact_urls),
+    poNumbers: parseJsonArray(row.po_numbers),
+    error: row.error,
+    artifactCount: artifacts.length,
+    artifacts,
+    createdAt: row.created_at,
+    completedAt: row.completed_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function listCanadaPostManifestRuns() {
+  const rows = all(
+    `SELECT r.*, c.provider, c.metadata
+     FROM canada_post_manifest_runs r
+     LEFT JOIN shipping_provider_connections c ON c.id = r.connection_id
+     ORDER BY r.created_at DESC
+     LIMIT 20`,
+  );
+  return rows.map((row) => {
+    const artifacts = all(
+      `SELECT id, source_url, content_type, byte_size, created_at
+       FROM canada_post_manifest_artifacts
+       WHERE manifest_run_id = ?
+       ORDER BY created_at ASC`,
+      [row.id],
+    ).map((artifact) => publicManifestArtifact(artifact, row.id));
+    return publicManifestRun(row, artifacts);
+  });
+}
+
+function manifestArtifactFilename(row) {
+  const poNumber = parseJsonArray(row.po_numbers)[0] || row.manifest_run_id;
+  const safeId = String(poNumber || "manifest").replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "") || "manifest";
+  return `canada-post-manifest-${safeId}.pdf`;
 }
 
 export function registerAutomationRoutes(app) {
@@ -79,15 +233,48 @@ export function registerAutomationRoutes(app) {
   });
 
   app.post("/api/automation/shipping/canada-post/manifest", requireProtectedConfigWrite, requireJsonBody, async (req, res) => {
+    let runId = null;
     try {
-      const groupIds = Array.isArray(req.body.groupIds) ? req.body.groupIds.filter(Boolean) : [];
+      const groupIds = Array.isArray(req.body.groupIds)
+        ? req.body.groupIds.map((entry) => String(entry).trim()).filter(Boolean)
+        : [];
       if (groupIds.length === 0) return res.status(400).json({ error: "groupIds required" });
 
       const connection = findCanadaPostConnection(req.body.connectionId || req.body.connection_id || null);
       if (!connection) return res.status(404).json({ error: "Canada Post shipping provider connection not found" });
 
+      runId = createCanadaPostManifestRun({ connectionId: connection.id, groupIds });
       const metadata = parseJson(connection.metadata);
-      res.json(await transmitCanadaPostManifest({ connection, metadata, groupIds }));
+      const result = await transmitCanadaPostManifest({ connection, metadata, groupIds });
+      res.json(persistCanadaPostManifestResult({ runId, result }));
+    } catch (error) {
+      if (runId) markCanadaPostManifestRunFailed(runId, error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/automation/shipping/canada-post/manifests", requireProtectedConfigWrite, (_req, res) => {
+    try {
+      res.json(listCanadaPostManifestRuns());
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/automation/shipping/canada-post/manifests/:runId/artifacts/:artifactId", requireProtectedConfigWrite, (req, res) => {
+    try {
+      const artifact = get(
+        `SELECT a.*, r.po_numbers
+         FROM canada_post_manifest_artifacts a
+         JOIN canada_post_manifest_runs r ON r.id = a.manifest_run_id
+         WHERE a.id = ? AND a.manifest_run_id = ?`,
+        [req.params.artifactId, req.params.runId],
+      );
+      if (!artifact) return res.status(404).json({ error: "Canada Post manifest artifact not found" });
+
+      res.setHeader("Content-Type", artifact.content_type || "application/octet-stream");
+      res.setHeader("Content-Disposition", `attachment; filename="${manifestArtifactFilename(artifact)}"`);
+      res.send(Buffer.from(artifact.content));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

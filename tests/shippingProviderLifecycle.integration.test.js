@@ -393,7 +393,43 @@ test("shipping automation transmits Canada Post manifest and retrieves artifacts
   assert.equal(manifest.poNumbers[0], "PO12345");
   assert.equal(manifest.artifacts[0].contentType, "application/pdf");
   assert.equal(Buffer.from(manifest.artifacts[0].base64, "base64").toString("utf8"), "%PDF-1.4 manifest");
+  assert.ok(manifest.id);
+  assert.ok(manifest.artifacts[0].id);
+  assert.match(manifest.artifacts[0].downloadUrl, new RegExp(`/api/automation/shipping/canada-post/manifests/${manifest.id}/artifacts/${manifest.artifacts[0].id}$`));
   assert.equal(JSON.stringify(manifest).includes("secret-provider-key"), false);
+
+  const historyResponse = await fetch(`${baseUrl}/api/automation/shipping/canada-post/manifests`);
+  assert.equal(historyResponse.status, 200);
+  const history = await historyResponse.json();
+  assert.equal(history.length, 1);
+  assert.equal(history[0].id, manifest.id);
+  assert.equal(history[0].status, "completed");
+  assert.deepEqual(history[0].groupIds, ["cv-2026-06-12"]);
+  assert.equal(history[0].poNumbers[0], "PO12345");
+  assert.equal(history[0].artifacts[0].id, manifest.artifacts[0].id);
+  assert.equal(history[0].artifacts[0].bytes, "%PDF-1.4 manifest".length);
+  assert.equal(Object.hasOwn(history[0].artifacts[0], "base64"), false);
+  assert.equal(JSON.stringify(history).includes("secret-provider-key"), false);
+
+  const downloadResponse = await fetch(`${baseUrl}${manifest.artifacts[0].downloadUrl}`);
+  assert.equal(downloadResponse.status, 200);
+  assert.match(downloadResponse.headers.get("content-type"), /application\/pdf/);
+  assert.match(downloadResponse.headers.get("content-disposition"), /attachment/);
+  assert.equal(await downloadResponse.text(), "%PDF-1.4 manifest");
+
+  const db = new Database(dbPath, { readonly: true });
+  try {
+    const run = db.prepare("SELECT status, group_ids, po_numbers FROM canada_post_manifest_runs WHERE id = ?").get(manifest.id);
+    assert.equal(run.status, "completed");
+    assert.deepEqual(JSON.parse(run.group_ids), ["cv-2026-06-12"]);
+    assert.deepEqual(JSON.parse(run.po_numbers), ["PO12345"]);
+    const artifact = db.prepare("SELECT content_type, byte_size, content FROM canada_post_manifest_artifacts WHERE id = ?").get(manifest.artifacts[0].id);
+    assert.equal(artifact.content_type, "application/pdf");
+    assert.equal(artifact.byte_size, "%PDF-1.4 manifest".length);
+    assert.equal(Buffer.from(artifact.content).toString("utf8"), "%PDF-1.4 manifest");
+  } finally {
+    db.close();
+  }
 });
 
 test("shipping automation blocks Canada Post native labels until shipment requirements are complete", async (t) => {

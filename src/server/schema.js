@@ -259,6 +259,30 @@ export function createTables(db) {
       created_at TEXT DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS canada_post_manifest_runs (
+      id TEXT PRIMARY KEY,
+      connection_id TEXT REFERENCES shipping_provider_connections(id) ON DELETE SET NULL,
+      status TEXT DEFAULT 'running',
+      group_ids TEXT NOT NULL DEFAULT '[]',
+      manifest_urls TEXT NOT NULL DEFAULT '[]',
+      artifact_urls TEXT NOT NULL DEFAULT '[]',
+      po_numbers TEXT NOT NULL DEFAULT '[]',
+      error TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      completed_at TEXT,
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS canada_post_manifest_artifacts (
+      id TEXT PRIMARY KEY,
+      manifest_run_id TEXT NOT NULL REFERENCES canada_post_manifest_runs(id) ON DELETE CASCADE,
+      source_url TEXT,
+      content_type TEXT DEFAULT 'application/pdf',
+      byte_size INTEGER DEFAULT 0,
+      content BLOB NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
 
     CREATE TABLE IF NOT EXISTS price_snapshots (
       id TEXT PRIMARY KEY,

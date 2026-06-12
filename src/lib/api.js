@@ -123,6 +123,10 @@ export const automationAPI = {
     request(`/automation/shipping/${orderId}`, { method: "POST", body: data }),
   transmitCanadaPostManifest: (data) =>
     request("/automation/shipping/canada-post/manifest", { method: "POST", body: data }),
+  canadaPostManifests: () =>
+    request("/automation/shipping/canada-post/manifests"),
+  canadaPostManifestArtifactUrl: (runId, artifactId) =>
+    apiPath(`/automation/shipping/canada-post/manifests/${encodeURIComponent(runId)}/artifacts/${encodeURIComponent(artifactId)}`),
   actionQueue: () => request("/automation/action-queue"),
   duplicates: (params) => request(`/automation/duplicates${toQuery(params)}`),
   marketTrends: () => request("/automation/market-trends", { method: "POST" }),

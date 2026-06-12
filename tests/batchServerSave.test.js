@@ -61,7 +61,10 @@ test("automation API exposes Canada Post manifest transmit helper", async () => 
   const api = await readFile(new URL("../src/lib/api.js", import.meta.url), "utf8");
 
   assert.match(api, /transmitCanadaPostManifest:\s*\(data\)\s*=>/);
+  assert.match(api, /canadaPostManifests:\s*\(\)\s*=>/);
+  assert.match(api, /canadaPostManifestArtifactUrl:\s*\(runId,\s*artifactId\)\s*=>/);
   assert.match(api, /\/automation\/shipping\/canada-post\/manifest/);
+  assert.match(api, /\/automation\/shipping\/canada-post\/manifests/);
 });
 
 test("settings exposes Canada Post production connection profile defaults", async () => {
@@ -102,6 +105,18 @@ test("settings keeps shipping provider countries input as raw text", async () =>
   assert.match(settings, /const\s+val\s*=\s*e\.target\.value;\s*setCountriesText\(val\);/s);
   assert.match(settings, /updateRate\(\{\s*countries:\s*val\.split\(","\)\.map\(\(entry\)\s*=>\s*entry\.trim\(\)\)\.filter\(Boolean\)\s*\}\)/s);
   assert.doesNotMatch(settings, /value=\{rate\.countries\.join\(", "\)\}/);
+});
+
+test("settings exposes Canada Post manifest operations controls", async () => {
+  const settings = await readFile(new URL("../src/components/Settings.jsx", import.meta.url), "utf8");
+
+  assert.match(settings, /const\s+\[manifestGroupText,\s*setManifestGroupText\]\s*=\s*useState\(""\)/);
+  assert.match(settings, /automationAPI\.canadaPostManifests\(\)/);
+  assert.match(settings, /automationAPI\.transmitCanadaPostManifest\(\{/);
+  assert.match(settings, /automationAPI\.canadaPostManifestArtifactUrl\(run\.id,\s*artifact\.id\)/);
+  assert.match(settings, /Canada Post Manifests/);
+  assert.match(settings, /Transmit Manifest/);
+  assert.match(settings, /Group IDs/);
 });
 
 test("sales flow blocks duplicate manual sale submissions while saving", async () => {

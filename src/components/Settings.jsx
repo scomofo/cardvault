@@ -437,6 +437,15 @@ function cloneDefaultShippingProvider() {
   };
 }
 
+function splitManifestGroupIds(value) {
+  return String(value || "").split(/[\s,]+/).map((entry) => entry.trim()).filter(Boolean);
+}
+
+function canadaPostManifestFilename(run) {
+  const safeId = String(run?.poNumbers?.[0] || run?.id || "manifest").replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "") || "manifest";
+  return `canada-post-manifest-${safeId}.pdf`;
+}
+
 function ShippingProviderConnectionsSection() {
   const toast = useToast();
   const [connections, setConnections] = useState([]);
@@ -444,15 +453,29 @@ function ShippingProviderConnectionsSection() {
   const [showAdd, setShowAdd] = useState(false);
   const [newConn, setNewConn] = useState(cloneDefaultShippingProvider);
   const [countriesText, setCountriesText] = useState("CA");
+  const [manifestGroupText, setManifestGroupText] = useState("");
+  const [manifestRuns, setManifestRuns] = useState([]);
   const [saving, setSaving] = useState(false);
   const [testingId, setTestingId] = useState(null);
+  const [transmittingManifest, setTransmittingManifest] = useState(false);
   const rate = newConn.metadata.rates[0];
   const isCanadaPostProvider = newConn.provider.trim().toLowerCase() === "canada post";
+  const canadaPostConnections = connections.filter((conn) => String(conn.provider || "").trim().toLowerCase() === "canada post");
+  const primaryCanadaPostConnection = canadaPostConnections[0] || null;
 
   useEffect(() => {
-    shippingProvidersAPI.connections()
-      .then((rows) => setConnections(Array.isArray(rows) ? rows : []))
-      .catch(() => setConnections([]))
+    Promise.all([
+      shippingProvidersAPI.connections().catch(() => []),
+      automationAPI.canadaPostManifests().catch(() => []),
+    ])
+      .then(([rows, manifests]) => {
+        setConnections(Array.isArray(rows) ? rows : []);
+        setManifestRuns(Array.isArray(manifests) ? manifests : []);
+      })
+      .catch(() => {
+        setConnections([]);
+        setManifestRuns([]);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -537,6 +560,44 @@ function ShippingProviderConnectionsSection() {
     }
   };
 
+  const downloadManifestArtifact = async (run, artifact) => {
+    try {
+      const response = await fetch(automationAPI.canadaPostManifestArtifactUrl(run.id, artifact.id));
+      if (!response.ok) throw new Error(`download failed (${response.status})`);
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = canadaPostManifestFilename(run);
+      a.click();
+      URL.revokeObjectURL(objectUrl);
+    } catch (error) {
+      toast.error(error.message || "Manifest download failed");
+    }
+  };
+
+  const transmitManifest = async () => {
+    const groupIds = splitManifestGroupIds(manifestGroupText);
+    if (groupIds.length === 0) { toast.error("Group IDs required"); return; }
+    if (!primaryCanadaPostConnection) { toast.error("Canada Post provider required"); return; }
+
+    setTransmittingManifest(true);
+    try {
+      await automationAPI.transmitCanadaPostManifest({
+        connectionId: primaryCanadaPostConnection.id,
+        groupIds,
+      });
+      const manifests = await automationAPI.canadaPostManifests().catch(() => []);
+      setManifestRuns(Array.isArray(manifests) ? manifests : []);
+      setManifestGroupText("");
+      toast.success("Canada Post manifest ready");
+    } catch (error) {
+      toast.error(error.message || "Manifest transmit failed");
+    } finally {
+      setTransmittingManifest(false);
+    }
+  };
+
   return (
     <div className="card mb-12">
       <div className="flex items-center justify-between mb-8">
@@ -571,6 +632,48 @@ function ShippingProviderConnectionsSection() {
             </div>
           </div>
         ))
+      )}
+
+      {canadaPostConnections.length > 0 && (
+        <div className="mt-10" style={{ paddingTop: 10, borderTop: "1px solid var(--brd)" }}>
+          <div className="flex items-center justify-between gap-8 mb-8">
+            <div className="lbl" style={{ margin: 0 }}>Canada Post Manifests</div>
+            <span className="badge badge-dim">{manifestRuns.length}</span>
+          </div>
+          <div className="flex items-end gap-8 flex-wrap">
+            <label className="fld" style={{ flex: "1 1 260px" }}>
+              <span className="text-xxs text-dim">Group IDs</span>
+              <input
+                className="inp"
+                value={manifestGroupText}
+                onChange={(e) => setManifestGroupText(e.target.value)}
+                placeholder="cv-2026-06-12"
+              />
+            </label>
+            <button className="btn btn-primary btn-sm" onClick={transmitManifest} disabled={transmittingManifest}>
+              {transmittingManifest ? <Spinner size={12} /> : <IconZap size={12} />} Transmit Manifest
+            </button>
+          </div>
+          {manifestRuns.length > 0 && (
+            <div className="mt-8">
+              {manifestRuns.slice(0, 5).map((run) => (
+                <div key={run.id} className="flex items-center justify-between gap-8 mt-6" style={{ padding: "8px 10px", background: "var(--s3)", borderRadius: "var(--radius)" }}>
+                  <div className="min-w-0">
+                    <div className="text-xs fw-700 truncate">{run.poNumbers?.[0] || run.groupIds?.join(", ") || run.id}</div>
+                    <div className="text-xxs text-dim truncate">{run.status} - {run.createdAt || ""}</div>
+                  </div>
+                  <div className="flex items-center gap-6">
+                    {(run.artifacts || []).map((artifact) => (
+                      <button key={artifact.id} className="btn btn-outline btn-sm" type="button" onClick={() => downloadManifestArtifact(run, artifact)}>
+                        <IconDownload size={12} /> PDF
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {showAdd && (
