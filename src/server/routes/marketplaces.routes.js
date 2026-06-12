@@ -1,4 +1,5 @@
 import { all, get, run } from "../database.js";
+import { requireProtectedConfigWrite } from "../auth.js";
 import { MARKETPLACE_CONNECTION_FIELD_MAP } from "../mappers/fieldMaps.js";
 import { toCamel, toCamelArray } from "../mappers/recordMappers.js";
 import { requireJsonBody } from "../validation/common.js";
@@ -13,6 +14,23 @@ import {
 import { crosspostListing, getListingChannelState } from "../services/marketplaces/crosspostService.js";
 import { syncMarketplaceListings } from "../services/marketplaces/syncService.js";
 import { exportListingsForMarketplace } from "../services/exports/marketplaceCsvExporter.js";
+
+function firstDefined(...values) {
+  return values.find((value) => value != null && value !== "");
+}
+
+function normalizeOptionalSecret(value, fieldName) {
+  if (value == null || value === "") return null;
+  if (typeof value !== "string") {
+    throw new Error(`${fieldName} must be a string`);
+  }
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.length > 4000) {
+    throw new Error(`${fieldName} is too long`);
+  }
+  return trimmed;
+}
 
 export function registerMarketplaceRoutes(app) {
   const connectionSelect = `
@@ -45,23 +63,29 @@ export function registerMarketplaceRoutes(app) {
     }
   });
 
-  app.post("/api/marketplace-connections", requireJsonBody, (req, res) => {
+  app.post("/api/marketplace-connections", requireProtectedConfigWrite, requireJsonBody, (req, res) => {
     try {
       const { marketplace, accountLabel, metadata, shopName } = req.body;
       if (!marketplace) return res.status(400).json({ error: "marketplace required" });
+      const accessToken = normalizeOptionalSecret(firstDefined(req.body.accessToken, req.body.access_token), "accessToken");
+      const refreshToken = normalizeOptionalSecret(firstDefined(req.body.refreshToken, req.body.refresh_token), "refreshToken");
+      const tokenExpiresAt = normalizeOptionalSecret(firstDefined(req.body.tokenExpiresAt, req.body.token_expires_at), "tokenExpiresAt");
       const resolvedAccountLabel = accountLabel || shopName || marketplace;
-      const authStatus = "configured";
+      const authStatus = accessToken ? "connected" : "configured";
       const id = uid();
       run(
         `INSERT INTO marketplace_connections
-         (id, marketplace, account_label, auth_status, metadata, created_at, updated_at)
-         VALUES (?,?,?,?,?,datetime('now'),datetime('now'))`,
-        [id, marketplace, resolvedAccountLabel, authStatus, JSON.stringify(metadata || {})],
+         (id, marketplace, account_label, auth_status, access_token, refresh_token, token_expires_at, metadata, created_at, updated_at)
+         VALUES (?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))`,
+        [id, marketplace, resolvedAccountLabel, authStatus, accessToken, refreshToken, tokenExpiresAt, JSON.stringify(metadata || {})],
       );
       res.status(201).json(
         toCamel(get(`${connectionSelect} WHERE id = ?`, [id]), MARKETPLACE_CONNECTION_FIELD_MAP),
       );
     } catch (error) {
+      if (error.message?.includes("must be") || error.message?.includes("too long")) {
+        return res.status(400).json({ error: error.message });
+      }
       res.status(500).json({ error: error.message });
     }
   });

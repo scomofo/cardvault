@@ -28,6 +28,17 @@ function firstDefined(...values) {
   return values.find((value) => value != null && value !== "");
 }
 
+function parseJsonObject(value) {
+  if (!value) return {};
+  if (typeof value === "object" && !Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 function toNumberOrNull(value) {
   if (value == null || value === "") return null;
   const numeric = Number(value);
@@ -302,6 +313,30 @@ function markItemSoldFromMarketplaceSync(listing, sale, synced) {
   );
 }
 
+function handoffOverridesFromSync(channel, synced) {
+  const handoff = synced?.payload?.handoff;
+  if (!handoff || typeof handoff !== "object" || Array.isArray(handoff)) return null;
+  const overrides = parseJsonObject(channel.overrides);
+  return JSON.stringify({
+    ...overrides,
+    handoff: {
+      ...(overrides.handoff || {}),
+      ...handoff,
+    },
+  });
+}
+
+function publishErrorFromSync(synced) {
+  if (synced?.status !== "handoff_exception") return null;
+  return firstDefined(
+    synced.payload?.handoff?.note,
+    synced.payload?.note,
+    synced.payload?.message,
+    synced.payload?.error,
+    "External handoff needs retry",
+  );
+}
+
 /**
  * Sync listing status with a marketplace.
  * @param {string} marketplace
@@ -319,17 +354,23 @@ export async function syncMarketplaceListings(marketplace, listingId = null) {
   for (const channel of channels) {
     const listing = get(`SELECT * FROM listings WHERE id = ?`, [channel.listing_id]);
     if (!listing) continue;
+    const connection = channel.connection_id
+      ? get(`SELECT * FROM marketplace_connections WHERE id = ?`, [channel.connection_id])
+      : null;
     const listingForChannel = {
       ...listing,
       channel_status: channel.status || null,
       channelStatus: channel.status || null,
+      channel_id: channel.id,
+      channelId: channel.id,
       external_listing_id: channel.external_listing_id || listing.external_listing_id || null,
       externalListingId: channel.external_listing_id || listing.external_listing_id || null,
+      overrides: channel.overrides || null,
     };
 
     let synced;
     try {
-      synced = await adapter.sync(listingForChannel);
+      synced = await adapter.sync(listingForChannel, { channel, connection });
     } catch (error) {
       console.error(`Failed to sync ${channel.marketplace} listing ${listing.id}:`, error);
       run(
@@ -383,6 +424,8 @@ export async function syncMarketplaceListings(marketplace, listingId = null) {
       continue;
     }
 
+    const nextOverrides = handoffOverridesFromSync(channel, normalizedSynced);
+    const publishError = publishErrorFromSync(normalizedSynced);
     const result = runInImmediateTransaction(() => {
       run(
         `UPDATE listing_channels
@@ -390,7 +433,8 @@ export async function syncMarketplaceListings(marketplace, listingId = null) {
              last_sync_at = ?,
              remote_updated_at = COALESCE(?, remote_updated_at),
              remote_price_history = COALESCE(?, remote_price_history),
-             publish_error = NULL,
+             publish_error = ?,
+             overrides = COALESCE(?, overrides),
              updated_at = datetime('now')
          WHERE id = ?`,
         [
@@ -398,6 +442,8 @@ export async function syncMarketplaceListings(marketplace, listingId = null) {
           normalizedSynced.syncedAt,
           normalizedSynced.remoteUpdatedAt || null,
           normalizedSynced.priceHistory?.length ? JSON.stringify(normalizedSynced.priceHistory) : null,
+          publishError,
+          nextOverrides,
           channel.id,
         ],
       );

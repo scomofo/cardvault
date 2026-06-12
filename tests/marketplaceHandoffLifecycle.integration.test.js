@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import Database from "better-sqlite3";
+import { createServer } from "node:http";
 
 import { startTestServer } from "./helpers/testServer.js";
 
@@ -12,7 +13,7 @@ async function postJson(baseUrl, path, body) {
   });
 }
 
-async function createHandoffListing(baseUrl, { idPrefix, marketplace, cardName, marketPrice }) {
+async function createHandoffListing(baseUrl, { idPrefix, marketplace, cardName, marketPrice, connectionId }) {
   const itemId = `${idPrefix}-item`;
   const listingId = `${idPrefix}-listing`;
 
@@ -41,12 +42,36 @@ async function createHandoffListing(baseUrl, { idPrefix, marketplace, cardName, 
   const publishResponse = await postJson(baseUrl, "/api/marketplaces/publish", {
     listingId,
     marketplace,
+    ...(connectionId ? { connectionId } : {}),
   });
   assert.equal(publishResponse.status, 200);
   const publishPayload = await publishResponse.json();
   assert.equal(publishPayload.status, "handoff_ready");
 
   return { itemId, listingId };
+}
+
+async function startPartnerStatusServer(t, responsePayload) {
+  const requests = [];
+  const server = createServer((req, res) => {
+    requests.push({
+      method: req.method,
+      url: req.url,
+      partnerKey: req.headers["x-partner-key"],
+    });
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify(responsePayload));
+  });
+
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(async () => {
+    await new Promise((resolve) => server.close(resolve));
+  });
+
+  return {
+    requests,
+    baseUrl: `http://127.0.0.1:${server.address().port}`,
+  };
 }
 
 async function getMarketplaceChannel(baseUrl, listingId, marketplace) {
@@ -231,4 +256,62 @@ test("external handoff status updates persist partner outcomes and queue excepti
   } finally {
     db.close();
   }
+});
+
+test("configured partner status sync advances COMC handoff lifecycle", async (t) => {
+  const partner = await startPartnerStatusServer(t, {
+    status: "accepted",
+    submissionReference: "comc-accepted-42",
+    note: "Accepted by COMC intake",
+    updatedAt: "2026-06-12T12:00:00.000Z",
+  });
+  const { baseUrl } = await startTestServer(t, { dirPrefix: "cardvault-comc-partner-status-sync-" });
+
+  const connectionResponse = await postJson(baseUrl, "/api/marketplace-connections", {
+    marketplace: "comc",
+    accountLabel: "COMC partner API",
+    accessToken: "partner-secret",
+    metadata: {
+      handoffStatusUrl: `${partner.baseUrl}/status/{listingId}?submission={submissionReference}`,
+      apiKeyHeader: "X-Partner-Key",
+      apiKeyPrefix: "",
+      handoffStatusTimeoutMs: 1000,
+    },
+  });
+  assert.equal(connectionResponse.status, 201);
+  const connection = await connectionResponse.json();
+  assert.equal("accessToken" in connection, false);
+
+  const { listingId } = await createHandoffListing(baseUrl, {
+    idPrefix: "comc-partner-sync",
+    marketplace: "comc",
+    cardName: "Mark Messier",
+    marketPrice: 64,
+    connectionId: connection.id,
+  });
+
+  assert.equal((await postJson(baseUrl, "/api/marketplaces/export", {
+    marketplace: "comc",
+    listingIds: [listingId],
+  })).status, 200);
+
+  const syncResponse = await postJson(baseUrl, "/api/marketplaces/sync", {
+    marketplace: "comc",
+    listingId,
+  });
+  assert.equal(syncResponse.status, 200);
+  const syncPayload = await syncResponse.json();
+  assert.equal(syncPayload.length, 1);
+  assert.equal(syncPayload[0].synced.status, "handoff_accepted");
+  assert.equal(partner.requests.length, 1);
+  assert.equal(partner.requests[0].method, "GET");
+  assert.equal(partner.requests[0].partnerKey, "partner-secret");
+  assert.match(partner.requests[0].url, new RegExp(`/status/${listingId}`));
+
+  const channel = await getMarketplaceChannel(baseUrl, listingId, "comc");
+  assert.equal(channel.status, "handoff_accepted");
+  const overrides = JSON.parse(channel.overrides);
+  assert.equal(overrides.handoff.submissionStatus, "accepted");
+  assert.equal(overrides.handoff.submissionReference, "comc-accepted-42");
+  assert.equal(overrides.handoff.note, "Accepted by COMC intake");
 });
