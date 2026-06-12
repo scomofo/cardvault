@@ -1,9 +1,10 @@
-import { get, run } from "../../database.js";
+import { all, get, run } from "../../database.js";
 import { uid } from "../../routes/shared.js";
 import { getMarketplaceAdapter } from "../../integrations/marketplaces/marketplaceRegistry.js";
 import { refreshListingAggregateState } from "./listingAggregateState.js";
 
 const HANDOFF_MARKETPLACES = new Set(["comc", "consignment"]);
+const SUBMITTABLE_HANDOFF_STATUSES = new Set(["handoff_ready", "handoff_exported", "handoff_exception"]);
 const HANDOFF_STATUS_MAP = new Map([
   ["ready", "handoff_ready"],
   ["ready_for_review", "handoff_ready"],
@@ -39,6 +40,14 @@ function normalizeHandoffStatus(status) {
 
 function handoffSubmissionStatus(channelStatus) {
   return channelStatus.replace(/^handoff_/, "");
+}
+
+function normalizeHandoffMarketplace(marketplace) {
+  const normalizedMarketplace = String(marketplace || "").trim().toLowerCase();
+  if (!HANDOFF_MARKETPLACES.has(normalizedMarketplace)) {
+    throw new Error("Marketplace does not support external handoff lifecycle");
+  }
+  return normalizedMarketplace;
 }
 
 function upsertChannel({ listingId, marketplace, connectionId, externalListingId, status, payload, publishError }) {
@@ -95,6 +104,123 @@ function addChannelEvent(channelId, eventType, status, payload) {
      VALUES (?,?,?,?,?)`,
     [uid(), channelId, eventType, status || null, JSON.stringify(payload || {})],
   );
+}
+
+function findSubmittableHandoffChannels(marketplace, listingIds = []) {
+  if (listingIds.length) {
+    return all(
+      `SELECT *
+       FROM listing_channels
+       WHERE marketplace = ?
+         AND listing_id IN (${listingIds.map(() => "?").join(",")})
+         AND status IN (${Array.from(SUBMITTABLE_HANDOFF_STATUSES).map(() => "?").join(",")})`,
+      [marketplace, ...listingIds, ...SUBMITTABLE_HANDOFF_STATUSES],
+    );
+  }
+
+  return all(
+    `SELECT *
+     FROM listing_channels
+     WHERE marketplace = ?
+       AND status IN (${Array.from(SUBMITTABLE_HANDOFF_STATUSES).map(() => "?").join(",")})`,
+    [marketplace, ...SUBMITTABLE_HANDOFF_STATUSES],
+  );
+}
+
+function channelListingForHandoff(listing, channel) {
+  return {
+    ...listing,
+    channel_status: channel.status || null,
+    channelStatus: channel.status || null,
+    channel_id: channel.id,
+    channelId: channel.id,
+    external_listing_id: channel.external_listing_id || listing.external_listing_id || null,
+    externalListingId: channel.external_listing_id || listing.external_listing_id || null,
+    overrides: channel.overrides || null,
+  };
+}
+
+function publishErrorFromHandoffResult(result) {
+  if (result.status !== "handoff_exception") return null;
+  return result.payload?.handoff?.note
+    || result.payload?.note
+    || result.payload?.message
+    || result.payload?.error
+    || "External handoff needs retry";
+}
+
+function persistHandoffSubmission(channel, result) {
+  const updatedAt = result.syncedAt || new Date().toISOString();
+  const overrides = parseJsonObject(channel.overrides);
+  const handoff = {
+    ...(overrides.handoff || {}),
+    ...(result.payload?.handoff || {}),
+  };
+  const nextOverrides = {
+    ...overrides,
+    handoff,
+  };
+  const publishError = publishErrorFromHandoffResult(result);
+
+  run(
+    `UPDATE listing_channels
+     SET status = ?,
+         publish_error = ?,
+         overrides = ?,
+         last_sync_at = ?,
+         updated_at = datetime('now')
+     WHERE id = ?`,
+    [result.status, publishError, JSON.stringify(nextOverrides), updatedAt, channel.id],
+  );
+
+  addChannelEvent(channel.id, "handoff_submission", result.status, {
+    listingId: channel.listing_id,
+    marketplace: channel.marketplace,
+    previousStatus: channel.status,
+    status: result.status,
+    handoff,
+  });
+  refreshListingAggregateState(channel.listing_id, { syncedAt: updatedAt });
+
+  return get(`SELECT * FROM listing_channels WHERE id = ?`, [channel.id]);
+}
+
+function persistHandoffSubmissionException(channel, error) {
+  const updatedAt = new Date().toISOString();
+  const message = error?.message || "External handoff submission failed";
+  const overrides = parseJsonObject(channel.overrides);
+  const handoff = {
+    ...(overrides.handoff || {}),
+    submissionStatus: "exception",
+    note: message,
+    updatedAt,
+  };
+  const nextOverrides = {
+    ...overrides,
+    handoff,
+  };
+
+  run(
+    `UPDATE listing_channels
+     SET status = 'handoff_exception',
+         publish_error = ?,
+         overrides = ?,
+         last_sync_at = ?,
+         updated_at = datetime('now')
+     WHERE id = ?`,
+    [message, JSON.stringify(nextOverrides), updatedAt, channel.id],
+  );
+
+  addChannelEvent(channel.id, "handoff_submission", "handoff_exception", {
+    listingId: channel.listing_id,
+    marketplace: channel.marketplace,
+    previousStatus: channel.status,
+    status: "handoff_exception",
+    handoff,
+  });
+  refreshListingAggregateState(channel.listing_id, { syncedAt: updatedAt });
+
+  return get(`SELECT * FROM listing_channels WHERE id = ?`, [channel.id]);
 }
 
 function getListingForMarketplace(listingId, marketplace) {
@@ -179,10 +305,7 @@ export function updateMarketplaceHandoffStatus({ listingId, marketplace, status,
     throw new Error("listingId, marketplace, and status required");
   }
 
-  const normalizedMarketplace = String(marketplace).trim().toLowerCase();
-  if (!HANDOFF_MARKETPLACES.has(normalizedMarketplace)) {
-    throw new Error("Marketplace does not support external handoff lifecycle");
-  }
+  const normalizedMarketplace = normalizeHandoffMarketplace(marketplace);
 
   const listing = get(`SELECT * FROM listings WHERE id = ?`, [listingId]);
   if (!listing) throw new Error("Listing not found");
@@ -235,4 +358,45 @@ export function updateMarketplaceHandoffStatus({ listingId, marketplace, status,
   refreshListingAggregateState(listingId, { syncedAt: updatedAt });
 
   return get(`SELECT * FROM listing_channels WHERE id = ?`, [channel.id]);
+}
+
+export async function submitMarketplaceHandoffs({ marketplace, listingIds = [] }) {
+  const normalizedMarketplace = normalizeHandoffMarketplace(marketplace);
+  const normalizedListingIds = Array.isArray(listingIds)
+    ? listingIds.map((id) => String(id)).filter(Boolean)
+    : [];
+  const channels = findSubmittableHandoffChannels(normalizedMarketplace, normalizedListingIds);
+  if (!channels.length) {
+    throw new Error("No handoff channels available for submission");
+  }
+
+  const adapter = getMarketplaceAdapter(normalizedMarketplace);
+  const results = [];
+  for (const channel of channels) {
+    const listing = get(`SELECT * FROM listings WHERE id = ?`, [channel.listing_id]);
+    if (!listing) continue;
+    const connection = channel.connection_id
+      ? get(`SELECT * FROM marketplace_connections WHERE id = ?`, [channel.connection_id])
+      : null;
+
+    try {
+      const result = await adapter.submitHandoff(channelListingForHandoff(listing, channel), { channel, connection });
+      results.push(persistHandoffSubmission(channel, result));
+    } catch (error) {
+      results.push(persistHandoffSubmissionException(channel, error));
+    }
+  }
+
+  const submittedListingIds = results
+    .filter((channel) => channel?.status !== "handoff_exception")
+    .map((channel) => channel.listing_id);
+
+  return {
+    marketplace: normalizedMarketplace,
+    handoff: {
+      status: "handoff_submitted",
+      listingIds: submittedListingIds,
+    },
+    results,
+  };
 }

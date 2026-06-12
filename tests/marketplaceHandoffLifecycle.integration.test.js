@@ -54,13 +54,27 @@ async function createHandoffListing(baseUrl, { idPrefix, marketplace, cardName, 
 async function startPartnerStatusServer(t, responsePayload) {
   const requests = [];
   const server = createServer((req, res) => {
-    requests.push({
-      method: req.method,
-      url: req.url,
-      partnerKey: req.headers["x-partner-key"],
+    const chunks = [];
+    req.on("data", (chunk) => chunks.push(chunk));
+    req.on("end", () => {
+      const rawBody = Buffer.concat(chunks).toString("utf8");
+      let body = null;
+      if (rawBody) {
+        try {
+          body = JSON.parse(rawBody);
+        } catch {
+          body = rawBody;
+        }
+      }
+      requests.push({
+        method: req.method,
+        url: req.url,
+        partnerKey: req.headers["x-partner-key"],
+        body,
+      });
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify(responsePayload));
     });
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify(responsePayload));
   });
 
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -314,4 +328,83 @@ test("configured partner status sync advances COMC handoff lifecycle", async (t)
   assert.equal(overrides.handoff.submissionStatus, "accepted");
   assert.equal(overrides.handoff.submissionReference, "comc-accepted-42");
   assert.equal(overrides.handoff.note, "Accepted by COMC intake");
+});
+
+test("configured partner submission posts COMC handoff and records submission reference", async (t) => {
+  const partner = await startPartnerStatusServer(t, {
+    status: "submitted",
+    submissionReference: "comc-submission-77",
+    note: "Received by COMC intake",
+    updatedAt: "2026-06-12T13:00:00.000Z",
+  });
+  const { baseUrl, dbPath } = await startTestServer(t, { dirPrefix: "cardvault-comc-partner-submit-" });
+
+  const connectionResponse = await postJson(baseUrl, "/api/marketplace-connections", {
+    marketplace: "comc",
+    accountLabel: "COMC partner API",
+    accessToken: "partner-secret",
+    metadata: {
+      handoffSubmissionUrl: `${partner.baseUrl}/submit/{listingId}`,
+      apiKeyHeader: "X-Partner-Key",
+      apiKeyPrefix: "",
+      handoffSubmissionTimeoutMs: 1000,
+    },
+  });
+  assert.equal(connectionResponse.status, 201);
+  const connection = await connectionResponse.json();
+
+  const { listingId } = await createHandoffListing(baseUrl, {
+    idPrefix: "comc-partner-submit",
+    marketplace: "comc",
+    cardName: "Bobby Orr",
+    marketPrice: 120,
+    connectionId: connection.id,
+  });
+
+  assert.equal((await postJson(baseUrl, "/api/marketplaces/export", {
+    marketplace: "comc",
+    listingIds: [listingId],
+  })).status, 200);
+
+  const submitResponse = await postJson(baseUrl, "/api/marketplaces/handoff/submit", {
+    marketplace: "comc",
+    listingIds: [listingId],
+  });
+  assert.equal(submitResponse.status, 200);
+  const submitPayload = await submitResponse.json();
+  assert.equal(submitPayload.marketplace, "comc");
+  assert.deepEqual(submitPayload.handoff.listingIds, [listingId]);
+  assert.equal(submitPayload.results[0].status, "handoff_submitted");
+
+  assert.equal(partner.requests.length, 1);
+  assert.equal(partner.requests[0].method, "POST");
+  assert.equal(partner.requests[0].partnerKey, "partner-secret");
+  assert.match(partner.requests[0].url, new RegExp(`/submit/${listingId}`));
+  assert.equal(partner.requests[0].body.listingId, listingId);
+  assert.equal(partner.requests[0].body.marketplace, "comc");
+  assert.equal(partner.requests[0].body.handoff.submissionStatus, "exported");
+  assert.match(partner.requests[0].body.card.title, /Bobby Orr/);
+
+  const channel = await getMarketplaceChannel(baseUrl, listingId, "comc");
+  assert.equal(channel.status, "handoff_submitted");
+  const overrides = JSON.parse(channel.overrides);
+  assert.equal(overrides.handoff.submissionStatus, "submitted");
+  assert.equal(overrides.handoff.submissionReference, "comc-submission-77");
+  assert.equal(overrides.handoff.note, "Received by COMC intake");
+
+  const db = new Database(dbPath, { readonly: true });
+  try {
+    const event = db.prepare(
+      `SELECT event_type, status, payload
+       FROM listing_channel_events
+       WHERE event_type = 'handoff_submission'
+       ORDER BY created_at DESC
+       LIMIT 1`,
+    ).get();
+    assert.equal(event.status, "handoff_submitted");
+    assert.match(event.payload, /comc-submission-77/);
+    assert.doesNotMatch(event.payload, /partner-secret|accessToken|refreshToken|api_key|apiKey/);
+  } finally {
+    db.close();
+  }
 });

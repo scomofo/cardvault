@@ -1,4 +1,5 @@
 const DEFAULT_HANDOFF_STATUS_TIMEOUT_MS = 10000;
+const DEFAULT_HANDOFF_SUBMISSION_TIMEOUT_MS = 10000;
 const HANDOFF_ERROR_TEXT_LIMIT = 200;
 const HANDOFF_STATUS_MAP = new Map([
   ["ready", "handoff_ready"],
@@ -45,6 +46,15 @@ function handoffStatusUrl(metadata = {}) {
   );
 }
 
+function handoffSubmissionUrl(metadata = {}) {
+  return firstDefined(
+    metadata.handoffSubmissionUrl,
+    metadata.handoff_submission_url,
+    metadata.submissionUrl,
+    metadata.submission_url,
+  );
+}
+
 function handoffStatusTimeoutMs(metadata = {}) {
   const timeoutMs = Number(firstDefined(
     metadata.handoffStatusTimeoutMs,
@@ -55,6 +65,18 @@ function handoffStatusTimeoutMs(metadata = {}) {
   return Number.isFinite(timeoutMs) && timeoutMs > 0
     ? timeoutMs
     : DEFAULT_HANDOFF_STATUS_TIMEOUT_MS;
+}
+
+function handoffSubmissionTimeoutMs(metadata = {}) {
+  const timeoutMs = Number(firstDefined(
+    metadata.handoffSubmissionTimeoutMs,
+    metadata.handoff_submission_timeout_ms,
+    metadata.submissionTimeoutMs,
+    metadata.submission_timeout_ms,
+  ));
+  return Number.isFinite(timeoutMs) && timeoutMs > 0
+    ? timeoutMs
+    : DEFAULT_HANDOFF_SUBMISSION_TIMEOUT_MS;
 }
 
 function renderTemplate(template, values) {
@@ -97,6 +119,21 @@ async function readHandoffPayload(response) {
   } catch {
     return { error: truncateText(text) };
   }
+}
+
+function handoffEndpoint(template, values, label) {
+  let endpoint;
+  try {
+    endpoint = new URL(renderTemplate(template, values));
+  } catch {
+    throw new Error(`${label} URL is invalid`);
+  }
+
+  if (!["http:", "https:"].includes(endpoint.protocol)) {
+    throw new Error(`${label} URL must use http or https`);
+  }
+
+  return endpoint;
 }
 
 export class MarketplaceAdapter {
@@ -162,22 +199,13 @@ export class MarketplaceAdapter {
 
     const overrides = parseJsonObject(listing.overrides);
     const currentHandoff = overrides.handoff || {};
-    let endpoint;
-    try {
-      endpoint = new URL(renderTemplate(template, {
-        listingId: listing.id,
-        marketplace: this.marketplace,
-        externalListingId: listing.external_listing_id || listing.externalListingId || "",
-        submissionReference: currentHandoff.submissionReference || "",
-        channelId: listing.channel_id || listing.channelId || "",
-      }));
-    } catch {
-      throw new Error(`${this.marketplace} handoff status URL is invalid`);
-    }
-
-    if (!["http:", "https:"].includes(endpoint.protocol)) {
-      throw new Error(`${this.marketplace} handoff status URL must use http or https`);
-    }
+    const endpoint = handoffEndpoint(template, {
+      listingId: listing.id,
+      marketplace: this.marketplace,
+      externalListingId: listing.external_listing_id || listing.externalListingId || "",
+      submissionReference: currentHandoff.submissionReference || "",
+      channelId: listing.channel_id || listing.channelId || "",
+    }, `${this.marketplace} handoff status`);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), handoffStatusTimeoutMs(metadata));
@@ -228,6 +256,96 @@ export class MarketplaceAdapter {
     } catch (error) {
       if (error?.name === "AbortError") {
         throw new Error(`${this.marketplace} handoff status sync timed out`, { cause: error });
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  async submitHandoff(listing, options = {}) {
+    const connection = options.connection || {};
+    const metadata = parseJsonObject(connection.metadata);
+    const template = handoffSubmissionUrl(metadata);
+    if (!template) {
+      throw new Error(`${this.marketplace} handoff submission URL is not configured`);
+    }
+
+    const overrides = parseJsonObject(listing.overrides);
+    const currentHandoff = overrides.handoff || {};
+    const endpoint = handoffEndpoint(template, {
+      listingId: listing.id,
+      marketplace: this.marketplace,
+      externalListingId: listing.external_listing_id || listing.externalListingId || "",
+      submissionReference: currentHandoff.submissionReference || "",
+      channelId: listing.channel_id || listing.channelId || "",
+    }, `${this.marketplace} handoff submission`);
+    const mapped = this.mapForExport({ ...listing, handoff: currentHandoff });
+    const requestPayload = {
+      listingId: listing.id,
+      marketplace: this.marketplace,
+      externalListingId: listing.external_listing_id || listing.externalListingId || null,
+      card: {
+        title: firstDefined(mapped.Card, mapped.title, listing.listing_title, listing.card_name),
+        description: firstDefined(mapped.Notes, mapped.description, listing.listing_description, ""),
+        price: firstDefined(mapped.AskPrice, mapped.DeclaredValue, mapped.ReservePrice, mapped.price, listing.buy_now_price, listing.start_price, 0),
+        quantity: firstDefined(mapped.Quantity, mapped.quantity, listing.quantity, 1),
+      },
+      export: mapped,
+      handoff: currentHandoff,
+    };
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), handoffSubmissionTimeoutMs(metadata));
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          ...handoffAuthHeaders(connection, metadata),
+        },
+        body: JSON.stringify(requestPayload),
+        signal: controller.signal,
+      });
+      const payload = await readHandoffPayload(response);
+      if (!response.ok) {
+        throw new Error(firstDefined(payload.error, payload.message, `${this.marketplace} handoff submission failed (${response.status})`));
+      }
+
+      const status = normalizeHandoffStatus(
+        firstDefined(payload.status, payload.handoffStatus, payload.handoff_status, payload.submissionStatus, payload.submission_status),
+        "submitted",
+      );
+      const syncedAt = firstDefined(payload.syncedAt, payload.synced_at, payload.updatedAt, payload.updated_at, new Date().toISOString());
+      const submissionReference = firstDefined(
+        payload.submissionReference,
+        payload.submission_reference,
+        payload.reference,
+        payload.ref,
+        payload.id,
+        currentHandoff.submissionReference,
+      );
+      const note = firstDefined(payload.note, payload.message, payload.error, currentHandoff.note);
+      const handoff = {
+        ...currentHandoff,
+        submissionStatus: handoffSubmissionStatus(status),
+        submittedAt: syncedAt,
+        updatedAt: syncedAt,
+      };
+      if (submissionReference) handoff.submissionReference = String(submissionReference);
+      if (note) handoff.note = String(note);
+
+      return {
+        marketplace: this.marketplace,
+        externalListingId: firstDefined(payload.externalListingId, payload.external_listing_id, listing.external_listing_id, listing.externalListingId),
+        status,
+        payload: { ...payload, handoff },
+        syncedAt,
+      };
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        throw new Error(`${this.marketplace} handoff submission timed out`, { cause: error });
       }
       throw error;
     } finally {

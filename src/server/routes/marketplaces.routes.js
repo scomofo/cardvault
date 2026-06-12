@@ -10,6 +10,7 @@ import {
   reviseListingOnMarketplace,
   endListingOnMarketplace,
   updateMarketplaceHandoffStatus,
+  submitMarketplaceHandoffs,
 } from "../services/marketplaces/publishService.js";
 import { crosspostListing, getListingChannelState } from "../services/marketplaces/crosspostService.js";
 import { syncMarketplaceListings } from "../services/marketplaces/syncService.js";
@@ -130,6 +131,16 @@ export function registerMarketplaceRoutes(app) {
     try {
       const { listingId, marketplace, status, submissionReference, note } = req.body;
       res.json(updateMarketplaceHandoffStatus({ listingId, marketplace, status, submissionReference, note }));
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/marketplaces/handoff/submit", requireJsonBody, async (req, res) => {
+    try {
+      const { marketplace, listingIds } = req.body;
+      if (!marketplace) return res.status(400).json({ error: "marketplace required" });
+      res.json(await submitMarketplaceHandoffs({ marketplace, listingIds: listingIds || [] }));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
