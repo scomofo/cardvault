@@ -4,6 +4,27 @@ function score({ base = 0, marketPrice = 0, ageDays = 0, urgency = 0, blockedCas
   return Math.round(base + marketPrice + ageDays + urgency + blockedCash + risk + marketMovement + profitOpportunity);
 }
 
+function parseJson(value, fallback = {}) {
+  if (!value) return fallback;
+  if (typeof value === "object") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function shippingRetryReason(order) {
+  const serviceParts = [order.carrier, order.service_level].filter(Boolean);
+  const service = serviceParts.length > 0 ? `${serviceParts.join(" ")} label` : "Shipping label";
+  const eventPayload = parseJson(order.shipping_event_payload, {});
+  const error = typeof eventPayload.error === "string" && eventPayload.error.trim()
+    ? eventPayload.error.trim()
+    : "";
+
+  return `${service} for ${order.platform} order needs retry${error ? `: ${error}` : ""}`;
+}
+
 /**
  * Build a prioritized action queue from orders, listings, pricing, and grading state.
  * @returns {{ queue: string, subjectType: string, subjectId: string, reason: string, priorityScore: number }[]}
@@ -16,8 +37,19 @@ export function getActionQueue() {
       orders.id,
       orders.sale_price,
       orders.platform,
+      shipments.carrier,
+      shipments.service_level,
       shipments.label_status,
-      shipments.status AS shipment_status
+      shipments.status AS shipment_status,
+      (
+        SELECT listing_channel_events.payload
+        FROM listing_channel_events
+        JOIN listing_channels ON listing_channels.id = listing_channel_events.listing_channel_id
+        WHERE listing_channels.listing_id = orders.listing_id
+          AND listing_channel_events.event_type = 'shipping_exception'
+        ORDER BY listing_channel_events.created_at DESC
+        LIMIT 1
+      ) AS shipping_event_payload
     FROM orders
     JOIN shipments
       ON shipments.id = (
@@ -36,7 +68,7 @@ export function getActionQueue() {
       item: order.id,
       itemId: order.id,
       itemName: null,
-      reason: `Shipping label for ${order.platform} order needs retry`,
+      reason: shippingRetryReason(order),
       suggestedAction: "retry_shipment",
       priorityScore: score({ base: 240, marketPrice: Number(order.sale_price || 0), urgency: 70, risk: 40 }),
       subjectType: "order",
@@ -49,18 +81,24 @@ export function getActionQueue() {
       listing_channels.listing_id,
       listing_channels.marketplace,
       listing_channels.publish_error,
+      listing_channels.overrides,
       listings.card_name,
       listings.start_price
     FROM listing_channels
     JOIN listings ON listings.id = listing_channels.listing_id
     WHERE listing_channels.status = 'handoff_exception'
   `)) {
+    const handoff = parseJson(channel.overrides, {}).handoff || {};
     queue.push({
       queue: "marketplace_handoff_exception",
       item: channel.card_name || channel.listing_id,
       itemId: channel.listing_id,
       itemName: channel.card_name || null,
       reason: channel.publish_error || `${channel.marketplace} handoff needs retry`,
+      marketplace: channel.marketplace,
+      listingId: channel.listing_id,
+      submissionReference: handoff.submissionReference || null,
+      handoffNote: handoff.note || null,
       suggestedAction: "retry_handoff",
       priorityScore: score({ base: 210, marketPrice: Number(channel.start_price || 0), urgency: 60, risk: 35 }),
       subjectType: "listing",

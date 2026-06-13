@@ -20,7 +20,7 @@ Status values:
 | Profit tracking | implemented | `services/dashboard/kpiService.js` |
 | Inventory aging alerts | implemented | `services/dashboard/actionQueueService.js` |
 
-**Shipping partial notes:** automation module wires into the order flow, uses configured `shipping_provider_connections` rate/label metadata when available, and can execute live label purchases through a registered provider client or generic HTTP label endpoint. The deterministic Canada Post fallback remains for offline use. Carrier-specific production adapters still require real provider credentials and endpoint configuration.
+**Shipping partial notes:** automation module wires into the order flow, uses configured `shipping_provider_connections` rate/label metadata when available, and can execute live label purchases through a registered provider client or generic HTTP label endpoint. Canada Post now has first-class sandbox/production profile defaults, Basic-auth dry-run validation, redacted diagnostics, retry queue context, native shipment preflight, direct native Create Shipment XML submission when explicitly enabled, label response parsing, protected Transmit Shipments/Get Manifest/Get Artifact workflow, durable manifest artifact storage, group-ID controls, run history, and PDF downloads. The deterministic Canada Post fallback remains for offline use. Full production completion still requires carrier approval plus live production validation.
 
 ## Tier 2 — Decision engine and automation
 
@@ -48,7 +48,7 @@ Items in this tier are planned but unscoped. They address the known limitations 
 | Marketplace fee model for routing | **implemented** | `services/decisions/marketplaceFees.js` — default rates for eBay (13.35%+$0.40), TCGplayer (10.25%), Shopify (2.9%+$0.30), COMC (20%), consignment (20%). `marketplaceDecision` now emits `expectedNet` in inputs/explanation. |
 | Confidence calibration from outcome history | **implemented** | `services/decisions/confidenceCalibration.js` — Laplace-smoothed acceptance rate per decision type, blended by `decisionStore.saveDecisions`. Falls back to the hardcoded prior until ≥5 resolved feedback rows exist. `GET /api/decisions/calibration` reports per-type samples. |
 | Cross-marketplace inventory sync reconciliation | **implemented** | `services/marketplaces/syncReconciler.js` detects `external_id_mismatch`, `status_mismatch`, `price_mismatch`, and `missing_remote` conflicts. Blocking conflicts halt the apply step and log a `reconciliation_conflict` event. Adapter-provided remote update timestamps and price history are normalized into sync results and persisted on `listing_channels`. |
-| Consignment / COMC integrations | **partial** | `integrations/marketplaces/comcAdapter.js` and `consignmentAdapter.js` now publish handoff-ready channels and export CardVault listing IDs plus submission status metadata for CSV handoff tracking. External marketplace APIs are still stubbed. |
+| Consignment / COMC integrations | **partial** | `integrations/marketplaces/comcAdapter.js` and `consignmentAdapter.js` now publish handoff-ready channels, export CardVault listing IDs plus submission status metadata for CSV fallback tracking, submit eligible handoffs to configured partner endpoints, and poll configured partner status endpoints during marketplace sync. The operator UX for direct submissions is implemented. Full completion still needs partner-specific live validation against real COMC/consignment endpoints. |
 
 ## How to propose a change
 

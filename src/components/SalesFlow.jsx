@@ -8,7 +8,7 @@ import { actionQueueAPI, marketplacesAPI, ordersAPI, listingsAPI, salesAPI, auto
 import { importEbayPurchasesLocal, parseEbayPurchaseImport } from "../lib/ebayPurchaseImport";
 import { buildManualSaleFulfillment, loadServerSalesState, summarizeMarketplaceCrosspostResults, summarizeMarketplaceSyncResults } from "../lib/salesViewState";
 import { requestNotificationPermission, canNotify, sendNotification, scheduleAuctionNotification, cancelNotificationTimer } from "../lib/notifications";
-import { IconPlus, IconBell, IconCheck, IconX, IconUpload, Spinner } from "./Icons";
+import { IconPlus, IconBell, IconCheck, IconX, IconUpload, IconRefresh, Spinner } from "./Icons";
 import EbayExport from "./EbayExport";
 import ActiveListingCard from "./ActiveListingCard";
 
@@ -366,6 +366,48 @@ export default function SalesFlow({ onNavigate }) {
     }
   };
 
+  async function retryHandoff(entry) {
+    if (!entry?.marketplace || !entry?.subjectId) {
+      toast.error("Handoff retry is missing marketplace context");
+      return;
+    }
+    try {
+      setBusyListingId(entry.subjectId);
+      const result = await marketplacesAPI.submitHandoff({
+        marketplace: entry.marketplace,
+        listingIds: [entry.subjectId]
+      });
+      await refreshServerSalesState();
+      const retried = result.handoff?.listingIds?.length || 0;
+      toast.success(retried ? `Retried ${entry.marketplace} handoff` : "Handoff retry request sent");
+    } catch (error) {
+      toast.error("Handoff retry failed: " + error.message);
+    } finally {
+      setBusyListingId(null);
+    }
+  }
+
+  async function syncHandoffStatus(entry) {
+    if (!entry?.marketplace || !entry?.subjectId) {
+      toast.error("Handoff sync is missing marketplace context");
+      return;
+    }
+    try {
+      setBusyListingId(entry.subjectId);
+      const syncResults = await marketplacesAPI.sync({
+        marketplace: entry.marketplace,
+        listingId: entry.subjectId
+      });
+      await refreshServerSalesState();
+      const summary = summarizeMarketplaceSyncResults(syncResults, entry.marketplace);
+      (toast[summary.type] || toast.info)(summary.message);
+    } catch (error) {
+      toast.error("Handoff sync failed: " + error.message);
+    } finally {
+      setBusyListingId(null);
+    }
+  }
+
   const automateShipping = async (orderId) => {
     try {
       setShippingBusy(orderId);
@@ -418,15 +460,44 @@ export default function SalesFlow({ onNavigate }) {
       {actionQueue.length > 0 && (
         <div className="card mb-12">
           <div className="lbl">Action Queue</div>
-          {actionQueue.slice(0, 4).map((entry) => (
-            <div key={`${entry.subjectType}-${entry.subjectId}`} className="flex justify-between items-center mt-8">
-              <div>
-                <div className="text-xs fw-700">{entry.queue.replace(/_/g, " ")}</div>
-                <div className="text-xxs text-dim">{entry.reason}</div>
+          {actionQueue.slice(0, 4).map((entry) => {
+            const isHandoffException = entry.queue === "marketplace_handoff_exception";
+            const isBusy = busyListingId === entry.subjectId;
+            const handoffMeta = [entry.marketplace, entry.submissionReference && `Ref ${entry.submissionReference}`]
+              .filter(Boolean)
+              .join(" - ");
+            return (
+              <div key={`${entry.subjectType}-${entry.subjectId}`} className="flex justify-between items-center mt-8">
+                <div>
+                  <div className="text-xs fw-700">{entry.queue.replace(/_/g, " ")}</div>
+                  <div className="text-xxs text-dim">{entry.reason}</div>
+                  {isHandoffException && (
+                    <>
+                      {handoffMeta && <div className="text-xxs text-dim mt-4">{handoffMeta}</div>}
+                      {entry.handoffNote && <div className="text-xxs mt-4" style={{ color: "var(--red)" }}>{entry.handoffNote}</div>}
+                      <div className="flex gap-8 mt-8">
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => retryHandoff(entry)}
+                          disabled={isBusy || !entry.marketplace}
+                        >
+                          {isBusy ? <Spinner size={12} /> : <IconRefresh size={12} />} Retry Handoff
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => syncHandoffStatus(entry)}
+                          disabled={isBusy || !entry.marketplace}
+                        >
+                          Sync Status
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+                <span className="badge badge-acc">{entry.priorityScore}</span>
               </div>
-              <span className="badge badge-acc">{entry.priorityScore}</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

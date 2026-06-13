@@ -121,6 +121,14 @@ export const automationAPI = {
     request("/automation/pricing/refresh-all", { method: "POST", body: data }),
   automateShipment: (orderId, data) =>
     request(`/automation/shipping/${orderId}`, { method: "POST", body: data }),
+  validateCanadaPost: (data) =>
+    request("/automation/shipping/canada-post/validation", { method: "POST", body: data }),
+  transmitCanadaPostManifest: (data) =>
+    request("/automation/shipping/canada-post/manifest", { method: "POST", body: data }),
+  canadaPostManifests: () =>
+    request("/automation/shipping/canada-post/manifests"),
+  canadaPostManifestArtifactUrl: (runId, artifactId) =>
+    apiPath(`/automation/shipping/canada-post/manifests/${encodeURIComponent(runId)}/artifacts/${encodeURIComponent(artifactId)}`),
   actionQueue: () => request("/automation/action-queue"),
   duplicates: (params) => request(`/automation/duplicates${toQuery(params)}`),
   marketTrends: () => request("/automation/market-trends", { method: "POST" }),
@@ -153,6 +161,7 @@ export const marketplacesAPI = {
   sync: (data) => request("/marketplaces/sync", { method: "POST", body: data }),
   channels: (listingId) => request(`/marketplaces/listings/${listingId}/channels`),
   export: (data) => request("/marketplaces/export", { method: "POST", body: data }),
+  submitHandoff: (data) => request("/marketplaces/handoff/submit", { method: "POST", body: data }),
 };
 
 export const shippingProvidersAPI = {

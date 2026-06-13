@@ -74,6 +74,7 @@ export async function automateShipment(orderId, options = {}) {
   }
 
   const country = options.destinationCountry || order.destination_country || "CA";
+  const destinationPostalCode = firstDefined(options.destinationPostalCode, options.destination_postal_code, order.destination_postal_code);
   const weightOz = Number(options.weightOz || 3);
   const packageType = options.packageType || "card_mailer";
   const shipmentId = uid();
@@ -84,7 +85,8 @@ export async function automateShipment(orderId, options = {}) {
     weightOz,
     shipmentId,
     packageType,
-    destinationPostalCode: order.destination_postal_code,
+    destinationPostalCode,
+    destination: options.destination,
   }) || pickService({
     country,
     salePrice: Number(order.sale_price || 0),

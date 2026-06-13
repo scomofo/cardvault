@@ -1,10 +1,15 @@
 import { all, get, run } from "../database.js";
 import { requireProtectedConfigWrite } from "../auth.js";
-import { selectConfiguredProviderService } from "../integrations/shipping/configuredProviderAdapter.js";
+import { testConfiguredProviderService } from "../integrations/shipping/configuredProviderAdapter.js";
 import { requireJsonBody } from "../validation/common.js";
 import { uid } from "./shared.js";
 
 const SENSITIVE_METADATA_KEYS = /api[_-]?key|token|secret|password|authorization|auth[_-]?header|bearer/i;
+const CANADA_POST_LABEL_URL_TEMPLATE = "labels/canada-post/{trackingNumber}/{shipmentId}.pdf";
+const CANADA_POST_ENDPOINTS = {
+  sandbox: "https://ct.soa-gw.canadapost.ca",
+  production: "https://soa-gw.canadapost.ca",
+};
 
 function parseJson(value, fallback = {}) {
   if (!value) return fallback;
@@ -14,6 +19,96 @@ function parseJson(value, fallback = {}) {
   } catch {
     return fallback;
   }
+}
+
+function firstDefined(...values) {
+  return values.find((value) => value != null && value !== "");
+}
+
+function badRequest(message) {
+  const error = new Error(message);
+  error.statusCode = 400;
+  return error;
+}
+
+function providerKey(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isCanadaPost(provider) {
+  return providerKey(provider) === "canada post";
+}
+
+function metadataLabelPurchaseUrl(metadata = {}) {
+  if (!metadata || typeof metadata !== "object") return undefined;
+  return firstDefined(metadata.labelPurchaseUrl, metadata.label_purchase_url);
+}
+
+function validateLabelPurchaseUrl(metadata = {}) {
+  const url = metadataLabelPurchaseUrl(metadata);
+  if (!url) return;
+
+  let endpoint;
+  try {
+    endpoint = new URL(url);
+  } catch {
+    throw badRequest("labelPurchaseUrl must be a valid URL");
+  }
+
+  if (!["http:", "https:"].includes(endpoint.protocol)) {
+    throw badRequest("labelPurchaseUrl must use http or https");
+  }
+}
+
+function normalizeProviderMetadata(provider, value) {
+  const metadata = value && typeof value === "object" && !Array.isArray(value) ? { ...value } : {};
+  validateLabelPurchaseUrl(metadata);
+
+  if (!isCanadaPost(provider)) return metadata;
+
+  const environment = metadata.environment === "production" ? "production" : "sandbox";
+  return {
+    ...metadata,
+    providerClient: firstDefined(metadata.providerClient, metadata.provider_client, "canada_post"),
+    environment,
+    apiBaseUrl: firstDefined(metadata.apiBaseUrl, metadata.api_base_url, CANADA_POST_ENDPOINTS[environment]),
+    labelPurchaseMode: firstDefined(metadata.labelPurchaseMode, metadata.label_purchase_mode, "proxy"),
+    customerNumber: firstDefined(metadata.customerNumber, metadata.customer_number, ""),
+    contractId: firstDefined(metadata.contractId, metadata.contract_id, ""),
+    originPostalCode: firstDefined(metadata.originPostalCode, metadata.origin_postal_code, ""),
+    shipFrom: metadata.shipFrom || metadata.ship_from || {},
+    packageDimensionsCm: metadata.packageDimensionsCm || metadata.package_dimensions_cm || { length: 16, width: 11, height: 1 },
+    apiKeyHeader: firstDefined(metadata.apiKeyHeader, metadata.api_key_header, "Authorization"),
+    apiKeyPrefix: metadata.apiKeyPrefix ?? metadata.api_key_prefix ?? "Basic ",
+    labelUrlTemplate: firstDefined(metadata.labelUrlTemplate, metadata.label_url_template, CANADA_POST_LABEL_URL_TEMPLATE),
+  };
+}
+
+function endpointHost(url) {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return null;
+  }
+}
+
+function connectionDiagnostics(metadata = {}) {
+  if (!metadata || typeof metadata !== "object") {
+    return {
+      providerClient: null,
+      environment: null,
+      endpointConfigured: false,
+      endpointHost: null,
+    };
+  }
+  const url = metadataLabelPurchaseUrl(metadata);
+  return {
+    providerClient: firstDefined(metadata.providerClient, metadata.provider_client, null),
+    environment: firstDefined(metadata.environment, null),
+    endpointConfigured: Boolean(url),
+    endpointHost: endpointHost(url),
+  };
 }
 
 function sanitizeMetadata(value) {
@@ -40,8 +135,8 @@ function sanitizeConnection(row) {
   };
 }
 
-function normalizeMetadata(value) {
-  return JSON.stringify(value && typeof value === "object" && !Array.isArray(value) ? value : {});
+function normalizeMetadata(value, provider) {
+  return JSON.stringify(normalizeProviderMetadata(provider, value));
 }
 
 function serviceSummaries(metadata) {
@@ -88,13 +183,13 @@ export function registerShippingProviderConnectionRoutes(app) {
           provider,
           req.body.authStatus || req.body.auth_status || "configured",
           req.body.apiKey || req.body.api_key || null,
-          normalizeMetadata(req.body.metadata),
+          normalizeMetadata(req.body.metadata, provider),
         ],
       );
       res.status(201);
       sendConnection(res, id);
     } catch (error) {
-      res.status(500).json({ error: error.message });
+      res.status(error.statusCode || 500).json({ error: error.message });
     }
   });
 
@@ -111,7 +206,7 @@ export function registerShippingProviderConnectionRoutes(app) {
         ? (req.body.apiKey || req.body.api_key || null)
         : existing.api_key;
       const metadata = Object.hasOwn(req.body, "metadata")
-        ? normalizeMetadata(req.body.metadata)
+        ? normalizeMetadata(req.body.metadata, provider)
         : existing.metadata;
 
       run(
@@ -122,29 +217,43 @@ export function registerShippingProviderConnectionRoutes(app) {
       );
       sendConnection(res, req.params.id);
     } catch (error) {
-      res.status(500).json({ error: error.message });
+      res.status(error.statusCode || 500).json({ error: error.message });
     }
   });
 
-  app.post("/api/shipping-provider-connections/:id/test", requireProtectedConfigWrite, requireJsonBody, (req, res) => {
+  app.post("/api/shipping-provider-connections/:id/test", requireProtectedConfigWrite, requireJsonBody, async (req, res) => {
     try {
       const connection = get("SELECT * FROM shipping_provider_connections WHERE id = ?", [req.params.id]);
       if (!connection) return res.status(404).json({ error: "Shipping provider connection not found" });
 
       const metadata = parseJson(connection.metadata);
+      const diagnostics = connectionDiagnostics(metadata);
       const services = serviceSummaries(metadata).filter((service) => service.service);
       if (services.length === 0) {
         return res.status(400).json({ error: "At least one provider rate is required to test the connection" });
       }
 
-      const sampleService = selectConfiguredProviderService(connection, {
+      const validation = await testConfiguredProviderService(connection, {
         country: req.body.country || "CA",
         salePrice: Number(req.body.salePrice ?? req.body.sale_price ?? 100),
         weightOz: Number(req.body.weightOz ?? req.body.weight_oz ?? 3),
+        destinationPostalCode: req.body.destinationPostalCode || req.body.destination_postal_code || null,
+        destination: req.body.destination || null,
         shipmentId: "connection-test",
       });
-      if (!sampleService) {
+      if (!validation) {
         return res.status(400).json({ error: "No provider rate matched the test shipment" });
+      }
+      if (!validation.endpointValidation.ok) {
+        return res.status(400).json({
+          error: `Provider label endpoint test failed: ${validation.endpointValidation.error || "unknown error"}`,
+          provider: connection.provider,
+          serviceCount: services.length,
+          selectedService: validation.service.service,
+          endpointValidation: validation.endpointValidation,
+          diagnostics,
+          services,
+        });
       }
 
       run(
@@ -157,7 +266,9 @@ export function registerShippingProviderConnectionRoutes(app) {
         provider: connection.provider,
         authStatus: "connected",
         serviceCount: services.length,
-        selectedService: sampleService.service,
+        selectedService: validation.service.service,
+        endpointValidation: validation.endpointValidation,
+        diagnostics,
         services,
       });
     } catch (error) {
