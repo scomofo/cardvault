@@ -521,8 +521,10 @@ function ShippingProviderConnectionsSection() {
   const [countriesText, setCountriesText] = useState("CA");
   const [manifestGroupText, setManifestGroupText] = useState("");
   const [manifestRuns, setManifestRuns] = useState([]);
+  const [canadaPostValidation, setCanadaPostValidation] = useState(null);
   const [saving, setSaving] = useState(false);
   const [testingId, setTestingId] = useState(null);
+  const [validatingCanadaPost, setValidatingCanadaPost] = useState(false);
   const [transmittingManifest, setTransmittingManifest] = useState(false);
   const rate = newConn.metadata.rates[0];
   const isCanadaPostProvider = newConn.provider.trim().toLowerCase() === "canada post";
@@ -664,6 +666,28 @@ function ShippingProviderConnectionsSection() {
     }
   };
 
+  const validateCanadaPost = async () => {
+    if (!primaryCanadaPostConnection) { toast.error("Canada Post provider required"); return; }
+
+    setValidatingCanadaPost(true);
+    try {
+      const result = await automationAPI.validateCanadaPost({
+        connectionId: primaryCanadaPostConnection.id,
+        groupIds: splitManifestGroupIds(manifestGroupText),
+      });
+      setCanadaPostValidation(result);
+      if (result.ok) {
+        toast.success("Canada Post validation ready");
+      } else {
+        toast.error("Canada Post validation needs attention");
+      }
+    } catch (error) {
+      toast.error(error.message || "Canada Post validation failed");
+    } finally {
+      setValidatingCanadaPost(false);
+    }
+  };
+
   return (
     <div className="card mb-12">
       <div className="flex items-center justify-between mb-8">
@@ -719,7 +743,34 @@ function ShippingProviderConnectionsSection() {
             <button className="btn btn-primary btn-sm" onClick={transmitManifest} disabled={transmittingManifest}>
               {transmittingManifest ? <Spinner size={12} /> : <IconZap size={12} />} Transmit Manifest
             </button>
+            <button className="btn btn-outline btn-sm" onClick={validateCanadaPost} disabled={validatingCanadaPost}>
+              {validatingCanadaPost ? <Spinner size={12} /> : <IconCheck size={12} />} Validate Setup
+            </button>
           </div>
+          {canadaPostValidation && (
+            <div className="mt-8" style={{ padding: "8px 10px", background: "var(--s3)", borderRadius: "var(--radius)" }}>
+              <div className="flex items-center justify-between gap-8">
+                <div className="lbl" style={{ margin: 0 }}>Canada Post Validation</div>
+                <span className={`badge ${canadaPostValidation.ok ? "badge-grn" : "badge-acc"}`}>
+                  <IconCheck size={10} /> {canadaPostValidation.ok ? "ready" : "review"}
+                </span>
+              </div>
+              <div className="text-xxs text-dim mt-4">
+                {canadaPostValidation.selectedService || "No matching service"} - {canadaPostValidation.environment || "sandbox"}
+              </div>
+              {(canadaPostValidation.checks || []).map((check) => (
+                <div key={check.id} className="flex items-center justify-between gap-8 mt-6">
+                  <div className="min-w-0">
+                    <div className="text-xs fw-700">{check.label}</div>
+                    <div className="text-xxs text-dim truncate">{check.message}</div>
+                  </div>
+                  <span className={`badge ${check.ok ? "badge-grn" : "badge-acc"}`}>
+                    {check.ok ? "OK" : "Check"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
           {manifestRuns.length > 0 && (
             <div className="mt-8">
               {manifestRuns.slice(0, 5).map((run) => (

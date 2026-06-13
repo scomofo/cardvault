@@ -121,6 +121,8 @@ export const automationAPI = {
     request("/automation/pricing/refresh-all", { method: "POST", body: data }),
   automateShipment: (orderId, data) =>
     request(`/automation/shipping/${orderId}`, { method: "POST", body: data }),
+  validateCanadaPost: (data) =>
+    request("/automation/shipping/canada-post/validation", { method: "POST", body: data }),
   transmitCanadaPostManifest: (data) =>
     request("/automation/shipping/canada-post/manifest", { method: "POST", body: data }),
   canadaPostManifests: () =>

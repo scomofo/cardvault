@@ -2,6 +2,11 @@ import { requireJsonBody } from "../validation/common.js";
 import { requireProtectedConfigWrite } from "../auth.js";
 import { all, get, run, runInImmediateTransaction } from "../database.js";
 import { transmitCanadaPostManifest } from "../integrations/shipping/providerClientRegistry.js";
+import { testConfiguredProviderService } from "../integrations/shipping/configuredProviderAdapter.js";
+import {
+  buildCanadaPostCreateShipmentPayload,
+  buildCanadaPostTransmitShipmentsPayload,
+} from "../integrations/shipping/canadaPostNativeAdapter.js";
 import { automateActionQueue } from "../services/automation/actionQueueAutomation.js";
 import { runAcquisitionDecisionAutomation } from "../services/automation/acquisitionDecisionAutomation.js";
 import { runAgingRepricingAutomation } from "../services/automation/agingRepricingAutomation.js";
@@ -49,6 +54,120 @@ function jsonArray(value) {
 function parseJsonArray(value) {
   const parsed = parseJson(value, []);
   return Array.isArray(parsed) ? parsed : [];
+}
+
+function firstDefined(...values) {
+  return values.find((value) => value != null && value !== "");
+}
+
+function serviceSummaries(metadata = {}) {
+  const rates = metadata && Array.isArray(metadata.rates) ? metadata.rates : [];
+  return rates
+    .filter((rate) => rate && typeof rate === "object")
+    .map((rate) => ({
+      service: rate.service || rate.serviceName || rate.service_name || rate.name || "",
+      serviceCode: rate.serviceCode || rate.service_code || rate.code || "",
+      countries: Array.isArray(rate.countries) ? rate.countries : [],
+      cost: Number(rate.cost ?? rate.rate ?? rate.amount ?? 0),
+      tracking: rate.tracking !== false,
+    }));
+}
+
+function canadaPostValidationGroupIds(value) {
+  const ids = Array.isArray(value) ? value.map((entry) => String(entry).trim()).filter(Boolean) : [];
+  return ids.length > 0 ? ids : ["cv-validation"];
+}
+
+function canadaPostValidationDestination(body = {}) {
+  const postalCode = body.destinationPostalCode || body.destination_postal_code || body.destination?.postalCode || body.destination?.postal_code || "K1A 0B1";
+  return body.destination && typeof body.destination === "object"
+    ? body.destination
+    : {
+        name: "CardVault Validation",
+        addressLine1: "99 Bank St",
+        city: "Ottawa",
+        province: "ON",
+        country: "CA",
+        postalCode,
+      };
+}
+
+async function runCanadaPostValidation({ connection, body = {} }) {
+  const metadata = parseJson(connection.metadata);
+  const services = serviceSummaries(metadata).filter((service) => service.service);
+  const country = body.country || body.destinationCountry || body.destination_country || "CA";
+  const destinationPostalCode = body.destinationPostalCode || body.destination_postal_code || body.destination?.postalCode || body.destination?.postal_code || "K1A 0B1";
+  const context = {
+    country,
+    salePrice: Number(body.salePrice ?? body.sale_price ?? 100),
+    weightOz: Number(body.weightOz ?? body.weight_oz ?? 3),
+    destinationPostalCode,
+    destination: canadaPostValidationDestination(body),
+    shipmentId: "canada-post-validation",
+  };
+  const groupIds = canadaPostValidationGroupIds(body.groupIds || body.group_ids);
+  const providerValidation = await testConfiguredProviderService(connection, context);
+  const selectedService = providerValidation?.service || null;
+  const selectedRate = (metadata.rates || []).find((rate) => (
+    firstDefined(rate.serviceCode, rate.service_code, rate.code) === selectedService?.serviceCode
+    || firstDefined(rate.service, rate.serviceName, rate.service_name, rate.name) === selectedService?.service
+  )) || (metadata.rates || [])[0] || {};
+  const shipmentPayload = buildCanadaPostCreateShipmentPayload({
+    metadata,
+    rate: selectedRate,
+    service: selectedService || {},
+    shipment: context,
+  });
+  const manifestPayload = buildCanadaPostTransmitShipmentsPayload({ metadata, groupIds });
+  const endpointValidation = providerValidation?.endpointValidation || { attempted: false, ok: true };
+  const checks = [
+    {
+      id: "provider_rate",
+      label: "Provider rate",
+      ok: Boolean(providerValidation),
+      message: providerValidation ? `${selectedService.service} matched validation shipment` : "No Canada Post rate matched the validation shipment",
+      service: selectedService?.service || null,
+    },
+    {
+      id: "label_endpoint",
+      label: "Label endpoint dry-run",
+      ok: endpointValidation.ok !== false,
+      attempted: Boolean(endpointValidation.attempted),
+      message: endpointValidation.attempted
+        ? "Label endpoint dry-run completed"
+        : "Label endpoint dry-run skipped; native Canada Post payload validation only",
+      labelStatus: endpointValidation.labelStatus || null,
+    },
+    {
+      id: "shipment_preflight",
+      label: "Shipment preflight",
+      ok: shipmentPayload.preflight.ok,
+      missing: shipmentPayload.preflight.missing,
+      message: shipmentPayload.preflight.message,
+      endpointPath: shipmentPayload.endpointPath,
+      xmlReady: Boolean(shipmentPayload.xml),
+    },
+    {
+      id: "manifest_preflight",
+      label: "Manifest preflight",
+      ok: manifestPayload.preflight.ok,
+      missing: manifestPayload.preflight.missing,
+      message: manifestPayload.preflight.message,
+      endpointPath: manifestPayload.endpointPath,
+      xmlReady: Boolean(manifestPayload.xml),
+    },
+  ];
+
+  return {
+    ok: checks.every((check) => check.ok),
+    provider: connection.provider,
+    connectionId: connection.id,
+    environment: firstDefined(metadata.environment, "sandbox"),
+    serviceCount: services.length,
+    selectedService: selectedService?.service || null,
+    groupIds,
+    checks,
+  };
 }
 
 function truncateError(value) {
@@ -227,6 +346,19 @@ export function registerAutomationRoutes(app) {
   app.post("/api/automation/aging-repricing", requireJsonBody, (req, res) => {
     try {
       res.json(runAgingRepricingAutomation(req.body));
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/automation/shipping/canada-post/validation", requireProtectedConfigWrite, requireJsonBody, async (req, res) => {
+    try {
+      const connection = findCanadaPostConnection(req.body.connectionId || req.body.connection_id || null);
+      if (!connection) return res.status(404).json({ error: "Canada Post shipping provider connection not found" });
+      if (String(connection.provider || "").trim().toLowerCase() !== "canada post") {
+        return res.status(400).json({ error: "Canada Post shipping provider connection required" });
+      }
+      res.json(await runCanadaPostValidation({ connection, body: req.body }));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

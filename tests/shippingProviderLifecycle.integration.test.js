@@ -432,6 +432,56 @@ test("shipping automation transmits Canada Post manifest and retrieves artifacts
   }
 });
 
+test("Canada Post validation run reports shipment and manifest readiness without exposing secrets", async (t) => {
+  const { baseUrl, dbPath } = await startTestServer(t, { dirPrefix: "cardvault-canada-post-validation-" });
+  insertShippingProvider(dbPath, {
+    providerClient: "canada_post",
+    labelPurchaseMode: "native",
+    apiBaseUrl: "https://ct.soa-gw.canadapost.ca",
+    customerNumber: "1234567",
+    contractId: "0045678",
+    originPostalCode: "T2P 1J9",
+    shipFrom: {
+      name: "CardVault",
+      addressLine1: "1 Arena Way",
+      city: "Calgary",
+      province: "AB",
+      postalCode: "T2P 1J9",
+    },
+    packageDimensionsCm: { length: 16, width: 11, height: 1 },
+    rates: [{
+      service: "Canada Post Expedited Parcel",
+      serviceCode: "DOM.EP",
+      countries: ["CA"],
+      maxWeightOz: 8,
+      cost: 9.75,
+      tracking: true,
+    }],
+  });
+
+  const response = await postJson(baseUrl, "/api/automation/shipping/canada-post/validation", {
+    connectionId: "canada-post-provider",
+    destinationPostalCode: "K1A 0B1",
+    weightOz: 6,
+    groupIds: ["cv-validation"],
+  });
+  assert.equal(response.status, 200);
+  const validation = await response.json();
+
+  assert.equal(validation.ok, true);
+  assert.equal(validation.provider, "Canada Post");
+  assert.equal(validation.connectionId, "canada-post-provider");
+  assert.equal(validation.selectedService, "Canada Post Expedited Parcel");
+  assert.equal(validation.environment, "sandbox");
+  assert.deepEqual(validation.groupIds, ["cv-validation"]);
+  assert.equal(validation.checks.find((check) => check.id === "provider_rate").ok, true);
+  assert.equal(validation.checks.find((check) => check.id === "shipment_preflight").endpointPath, "/rs/1234567/1234567/shipment");
+  assert.equal(validation.checks.find((check) => check.id === "shipment_preflight").xmlReady, true);
+  assert.equal(validation.checks.find((check) => check.id === "manifest_preflight").endpointPath, "/rs/1234567/1234567/manifest");
+  assert.equal(validation.checks.find((check) => check.id === "manifest_preflight").xmlReady, true);
+  assert.doesNotMatch(JSON.stringify(validation), /secret-provider-key|apiKey|api_key|Basic/);
+});
+
 test("shipping automation blocks Canada Post native labels until shipment requirements are complete", async (t) => {
   const { baseUrl, dbPath } = await startTestServer(t, { dirPrefix: "cardvault-canada-post-preflight-" });
   insertShippingProvider(dbPath, {
