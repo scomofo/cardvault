@@ -174,3 +174,16 @@ test("sales flow blocks duplicate manual sale submissions while saving", async (
   assert.match(salesFlow, /saleSubmissionRef\.current\.delete\(listingId\)/);
   assert.match(activeListingCard, /disabled=\{busyListingId === l\.id\}/);
 });
+
+test("sales flow exposes handoff exception retry and status sync actions", async () => {
+  const salesFlow = await readFile(new URL("../src/components/SalesFlow.jsx", import.meta.url), "utf8");
+
+  assert.match(salesFlow, /const\s+isHandoffException\s*=\s*entry\.queue\s*===\s*"marketplace_handoff_exception"/);
+  assert.match(salesFlow, /async function retryHandoff\(entry\)/);
+  assert.match(salesFlow, /marketplacesAPI\.submitHandoff\(\{\s*marketplace:\s*entry\.marketplace,\s*listingIds:\s*\[entry\.subjectId\]\s*\}\)/s);
+  assert.match(salesFlow, /async function syncHandoffStatus\(entry\)/);
+  assert.match(salesFlow, /marketplacesAPI\.sync\(\{\s*marketplace:\s*entry\.marketplace,\s*listingId:\s*entry\.subjectId\s*\}\)/s);
+  assert.match(salesFlow, /Retry Handoff/);
+  assert.match(salesFlow, /Sync Status/);
+  assert.match(salesFlow, /entry\.submissionReference/);
+});

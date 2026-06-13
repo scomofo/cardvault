@@ -253,6 +253,10 @@ test("external handoff status updates persist partner outcomes and queue excepti
   const retryAction = (await queueResponse.json()).find((entry) => entry.subjectId === listingId);
   assert.equal(retryAction.queue, "marketplace_handoff_exception");
   assert.equal(retryAction.suggestedAction, "retry_handoff");
+  assert.equal(retryAction.marketplace, "consignment");
+  assert.equal(retryAction.listingId, listingId);
+  assert.equal(retryAction.submissionReference, "broker-submission-42");
+  assert.equal(retryAction.handoffNote, "Broker rejected the declared value");
 
   const db = new Database(dbPath, { readonly: true });
   try {

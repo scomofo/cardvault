@@ -81,18 +81,24 @@ export function getActionQueue() {
       listing_channels.listing_id,
       listing_channels.marketplace,
       listing_channels.publish_error,
+      listing_channels.overrides,
       listings.card_name,
       listings.start_price
     FROM listing_channels
     JOIN listings ON listings.id = listing_channels.listing_id
     WHERE listing_channels.status = 'handoff_exception'
   `)) {
+    const handoff = parseJson(channel.overrides, {}).handoff || {};
     queue.push({
       queue: "marketplace_handoff_exception",
       item: channel.card_name || channel.listing_id,
       itemId: channel.listing_id,
       itemName: channel.card_name || null,
       reason: channel.publish_error || `${channel.marketplace} handoff needs retry`,
+      marketplace: channel.marketplace,
+      listingId: channel.listing_id,
+      submissionReference: handoff.submissionReference || null,
+      handoffNote: handoff.note || null,
       suggestedAction: "retry_handoff",
       priorityScore: score({ base: 210, marketPrice: Number(channel.start_price || 0), urgency: 60, risk: 35 }),
       subjectType: "listing",
