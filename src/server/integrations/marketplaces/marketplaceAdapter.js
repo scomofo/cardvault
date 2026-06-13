@@ -1,3 +1,5 @@
+import { testHandoffConnection } from "./handoffValidation.js";
+
 const DEFAULT_HANDOFF_STATUS_TIMEOUT_MS = 10000;
 const DEFAULT_HANDOFF_SUBMISSION_TIMEOUT_MS = 10000;
 const HANDOFF_ERROR_TEXT_LIMIT = 200;
@@ -351,6 +353,10 @@ export class MarketplaceAdapter {
     } finally {
       clearTimeout(timeoutId);
     }
+  }
+
+  async testHandoffConnection(options = {}) {
+    return testHandoffConnection(this, options);
   }
 
   getShippingProfile(country = "CA") {

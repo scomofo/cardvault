@@ -70,8 +70,10 @@ test("settings exposes shipping provider connection management", async () => {
 });
 
 test("settings exposes marketplace handoff connection configuration", async () => {
+  const api = await readFile(new URL("../src/lib/api.js", import.meta.url), "utf8");
   const settings = await readFile(new URL("../src/components/Settings.jsx", import.meta.url), "utf8");
 
+  assert.match(api, /testConnection:\s*\(id,\s*data\s*=\s*\{\}\)\s*=>\s*request\(`\/marketplace-connections\/\$\{id\}\/test`,\s*\{\s*method:\s*"POST",\s*body:\s*data\s*\}\)/);
   assert.match(settings, /function\s+cloneDefaultMarketplaceConnection\(\)/);
   assert.match(settings, /accessToken:\s*""/);
   assert.match(settings, /handoffSubmissionUrl:\s*""/);
@@ -90,6 +92,10 @@ test("settings exposes marketplace handoff connection configuration", async () =
   assert.match(settings, /Submission Timeout \(ms\)/);
   assert.match(settings, /Status Timeout \(ms\)/);
   assert.match(settings, /handoffSubmissionTimeoutMs:\s*e\.target\.value\s*===\s*""\s*\?\s*""\s*:\s*Number\(e\.target\.value\)/);
+  assert.match(settings, /const\s+\[testingMarketplaceId,\s*setTestingMarketplaceId\]\s*=\s*useState\(null\)/);
+  assert.match(settings, /marketplacesAPI\.testConnection\(conn\.id,\s*\{\s*listingId:\s*"connection-test"/s);
+  assert.match(settings, /HANDOFF_MARKETPLACES\.has\(String\(conn\.marketplace\s*\|\|\s*""\)\.toLowerCase\(\)\)/);
+  assert.match(settings, /Partner validation ready/);
 });
 
 test("roadmap reflects completed handoff operator UX and remaining partner validation", async () => {
@@ -97,8 +103,8 @@ test("roadmap reflects completed handoff operator UX and remaining partner valid
   const roadmapData = await readFile(new URL("../src/server/services/dashboard/roadmapData.js", import.meta.url), "utf8");
 
   assert.match(roadmapData, /Consignment \/ COMC integrations",\s*status:\s*"partial"/);
-  assert.match(roadmap, /operator UX for direct submissions is implemented/);
-  assert.match(roadmap, /partner-specific live validation/);
+  assert.match(roadmap, /validate configured partner endpoints from Settings/);
+  assert.match(roadmap, /real COMC\/consignment credentials and live acceptance evidence/);
   assert.doesNotMatch(roadmap, /operator UX for triggering direct submissions/);
 });
 

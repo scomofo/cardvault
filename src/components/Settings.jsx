@@ -301,6 +301,10 @@ function cloneDefaultMarketplaceConnection() {
   };
 }
 
+function isHandoffConnection(conn) {
+  return HANDOFF_MARKETPLACES.has(String(conn.marketplace || "").toLowerCase());
+}
+
 function MarketplaceConnectionsSection() {
   const toast = useToast();
   const [connections, setConnections] = useState([]);
@@ -309,6 +313,7 @@ function MarketplaceConnectionsSection() {
   const [showAdd, setShowAdd] = useState(false);
   const [newConn, setNewConn] = useState(cloneDefaultMarketplaceConnection);
   const [saving, setSaving] = useState(false);
+  const [testingMarketplaceId, setTestingMarketplaceId] = useState(null);
   const isHandoffMarketplace = HANDOFF_MARKETPLACES.has(String(newConn.marketplace).toLowerCase());
 
   useEffect(() => {
@@ -351,6 +356,25 @@ function MarketplaceConnectionsSection() {
     setSaving(false);
   };
 
+  const testConnection = async (conn) => {
+    setTestingMarketplaceId(conn.id);
+    try {
+      const result = await marketplacesAPI.testConnection(conn.id, {
+        listingId: "connection-test",
+        submissionReference: "connection-test",
+      });
+      setConnections((current) => current.map((entry) => (
+        entry.id === conn.id ? { ...entry, authStatus: result.authStatus || "connected" } : entry
+      )));
+      const checked = Object.values(result.endpointValidation || {}).filter((entry) => entry.attempted).length;
+      toast.success(`Partner validation ready: ${checked} endpoint${checked === 1 ? "" : "s"} checked`);
+    } catch (error) {
+      toast.error(error.message || "Partner validation failed");
+    } finally {
+      setTestingMarketplaceId(null);
+    }
+  };
+
   return (
     <div className="card mb-12">
       <div className="flex items-center justify-between mb-8">
@@ -374,9 +398,16 @@ function MarketplaceConnectionsSection() {
               <span className="text-xs fw-700" style={{ textTransform: "capitalize" }}>{conn.marketplace}</span>
               {conn.accountLabel && <span className="text-xxs text-dim ml-8">{conn.accountLabel}</span>}
             </div>
-            <span className={`badge ${conn.authStatus === "connected" ? "badge-grn" : "badge-dim"}`}>
-              <IconCheck size={10} /> {conn.authStatus || "configured"}
-            </span>
+            <div className="flex items-center gap-8">
+              <span className={`badge ${conn.authStatus === "connected" ? "badge-grn" : "badge-dim"}`}>
+                <IconCheck size={10} /> {conn.authStatus || "configured"}
+              </span>
+              {isHandoffConnection(conn) && (
+                <button className="btn btn-outline btn-sm" onClick={() => testConnection(conn)} disabled={testingMarketplaceId === conn.id}>
+                  {testingMarketplaceId === conn.id ? <Spinner size={12} /> : <IconCheck size={12} />} Test
+                </button>
+              )}
+            </div>
           </div>
         ))
       )}

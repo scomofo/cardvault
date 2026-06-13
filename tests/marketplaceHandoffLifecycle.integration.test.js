@@ -451,3 +451,68 @@ test("direct handoff submission reports missing partner configuration before mut
   assert.equal(overrides.handoff.submissionStatus, "exported");
   assert.equal(overrides.handoff.note, undefined);
 });
+
+test("marketplace connection test validates partner handoff endpoints without exposing secrets", async (t) => {
+  const partner = await startPartnerStatusServer(t, {
+    status: "submitted",
+    submissionReference: "comc-validation-ref",
+    note: "Validation dry run accepted",
+    updatedAt: "2026-06-12T14:00:00.000Z",
+  });
+  const { baseUrl, dbPath } = await startTestServer(t, { dirPrefix: "cardvault-comc-connection-test-" });
+
+  const connectionResponse = await postJson(baseUrl, "/api/marketplace-connections", {
+    marketplace: "comc",
+    accountLabel: "COMC partner API",
+    accessToken: "partner-secret",
+    metadata: {
+      handoffStatusUrl: `${partner.baseUrl}/status/{listingId}?submission={submissionReference}`,
+      handoffSubmissionUrl: `${partner.baseUrl}/submit/{listingId}`,
+      apiKeyHeader: "X-Partner-Key",
+      apiKeyPrefix: "",
+      handoffStatusTimeoutMs: 1000,
+      handoffSubmissionTimeoutMs: 1000,
+    },
+  });
+  assert.equal(connectionResponse.status, 201);
+  const connection = await connectionResponse.json();
+
+  const testResponse = await postJson(baseUrl, `/api/marketplace-connections/${connection.id}/test`, {
+    listingId: "comc-validation-listing",
+    submissionReference: "validation-input-ref",
+  });
+  assert.equal(testResponse.status, 200);
+  const payload = await testResponse.json();
+  assert.equal(payload.ok, true);
+  assert.equal(payload.marketplace, "comc");
+  assert.equal(payload.authStatus, "connected");
+  assert.equal(payload.endpointValidation.status.attempted, true);
+  assert.equal(payload.endpointValidation.status.ok, true);
+  assert.equal(payload.endpointValidation.status.status, "handoff_submitted");
+  assert.equal(payload.endpointValidation.submission.attempted, true);
+  assert.equal(payload.endpointValidation.submission.ok, true);
+  assert.equal(payload.endpointValidation.submission.status, "handoff_submitted");
+  assert.equal(payload.diagnostics.statusEndpointConfigured, true);
+  assert.equal(payload.diagnostics.submissionEndpointConfigured, true);
+  assert.doesNotMatch(JSON.stringify(payload), /partner-secret|accessToken|refreshToken|api_key|apiKey/);
+
+  assert.equal(partner.requests.length, 2);
+  assert.equal(partner.requests[0].method, "GET");
+  assert.equal(partner.requests[0].partnerKey, "partner-secret");
+  assert.match(partner.requests[0].url, /\/status\/comc-validation-listing/);
+  assert.equal(partner.requests[1].method, "POST");
+  assert.equal(partner.requests[1].partnerKey, "partner-secret");
+  assert.match(partner.requests[1].url, /\/submit\/comc-validation-listing/);
+  assert.equal(partner.requests[1].body.dryRun, true);
+  assert.equal(partner.requests[1].body.handoff.submissionReference, "validation-input-ref");
+
+  const db = new Database(dbPath, { readonly: true });
+  try {
+    const row = db.prepare("SELECT auth_status FROM marketplace_connections WHERE id = ?").get(connection.id);
+    assert.equal(row.auth_status, "connected");
+    const eventCount = db.prepare("SELECT COUNT(*) AS count FROM listing_channel_events").get();
+    assert.equal(eventCount.count, 0);
+  } finally {
+    db.close();
+  }
+});

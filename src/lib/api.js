@@ -154,6 +154,7 @@ export const marketplacesAPI = {
   },
   connections: () => request("/marketplace-connections"),
   connect: (data) => request("/marketplace-connections", { method: "POST", body: data }),
+  testConnection: (id, data = {}) => request(`/marketplace-connections/${id}/test`, { method: "POST", body: data }),
   publish: (data) => request("/marketplaces/publish", { method: "POST", body: data }),
   revise: (data) => request("/marketplaces/revise", { method: "POST", body: data }),
   end: (data) => request("/marketplaces/end", { method: "POST", body: data }),
