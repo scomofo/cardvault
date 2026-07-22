@@ -164,7 +164,12 @@ export function getActionQueue() {
     });
   }
 
-  for (const item of all(`SELECT item_id, name, age_days, market_price FROM aging_inventory_view WHERE age_days >= 30 ORDER BY age_days DESC LIMIT 25`)) {
+  for (const item of all(`
+    SELECT item_id, name, age_days, market_price,
+      (SELECT recommended_price_cents FROM pricing_recommendations
+       WHERE pricing_recommendations.item_id = aging_inventory_view.item_id
+       ORDER BY created_at DESC LIMIT 1) AS recommended_price_cents
+    FROM aging_inventory_view WHERE age_days >= 30 ORDER BY age_days DESC LIMIT 25`)) {
     const marketMovement = Number(item.market_price || 0) > 0 ? 10 : 0;
     queue.push({
       queue: "reprice_now",
@@ -173,6 +178,8 @@ export function getActionQueue() {
       itemName: item.name,
       reason: `${item.age_days} days in inventory`,
       suggestedAction: "revise_listing_price",
+      recommendedPrice:
+        item.recommended_price_cents != null ? item.recommended_price_cents / 100 : null,
       priorityScore: score({ base: 90, marketPrice: Number(item.market_price || 0), ageDays: item.age_days, risk: 15, marketMovement }),
       subjectType: "inventory_item",
       subjectId: item.item_id,

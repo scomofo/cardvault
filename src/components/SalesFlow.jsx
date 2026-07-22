@@ -82,7 +82,7 @@ export default function SalesFlow({ onNavigate, focus, onFocusConsumed }) {
           setHighlightId(listing.id);
           if (focus.intent === "reprice") {
             setRepricingId(listing.id);
-            setRepriceVal(String(listing.startPrice ?? ""));
+            setRepriceVal(String(focus.price ?? listing.startPrice ?? ""));
             setSellingId(null);
           }
         }

@@ -35,10 +35,16 @@ export function navigationTargetForQueue(queue, entry) {
     case "list_now":
     case "high_value_unlisted":
       return withFocus({ view: "sales" }, focusType, focusId, "list");
-    case "reprice_now":
-      return withFocus({ view: "sales" }, focusType, focusId, "reprice");
+    case "reprice_now": {
+      const target = withFocus({ view: "sales" }, focusType, focusId, "reprice");
+      // Carry the concrete recommendation so the reprice panel can stage it.
+      if (target.focus && entry?.recommendedPrice != null) {
+        target.focus.price = entry.recommendedPrice;
+      }
+      return target;
+    }
     case "grade_now":
-      return { view: "tools", toolsTab: "grade" };
+      return withFocus({ view: "tools", toolsTab: "grade" }, focusType, focusId, "grade");
     case "dead_inventory":
     case "bundle_low_value":
       return withFocus({ view: "cards" }, focusType, focusId);

@@ -49,6 +49,15 @@ test("action queue navigation carries intents for listing and repricing work", (
     navigationTargetForQueue("reprice_now", { subjectType: "inventory_item", subjectId: "item-2" }),
     { view: "sales", focus: { type: "inventory_item", id: "item-2", intent: "reprice" } },
   );
+  // A concrete pricing recommendation rides along for the reprice panel.
+  assert.deepEqual(
+    navigationTargetForQueue("reprice_now", {
+      subjectType: "inventory_item",
+      subjectId: "item-3",
+      recommendedPrice: 42.5,
+    }),
+    { view: "sales", focus: { type: "inventory_item", id: "item-3", intent: "reprice", price: 42.5 } },
+  );
   // Stub publishes focus the listing itself with no intent.
   assert.deepEqual(
     navigationTargetForQueue("stub_publish", { subjectType: "listing", subjectId: "listing-1" }),
@@ -58,6 +67,10 @@ test("action queue navigation carries intents for listing and repricing work", (
 
 test("action queue navigation routes grading and inventory queues to their views", () => {
   assert.deepEqual(navigationTargetForQueue("grade_now"), { view: "tools", toolsTab: "grade" });
+  assert.deepEqual(
+    navigationTargetForQueue("grade_now", { subjectType: "inventory_item", subjectId: "item-9" }),
+    { view: "tools", toolsTab: "grade", focus: { type: "inventory_item", id: "item-9", intent: "grade" } },
+  );
   assert.deepEqual(navigationTargetForQueue("dead_inventory"), { view: "cards" });
   assert.deepEqual(navigationTargetForQueue("bundle_low_value"), { view: "cards" });
   assert.deepEqual(navigationTargetForQueue("review_alerts"), { view: "dashboard" });

@@ -65,7 +65,7 @@ function MoreView({ onNavigate }) {
   );
 }
 
-function ToolsView({ tab, setTab }) {
+function ToolsView({ tab, setTab, focus, onFocusConsumed }) {
   return (
     <div className="fade">
       <h1 className="page-title">Tools</h1>
@@ -79,7 +79,7 @@ function ToolsView({ tab, setTab }) {
       </div>
       {tab === "batch" && <BatchView />}
       {tab === "sets" && <SetsView />}
-      {tab === "grade" && <GradeTracker />}
+      {tab === "grade" && <GradeTracker focus={focus} onFocusConsumed={onFocusConsumed} />}
       {tab === "watch" && <Watchlist />}
       {tab === "trade" && <TradeTracker />}
     </div>
@@ -204,7 +204,14 @@ function AppContent() {
           />
         )}
         {view === "dealer" && <DealerModeView />}
-        {view === "tools" && <ToolsView tab={toolsTab} setTab={setToolsTab} />}
+        {view === "tools" && (
+          <ToolsView
+            tab={toolsTab}
+            setTab={setToolsTab}
+            focus={pendingFocus}
+            onFocusConsumed={() => setPendingFocus(null)}
+          />
+        )}
         {view === "more" && <MoreView onNavigate={handleNavigate} />}
         {view === "settings" && <Settings />}
       </main>
