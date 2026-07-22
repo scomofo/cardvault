@@ -3,7 +3,7 @@ import { useToast } from "../components/Toast";
 import { useData } from "../lib/DataContext";
 import { EMPTY_CARD, EMPTY_LISTING } from "../lib/constants";
 import { aiPrice, aiRecognize, aiVisualSearch } from "../lib/ai";
-import { identificationAPI, itemsAPI, listingsAPI, marketplacesAPI } from "../lib/api";
+import { identificationAPI, imagesAPI, itemsAPI, listingsAPI, marketplacesAPI } from "../lib/api";
 import { apiPath } from "../lib/apiBase";
 import { analyzeCentering, checkCvHealth } from "../lib/cvApi";
 import {
@@ -364,6 +364,8 @@ export function useScanWorkflow() {
       if (frontImg) {
         frontImgId = `img_${id}_front`;
         await saveImage(frontImgId, frontImg);
+        // Mirror to the server so a live eBay publish can attach photos.
+        if (useServer) await imagesAPI.upload(frontImgId, frontImg).catch(() => {});
         frontImgPhash = await computeDHash(frontImg);
         // The capture-time banner already surfaced any likely duplicate;
         // only fall back to a toast when the check never ran (e.g. a
@@ -379,6 +381,7 @@ export function useScanWorkflow() {
       if (backImg) {
         backImgId = `img_${id}_back`;
         await saveImage(backImgId, backImg);
+        if (useServer) await imagesAPI.upload(backImgId, backImg).catch(() => {});
       }
 
       const entry = buildSavedCard({
@@ -600,9 +603,11 @@ export function useScanWorkflow() {
       const backImgId = item.back ? `img_${entryId}_back` : null;
       if (frontImgId) {
         await saveImage(frontImgId, item.front);
+        if (useServer) await imagesAPI.upload(frontImgId, item.front).catch(() => {});
       }
       if (backImgId) {
         await saveImage(backImgId, item.back);
+        if (useServer) await imagesAPI.upload(backImgId, item.back).catch(() => {});
       }
       entries.push({
         id: entryId,

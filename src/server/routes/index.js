@@ -7,6 +7,7 @@ import { registerDecisionRoutes } from "./decisions.routes.js";
 import { registerDashboardRoutes } from "./dashboard.routes.js";
 import { registerFeeModelsRoutes } from "./feeModels.routes.js";
 import { registerIdentificationRoutes } from "./identification.routes.js";
+import { registerImageRoutes } from "./images.routes.js";
 import { registerItemRoutes } from "./items.routes.js";
 import { registerListingRoutes } from "./listings.routes.js";
 import { registerMarketplaceRoutes } from "./marketplaces.routes.js";
@@ -21,6 +22,7 @@ import { registerEbayRoutes } from "./ebay.routes.js";
 
 export function registerRoutes(app) {
   registerItemRoutes(app);
+  registerImageRoutes(app);
   registerAlertsRoutes(app);
   registerAutomationRoutes(app);
   registerBatchPresetsRoutes(app);

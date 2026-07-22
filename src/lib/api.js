@@ -52,6 +52,10 @@ export const ordersAPI = {
 };
 
 // Listings
+export const imagesAPI = {
+  upload: (id, dataUrl) => request(`/images/${id}`, { method: "POST", body: { dataUrl } }),
+};
+
 export const listingsAPI = {
   list: (params) => request(`/listings${toQuery(params)}`),
   create: (data) => request("/listings", { method: "POST", body: data }),
