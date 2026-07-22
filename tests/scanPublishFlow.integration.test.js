@@ -238,6 +238,15 @@ test("create-retry upserts cannot revert sold listings or sold items", async (t)
 test("handoff marketplace publish from the scan flow queues a handoff channel", async (t) => {
   const { baseUrl } = await startTestServer(t, { dirPrefix: "cardvault-scanpublish-" });
 
+  // A configured COMC connection exists before the scan publishes.
+  const connectionResponse = await postJson(baseUrl, "/api/marketplace-connections", {
+    marketplace: "comc",
+    accountLabel: "COMC Main",
+    metadata: { handoffSubmissionUrl: "https://partner.example/handoffs/{listingId}" },
+  });
+  assert.equal(connectionResponse.status, 201);
+  const connection = await connectionResponse.json();
+
   assert.equal(
     (
       await postJson(baseUrl, "/api/items", {
@@ -265,6 +274,8 @@ test("handoff marketplace publish from the scan flow queues a handoff channel", 
     201,
   );
 
+  // No connectionId in the publish body — the server must associate the
+  // configured connection so handoff submit can resolve its endpoint.
   const publishResponse = await postJson(baseUrl, "/api/marketplaces/publish", {
     listingId: "scan-handoff-listing",
     marketplace: "comc",
@@ -272,4 +283,5 @@ test("handoff marketplace publish from the scan flow queues a handoff channel", 
   assert.equal(publishResponse.status, 200);
   const channel = await publishResponse.json();
   assert.equal(channel.status, "handoff_ready");
+  assert.equal(channel.connection_id, connection.id);
 });

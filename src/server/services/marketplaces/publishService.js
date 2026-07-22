@@ -269,6 +269,24 @@ function getListingForMarketplace(listingId, marketplace) {
   };
 }
 
+// Handoff submit/sync resolve their partner endpoint and token exclusively
+// through the channel's connection_id. A publish without an explicit
+// connectionId (scan flow, SalesFlow, crosspost) must associate the best
+// available connection, or every handoff created that way would later fail
+// submission as "not configured" despite a configured connection existing.
+function defaultConnectionIdFor(marketplace) {
+  if (!HANDOFF_MARKETPLACES.has(marketplace)) return null;
+  const row = get(
+    `SELECT id FROM marketplace_connections
+     WHERE marketplace = ?
+     ORDER BY CASE auth_status WHEN 'connected' THEN 0 WHEN 'configured' THEN 1 ELSE 2 END,
+       updated_at DESC, created_at DESC
+     LIMIT 1`,
+    [marketplace],
+  );
+  return row?.id || null;
+}
+
 export async function publishListingToMarketplace(listingId, marketplace, options = {}) {
   const listing = get(`SELECT * FROM listings WHERE id = ?`, [listingId]);
   if (!listing) throw new Error("Listing not found");
@@ -278,7 +296,7 @@ export async function publishListingToMarketplace(listingId, marketplace, option
   const channelId = upsertChannel({
     listingId,
     marketplace,
-    connectionId: options.connectionId,
+    connectionId: options.connectionId || defaultConnectionIdFor(marketplace),
     externalListingId: result.externalListingId,
     status: result.status,
     payload: result.payload,
