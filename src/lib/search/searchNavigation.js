@@ -1,12 +1,16 @@
-export function navigationTargetForSearchResult(type) {
+// Focus payloads ({ type, id }) ride along with { view, toolsTab } so target
+// views can open/scroll to the exact record (see App.jsx pendingFocus).
+export function navigationTargetForSearchResult(type, record) {
   switch (type) {
     case "card":
-      return { view: "cards" };
+      return withFocus({ view: "cards" }, "card", record?.id);
     case "sale":
+      // Sales render as completed listings, so focus on the linked listing.
+      return withFocus({ view: "sales" }, "sale", record?.listingId || record?.id);
     case "order":
     case "listing":
     case "purchase":
-      return { view: "sales" };
+      return withFocus({ view: "sales" }, type, record?.id);
     case "watch":
       return { view: "tools", toolsTab: "watch" };
     case "trade":
@@ -14,4 +18,38 @@ export function navigationTargetForSearchResult(type) {
     default:
       return { view: "dashboard" };
   }
+}
+
+// Maps action-queue entries (actionQueueService.js queue names) to the view
+// where that action is performed today.
+export function navigationTargetForQueue(queue, entry) {
+  const focusType = entry?.subjectType;
+  const focusId = entry?.subjectId;
+  switch (queue) {
+    case "shipping_exception":
+    case "marketplace_handoff_exception":
+    case "ship_now":
+    case "orders_awaiting_payment":
+    case "stub_publish":
+      return withFocus({ view: "sales" }, focusType, focusId);
+    case "list_now":
+    case "high_value_unlisted":
+      return withFocus({ view: "sales" }, focusType, focusId, "list");
+    case "reprice_now":
+      return withFocus({ view: "sales" }, focusType, focusId, "reprice");
+    case "grade_now":
+      return { view: "tools", toolsTab: "grade" };
+    case "dead_inventory":
+    case "bundle_low_value":
+      return withFocus({ view: "cards" }, focusType, focusId);
+    default:
+      return { view: "dashboard" };
+  }
+}
+
+function withFocus(target, type, id, intent) {
+  if (!type || !id) return target;
+  const focus = { type, id };
+  if (intent) focus.intent = intent;
+  return { ...target, focus };
 }

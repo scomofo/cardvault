@@ -1,9 +1,10 @@
 import { PLATFORMS, PLATFORM_FEES } from "../lib/constants";
+import { isStubChannel } from "../lib/scanPublish";
 import { fmtShort } from "../lib/utils";
 import { IconCheck, IconX, Spinner } from "./Icons";
 import ProfitWarning from "./ProfitWarning";
 
-export default function ActiveListingCard({ listing: l, catalog, busyListingId, sellingId, sellPrice, setSellPrice, sellTracking, setSellTracking, repricingId, repriceVal, setRepriceVal, onPublish, onSync, onCrosspost, onSell, onStartSell, onReprice, onStartReprice, onEndListing, onCancelSell, onCancelReprice, getFeeRate = (platform) => PLATFORM_FEES[platform] || 0, timeLeft }) {
+export default function ActiveListingCard({ listing: l, catalog, busyListingId, sellingId, sellPrice, setSellPrice, sellTracking, setSellTracking, repricingId, repriceVal, setRepriceVal, onPublish, onSync, onCrosspost, onSell, onStartSell, onReprice, onStartReprice, onEndListing, onCancelSell, onCancelReprice, getFeeRate = (platform) => PLATFORM_FEES[platform] || 0, timeLeft, highlighted = false }) {
   const tl = l.format === "auction" ? timeLeft(l.auctionEndDate) : null;
   const isUrgent = tl && !tl.includes("d") && !tl.includes("Ended") && parseInt(tl) < 60;
   const isSelling = sellingId === l.id;
@@ -11,14 +12,18 @@ export default function ActiveListingCard({ listing: l, catalog, busyListingId, 
   const feeRate = getFeeRate(l.platform);
   const previewNet = sellPrice ? (parseFloat(sellPrice) - (parseFloat(catalog.find((c) => c.id === l.cardId)?.costBasis) || 0) - Math.round(parseFloat(sellPrice) * feeRate * 100) / 100 - (l.shipping || 0)) : null;
   const publishStatus = String(l.publishStatus || "").toLowerCase();
-  const isPublished = ["active", "revised", "sold"].includes(publishStatus) || Boolean(l.externalListingId || l.external_listing_id);
+  // A stub publish (marketplace wasn't connected) must not lock the Publish
+  // button — the user needs to re-publish for real after connecting.
+  const isStubPublish = isStubChannel(l, { marketplace: l.platform, listingId: l.id });
+  const isPublished = !isStubPublish
+    && (["active", "revised", "sold"].includes(publishStatus) || Boolean(l.externalListingId || l.external_listing_id));
   const lastSyncAt = l.lastSyncAt || l.last_sync_at;
   const lastSyncLabel = lastSyncAt && !Number.isNaN(new Date(lastSyncAt).getTime())
     ? `Synced ${new Date(lastSyncAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`
     : null;
 
   return (
-              <div key={l.id} className="card mb-8" style={{ borderColor: isSelling ? "var(--grn-brd)" : isUrgent ? "var(--red-brd)" : tl === "Ended" ? "var(--acc-brd)" : undefined }}>
+              <div key={l.id} id={`sf-rec-${l.id}`} className="card mb-8" style={{ borderColor: highlighted ? "var(--acc-solid)" : isSelling ? "var(--grn-brd)" : isUrgent ? "var(--red-brd)" : tl === "Ended" ? "var(--acc-brd)" : undefined }}>
                 <div className="flex justify-between" style={{ alignItems: "start" }}>
                   <div>
                     <strong className="text-sm">{l.cardName}</strong>

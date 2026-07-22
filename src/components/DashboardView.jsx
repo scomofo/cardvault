@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { dashboardAPI, automationAPI } from "../lib/api";
 import { loadDashboardState } from "../lib/dashboardState";
+import { navigationTargetForQueue } from "../lib/search/searchNavigation";
 import { fmtShort } from "../lib/utils";
-import { Skeleton, Spinner, IconZap } from "./Icons";
+import { Skeleton, Spinner, IconZap, IconChevron } from "./Icons";
 import AlertQueue from "./AlertQueue";
 import DecisionFeedbackPanel from "./DecisionFeedbackPanel";
 import PricingRecommendationsQueue from "./PricingRecommendationsQueue";
+import SetupWizard from "./settings/SetupWizard";
 
 function MiniList({ title, rows, formatter = (value) => value }) {
   return (
@@ -25,7 +27,7 @@ function MiniList({ title, rows, formatter = (value) => value }) {
   );
 }
 
-export default function DashboardView() {
+export default function DashboardView({ onNavigate }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [autoRunning, setAutoRunning] = useState({});
@@ -79,10 +81,36 @@ export default function DashboardView() {
   const kpis = data?.kpis || {};
   const performance = data?.performance || {};
   const actionQueue = data?.actionQueue || [];
+  const nextAction = actionQueue[0];
+  const nextActionTarget = nextAction ? navigationTargetForQueue(nextAction.queue, nextAction) : null;
 
   return (
     <div className="fade">
       <h1 className="page-title">Dashboard</h1>
+
+      <SetupWizard />
+
+      {nextAction && (
+        <div className="card-hero mb-12" style={{ borderColor: "var(--acc-brd)" }}>
+          <div className="flex justify-between items-center">
+            <div>
+              <div className="lbl" style={{ margin: 0 }}>Next Best Action</div>
+              <div className="fw-800 mt-4">{nextAction.item}</div>
+              <div className="text-xxs text-dim mt-4">
+                {nextAction.queue.replace(/_/g, " ")} — {nextAction.reason}
+              </div>
+            </div>
+            {nextActionTarget.view !== "dashboard" && (
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => onNavigate?.(nextActionTarget)}
+              >
+                {(nextAction.suggestedAction || "open").replace(/_/g, " ")} <IconChevron size={12} />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="card-hero mb-12">
         <div className="stat-grid">
@@ -125,18 +153,30 @@ export default function DashboardView() {
         {actionQueue.length === 0 ? (
           <div className="text-xs text-dim mt-6">No queued actions yet</div>
         ) : (
-          actionQueue.slice(0, 8).map((entry) => (
-            <div key={`${entry.subjectType}-${entry.subjectId}-${entry.queue}`} className="flex justify-between items-center mt-8">
-              <div>
-                <div className="text-xs fw-700">{entry.queue.replace(/_/g, " ")}</div>
-                <div className="text-xxs text-dim">{entry.reason}</div>
+          actionQueue.slice(0, 8).map((entry) => {
+            const target = navigationTargetForQueue(entry.queue, entry);
+            const clickable = target.view !== "dashboard";
+            return (
+              <div
+                key={`${entry.subjectType}-${entry.subjectId}-${entry.queue}`}
+                className="flex justify-between items-center mt-8"
+                role={clickable ? "button" : undefined}
+                tabIndex={clickable ? 0 : undefined}
+                style={clickable ? { cursor: "pointer" } : undefined}
+                onClick={clickable ? () => onNavigate?.(target) : undefined}
+                onKeyDown={clickable ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onNavigate?.(target); } } : undefined}
+              >
+                <div>
+                  <div className="text-xs fw-700">{entry.queue.replace(/_/g, " ")}</div>
+                  <div className="text-xxs text-dim">{entry.reason}</div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div className="fw-800">{entry.item}</div>
+                  <div className="text-xxs text-dim">{entry.priorityScore}</div>
+                </div>
               </div>
-              <div style={{ textAlign: "right" }}>
-                <div className="fw-800">{entry.item}</div>
-                <div className="text-xxs text-dim">{entry.priorityScore}</div>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 

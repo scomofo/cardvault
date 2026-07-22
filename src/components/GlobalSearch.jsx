@@ -114,7 +114,7 @@ export default function GlobalSearch({ onNavigate }) {
   const handleSelect = useCallback((result) => {
     setOpen(false);
     setQuery("");
-    onNavigate(navigationTargetForSearchResult(result.type));
+    onNavigate(navigationTargetForSearchResult(result.type, result.item));
   }, [onNavigate]);
 
   const typeLabel = { card: "Card", sale: "Sale", order: "Order", listing: "Listing", purchase: "Purchase", watch: "Watchlist", trade: "Trade" };

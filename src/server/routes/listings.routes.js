@@ -45,6 +45,58 @@ export function registerListingRoutes(app) {
       if (body.card_id && !get("SELECT id FROM user_items WHERE id = ?", [body.card_id])) {
         return res.status(404).json({ error: "linked item not found" });
       }
+      // Upsert: the client sync engine retries creates after partial failures and
+      // the scan flow creates listings directly before the debounced sync runs.
+      // The conflict path only writes client-owned columns — publish_status,
+      // publish_error, external_listing_id, last_sync_at, and sold_* stay
+      // server-managed so a redundant re-POST can't clobber marketplace state.
+      const existing = body.id
+        ? get("SELECT * FROM listings WHERE id = ?", [body.id])
+        : null;
+      if (existing) {
+        const merged = { ...existing, ...body };
+        // Terminal statuses are server-set (marketplace sync marks sales); a
+        // stale create-retry must not revive a sold/ended listing.
+        const existingStatus = normalizeStatus(existing.status);
+        const mergedStatus = ["sold", "ended"].includes(existingStatus)
+          ? existingStatus
+          : normalizeStatus(merged.status, "active");
+        run(
+          `UPDATE listings SET card_id=?, card_name=?, card_set=?, card_number=?, platform=?,
+           listing_title=?, listing_description=?, format=?, start_price=?, buy_now_price=?,
+           auction_end_date=?, shipping=?, current_bid=?, quantity=?, status=?, notes=?
+           WHERE id=?`,
+          [
+            merged.card_id,
+            merged.card_name,
+            merged.card_set,
+            merged.card_number,
+            merged.platform,
+            merged.listing_title,
+            merged.listing_description,
+            merged.format,
+            merged.start_price,
+            merged.buy_now_price,
+            merged.auction_end_date,
+            merged.shipping,
+            merged.current_bid,
+            merged.quantity,
+            mergedStatus || "active",
+            merged.notes,
+            existing.id,
+          ],
+        );
+        syncItemState(
+          merged.card_id,
+          mergedStatus === "sold" ? merged.sold_date || new Date().toISOString() : null,
+        );
+        if (existing.card_id && existing.card_id !== merged.card_id) {
+          syncItemState(existing.card_id);
+        }
+        return res.json(
+          toCamel(get("SELECT * FROM listings WHERE id = ?", [existing.id]), LISTING_FIELD_MAP),
+        );
+      }
       const id = body.id || uid();
       const normalizedStatus = normalizeStatus(body.status, "active");
       run(

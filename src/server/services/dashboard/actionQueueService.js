@@ -106,6 +106,36 @@ export function getActionQueue() {
     });
   }
 
+  // Stub publishes: the eBay adapter falls back to a local stub when not
+  // connected, minting external ids of the form `${marketplace}-${listingId
+  // slice 12}` — the listing claims "active" but nothing is live.
+  for (const channel of all(`
+    SELECT
+      listing_channels.listing_id,
+      listing_channels.marketplace,
+      listings.card_name,
+      listings.start_price
+    FROM listing_channels
+    JOIN listings ON listings.id = listing_channels.listing_id
+    WHERE listing_channels.marketplace = 'ebay'
+      AND listing_channels.status IN ('active', 'revised')
+      AND listing_channels.external_listing_id = listing_channels.marketplace || '-' || substr(listing_channels.listing_id, 1, 12)
+  `)) {
+    queue.push({
+      queue: "stub_publish",
+      item: channel.card_name || channel.listing_id,
+      itemId: channel.listing_id,
+      itemName: channel.card_name || null,
+      reason: `${channel.marketplace} publish ran while disconnected — nothing is live`,
+      marketplace: channel.marketplace,
+      listingId: channel.listing_id,
+      suggestedAction: "republish_listing",
+      priorityScore: score({ base: 150, marketPrice: Number(channel.start_price || 0), risk: 30 }),
+      subjectType: "listing",
+      subjectId: channel.listing_id,
+    });
+  }
+
   for (const order of all(`SELECT id, sale_price, platform FROM orders WHERE fulfillment_status IN ('pending', 'paid')`)) {
     queue.push({
       queue: "ship_now",

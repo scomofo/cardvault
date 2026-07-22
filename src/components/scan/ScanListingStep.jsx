@@ -29,12 +29,20 @@ export default function ScanListingStep({
   onSaveAndList,
   onSaveOnly,
   saving,
+  publishing = false,
+  publishTarget = null,
   costBasis = 0,
   feeRate = 0,
   comps = [],
   priceEst = {},
 }) {
   const strategyPrices = deriveStrategyPrices(priceEst);
+  const busy = saving || publishing;
+  const saveAndListLabel = publishTarget
+    ? publishTarget.mode === "handoff"
+      ? `Save + Queue for ${publishTarget.label}`
+      : `Save + Publish to ${publishTarget.label}`
+    : "Save + List";
 
   function applyStrategy(key) {
     if (!strategyPrices) return;
@@ -150,15 +158,22 @@ export default function ScanListingStep({
         </div>
       </div>
 
+      {publishTarget && (
+        <div className="text-xxs text-dim mb-8" style={{ textAlign: "center" }}>
+          {publishTarget.mode === "handoff"
+            ? `Creates a ${publishTarget.label} handoff — review and submit it from the Sales tab`
+            : `Publishes live to ${publishTarget.label} via your connected account`}
+        </div>
+      )}
       <div className="flex gap-8">
         <button className="btn btn-primary btn-lg flex-1" onClick={onCopy}>
           <IconCopy size={14} /> Copy
         </button>
-        <button className="btn btn-outline btn-lg flex-1" disabled={saving} onClick={onSaveAndList}>
-          Save + List
+        <button className="btn btn-outline btn-lg flex-1" disabled={busy} onClick={onSaveAndList}>
+          {publishing ? "Publishing…" : saveAndListLabel}
         </button>
       </div>
-      <button className="btn btn-ghost btn-lg btn-full mt-8" disabled={saving} onClick={onSaveOnly}>
+      <button className="btn btn-ghost btn-lg btn-full mt-8" disabled={busy} onClick={onSaveOnly}>
         Save Only
       </button>
       <button

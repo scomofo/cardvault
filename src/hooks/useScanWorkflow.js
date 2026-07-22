@@ -1,15 +1,22 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useToast } from "../components/Toast";
 import { useData } from "../lib/DataContext";
 import { EMPTY_CARD, EMPTY_LISTING } from "../lib/constants";
 import { aiPrice, aiRecognize, aiVisualSearch } from "../lib/ai";
-import { identificationAPI, automationAPI } from "../lib/api";
+import { identificationAPI, itemsAPI, listingsAPI, marketplacesAPI } from "../lib/api";
+import { apiPath } from "../lib/apiBase";
 import { analyzeCentering, checkCvHealth } from "../lib/cvApi";
-import { computeDHash, hammingDistance } from "../lib/phash";
+import {
+  applyChannelToListing,
+  getPublishTarget,
+  publishScanListing,
+  summarizePublishOutcome,
+} from "../lib/scanPublish";
+import { findLikelyDuplicate } from "../lib/duplicateDetection";
+import { catalogCardToItemPatch, describeCatalogCard } from "../lib/identificationDisplay";
+import { computeDHash } from "../lib/phash";
 import { saveImage } from "../lib/storage";
 import { condOf, fmtShort, uid } from "../lib/utils";
-
-const DUPLICATE_HAMMING_THRESHOLD = 10;
 
 const MIN_CAPTURE_SHORT_EDGE = 600;
 const CV_DETECTION_THRESHOLD = 0.6;
@@ -76,6 +83,11 @@ function buildListingRecord({ card, entry, listing }) {
     cardName: card.name,
     set: card.set,
     number: card.number,
+    // Server-persisted aliases + marketplace content (listing_title drives a live eBay publish).
+    cardSet: card.set,
+    cardNumber: card.number,
+    listingTitle: listing.title,
+    listingDescription: listing.description,
     platform: listing.platform,
     format: "fixed",
     startPrice: parseFloat(listing.price),
@@ -91,7 +103,7 @@ function buildListingRecord({ card, entry, listing }) {
 
 export function useScanWorkflow() {
   const toast = useToast();
-  const { catalog, setCatalog, setListings } = useData();
+  const { catalog, setCatalog, setListings, useServer } = useData();
 
   const [step, setStep] = useState(0);
   const [batchMode, setBatchMode] = useState(null); // null | "capture" | "process"
@@ -112,7 +124,11 @@ export function useScanWorkflow() {
   const [showGrading, setShowGrading] = useState(false);
   const [gradingData, setGradingData] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [ebayConnected, setEbayConnected] = useState(false);
+  const [duplicateWarning, setDuplicateWarning] = useState(null);
   const [cvOnline, setCvOnline] = useState(false);
+  const scanItemRef = useRef(null);
   const [cvAnalyzing, setCvAnalyzing] = useState(false);
   const [cvResult, setCvResult] = useState(null);
   const [showCvOverlay, setShowCvOverlay] = useState(true);
@@ -123,6 +139,15 @@ export function useScanWorkflow() {
   useEffect(() => {
     checkCvHealth().then(setCvOnline);
   }, []);
+
+  useEffect(() => {
+    fetch(apiPath("/ebay/status"))
+      .then((response) => (response.ok ? response.json() : null))
+      .then((status) => setEbayConnected(Boolean(status?.connected)))
+      .catch(() => setEbayConnected(false));
+  }, []);
+
+  const publishTarget = getPublishTarget(listing.platform, { useServer, ebayConnected });
 
   async function processCapturedImage(dataUrl, side) {
     if (!dataUrl) return null;
@@ -159,11 +184,48 @@ export function useScanWorkflow() {
     if (!dataUrl) {
       setFrontImg(null);
       setCvResult(null);
+      setDuplicateWarning(null);
       return;
     }
     setFrontImg(dataUrl);
     const processed = await processCapturedImage(dataUrl, "front");
     if (processed && processed !== dataUrl) setFrontImg(processed);
+    // Warn about a likely duplicate NOW, before the user invests in
+    // identify/price/list work — not after save.
+    const phash = await computeDHash(processed || dataUrl);
+    setDuplicateWarning(findLikelyDuplicate(catalog, phash));
+  }
+
+  function dismissDuplicateWarning() {
+    setDuplicateWarning((warning) => (warning ? { ...warning, dismissed: true } : null));
+  }
+
+  function dismissIdentificationResult() {
+    setIdentificationResult((result) => (result ? { ...result, dismissed: true } : null));
+  }
+
+  // User picked a different candidate: record the correction for the learning
+  // loop and fix the saved item's fields (plus the open form when still on
+  // this card's scan session).
+  async function applyIdentificationCorrection(candidate) {
+    const result = identificationResult;
+    if (!result?.itemId || !candidate?.card?.id) return;
+    try {
+      await identificationAPI.correct({
+        identificationResultId: result.id,
+        correctedCatalogCardId: candidate.card.id,
+        reason: "scan_correction_picker",
+      });
+    } catch { /* learning is non-critical; still fix the item locally */ }
+    const patch = catalogCardToItemPatch(candidate.card);
+    setCatalog((previous) =>
+      previous.map((item) => (item.id === result.itemId ? { ...item, ...patch } : item)),
+    );
+    if (scanItemRef.current === result.itemId) {
+      setCard((previous) => ({ ...previous, ...patch }));
+    }
+    toast.success(`Corrected to ${describeCatalogCard(candidate.card)?.label || "selected card"}`);
+    dismissIdentificationResult();
   }
 
   async function captureBackImg(dataUrl) {
@@ -294,6 +356,7 @@ export function useScanWorkflow() {
     setSaving(true);
     try {
       const id = uid();
+      scanItemRef.current = id;
       let frontImgId = null;
       let backImgId = null;
       let frontImgPhash = null;
@@ -302,13 +365,13 @@ export function useScanWorkflow() {
         frontImgId = `img_${id}_front`;
         await saveImage(frontImgId, frontImg);
         frontImgPhash = await computeDHash(frontImg);
-        if (frontImgPhash) {
-          const duplicate = catalog.find((existing) => {
-            if (!existing?.frontImgPhash) return false;
-            return hammingDistance(existing.frontImgPhash, frontImgPhash) <= DUPLICATE_HAMMING_THRESHOLD;
-          });
+        // The capture-time banner already surfaced any likely duplicate;
+        // only fall back to a toast when the check never ran (e.g. a
+        // direct step jump with a pre-set image).
+        if (frontImgPhash && !duplicateWarning) {
+          const duplicate = findLikelyDuplicate(catalog, frontImgPhash);
           if (duplicate) {
-            toast.error(`Possible duplicate of ${duplicate.name || "existing card"} — saved anyway, review your collection`);
+            toast.error(`Possible duplicate of ${duplicate.card.name || "existing card"} — saved anyway, review your collection`);
           }
         }
       }
@@ -333,12 +396,22 @@ export function useScanWorkflow() {
       setCatalog((previous) => [entry, ...previous]);
       toast.success(`Saved: ${card.name || "Card"}`);
 
-      // Run server-side identification + learning after sync (fire-and-forget)
-      setTimeout(async () => {
+      // Server-side identification + learning (fire-and-forget, but
+      // deterministic: item creates are idempotent upserts, so persist the
+      // item first instead of racing the debounced sync on a timer).
+      const runIdentification = async () => {
         try {
+          await itemsAPI.create(entry);
           const idResult = await identificationAPI.identify({ itemId: id, visualSearchResult });
           if (idResult?.result?.id) {
-            setIdentificationResult(idResult.result);
+            // Only surface the panel if the user is still on this card's scan.
+            if (scanItemRef.current === id) {
+              setIdentificationResult({
+                ...idResult.result,
+                itemId: id,
+                candidates: (idResult.candidates || []).slice(0, 6),
+              });
+            }
             const verification = idResult.result.finalCatalogCard?.ebayVerification;
             if (verification) {
               const range = verification.priceRange;
@@ -365,7 +438,8 @@ export function useScanWorkflow() {
         } catch {
           // Identification is non-critical — don't block the save flow
         }
-      }, 800);
+      };
+      if (useServer) runIdentification();
 
       return entry;
     } finally {
@@ -391,6 +465,8 @@ export function useScanWorkflow() {
     setVisualSearching(false);
     setVisualSearchResult(null);
     setIdentificationResult(null);
+    setDuplicateWarning(null);
+    scanItemRef.current = null;
   }
 
   async function copyListing() {
@@ -434,6 +510,7 @@ export function useScanWorkflow() {
     const entry = await saveCard();
     if (entry && listing.price) {
       const listingRecord = buildListingRecord({ card, entry, listing });
+      const target = publishTarget;
       setListings((previous) => [listingRecord, ...previous]);
       setCatalog((previous) =>
         previous.map((item) =>
@@ -442,7 +519,38 @@ export function useScanWorkflow() {
             : item,
         ),
       );
-      toast.success(`Listed on ${listing.platform} for ${fmtShort(listing.price)}`);
+      if (target) {
+        setPublishing(true);
+        try {
+          const channel = await publishScanListing({
+            itemsAPI,
+            listingsAPI,
+            marketplacesAPI,
+            item: entry,
+            listingRecord,
+            marketplace: target.marketplace,
+          });
+          setListings((previous) =>
+            previous.map((item) =>
+              item.id === listingRecord.id ? applyChannelToListing(item, channel) : item,
+            ),
+          );
+          const summary = summarizePublishOutcome(channel, {
+            marketplace: target.marketplace,
+            label: target.label,
+            listingId: listingRecord.id,
+          });
+          (toast[summary.type] || toast.info)(summary.message);
+        } catch (error) {
+          toast.error(
+            `Saved locally — publish to ${target.label} failed: ${error.message}. Retry from the Sales tab.`,
+          );
+        } finally {
+          setPublishing(false);
+        }
+      } else {
+        toast.success(`Listed on ${listing.platform} for ${fmtShort(listing.price)} (tracked locally)`);
+      }
     }
     reset();
   }
@@ -539,6 +647,9 @@ export function useScanWorkflow() {
       saveCard,
       captureFrontImg,
       captureBackImg,
+      applyIdentificationCorrection,
+      dismissDuplicateWarning,
+      dismissIdentificationResult,
       setBackImg,
       setCard,
       setFrontImg,
@@ -567,11 +678,14 @@ export function useScanWorkflow() {
       cvAnalyzing,
       cvOnline,
       cvResult,
+      duplicateWarning,
       frontImg,
       gradingData,
       listing,
       priceEst,
       priceHistory,
+      publishing,
+      publishTarget,
       recognizing,
       results,
       saving,
