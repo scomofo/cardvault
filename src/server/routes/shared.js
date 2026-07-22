@@ -26,6 +26,16 @@ export function registerCRUD(app, table, requiredField, { columns, insert, updat
       if (!body[requiredField]) {
         return res.status(400).json({ error: `${requiredField} required` });
       }
+      // Upsert: the client sync engine retries creates after partial
+      // failures, so a re-POST of an existing id must update instead of
+      // violating the primary key.
+      const existing = body.id ? get(`SELECT * FROM ${table} WHERE id = ?`, [body.id]) : null;
+      if (existing) {
+        const merged = { ...existing, ...body };
+        const setClause = updateColumns.map((column) => `${column}=?`).join(",");
+        run(`UPDATE ${table} SET ${setClause} WHERE id=?`, [...update(merged), existing.id]);
+        return res.json(toCamel(get(`SELECT * FROM ${table} WHERE id = ?`, [existing.id]), fieldMap));
+      }
       const id = body.id || uid();
       const placeholders = columnList.map(() => "?").join(",");
       run(

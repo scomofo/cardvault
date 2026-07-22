@@ -10,6 +10,71 @@ import { requireJsonBody } from "../validation/common.js";
 import { validateSalePayload } from "../validation/writeValidators.js";
 import { uid } from "./shared.js";
 
+// Shared by PUT /api/sales/:id and the POST upsert path. Merges `updates`
+// over the existing row, validates the order link, applies the UPDATE and
+// order-link transitions. Returns { status, error } on failure, null on
+// success.
+function applySaleUpdate(saleId, existing, updates) {
+  const body = { ...existing, ...updates };
+  const nextOrderId = body.order_id || null;
+  if (nextOrderId) {
+    const linkedOrder = get("SELECT id, sale_id FROM orders WHERE id = ?", [nextOrderId]);
+    if (!linkedOrder) {
+      return { status: 404, error: "linked order not found" };
+    }
+    if (linkedOrder.sale_id && linkedOrder.sale_id !== saleId) {
+      return { status: 409, error: "order already linked to a different sale" };
+    }
+  }
+  run(
+    `UPDATE sales SET
+      card_id=?, order_id=?, card_name=?, card_set=?, sale_price=?, cost_basis=?,
+      platform=?, buyer_handle=?, fees=?, shipping_cost=?, packaging_cost=?,
+      grading_cost=?, tax_collected=?, payout_amount=?, net_profit=?,
+      tracking_number=?, listing_id=?, date=?
+     WHERE id=?`,
+    [
+      body.card_id,
+      body.order_id,
+      body.card_name,
+      body.card_set,
+      body.sale_price ?? 0,
+      body.cost_basis ?? 0,
+      body.platform,
+      body.buyer_handle,
+      body.fees ?? 0,
+      body.shipping_cost ?? 0,
+      body.packaging_cost ?? 0,
+      body.grading_cost ?? 0,
+      body.tax_collected ?? 0,
+      body.payout_amount ?? 0,
+      body.net_profit ?? 0,
+      body.tracking_number ?? null,
+      body.listing_id,
+      body.date,
+      saleId,
+    ],
+  );
+  if (existing.order_id && existing.order_id !== nextOrderId) {
+    run(
+      `UPDATE orders
+       SET sale_id = NULL
+       WHERE id = ?
+         AND sale_id = ?`,
+      [existing.order_id, saleId],
+    );
+  }
+  if (nextOrderId) {
+    run(
+      `UPDATE orders
+       SET sale_id = ?
+       WHERE id = ?`,
+      [saleId, nextOrderId],
+    );
+  }
+  return null;
+}
+
 export function registerSalesRoutes(app) {
   app.get("/api/sales", (_req, res) => {
     try {
@@ -22,6 +87,14 @@ export function registerSalesRoutes(app) {
   app.post("/api/sales", validateSalePayload, (req, res) => {
     try {
       const body = toSnake(req.body);
+      // Upsert: a sync-engine create retry updates the record; the linked
+      // listing/item side effects already ran on the original create.
+      const existingSale = body.id ? get("SELECT * FROM sales WHERE id = ?", [body.id]) : null;
+      if (existingSale) {
+        const failure = applySaleUpdate(existingSale.id, existingSale, body);
+        if (failure) return res.status(failure.status).json({ error: failure.error });
+        return res.json(toCamel(get("SELECT * FROM sales WHERE id = ?", [existingSale.id]), SALE_FIELD_MAP));
+      }
       const id = body.id || uid();
       const linkedOrderId = body.order_id || null;
       const linkedOrder = linkedOrderId
@@ -172,63 +245,8 @@ export function registerSalesRoutes(app) {
       const existing = get("SELECT * FROM sales WHERE id = ?", [req.params.id]);
       if (!existing) return res.status(404).json({ error: "Sale not found" });
 
-      const body = { ...existing, ...toSnake(req.body) };
-      const nextOrderId = body.order_id || null;
-      if (nextOrderId) {
-        const linkedOrder = get("SELECT id, sale_id FROM orders WHERE id = ?", [nextOrderId]);
-        if (!linkedOrder) {
-          return res.status(404).json({ error: "linked order not found" });
-        }
-        if (linkedOrder.sale_id && linkedOrder.sale_id !== req.params.id) {
-          return res.status(409).json({ error: "order already linked to a different sale" });
-        }
-      }
-      run(
-        `UPDATE sales SET
-          card_id=?, order_id=?, card_name=?, card_set=?, sale_price=?, cost_basis=?,
-          platform=?, buyer_handle=?, fees=?, shipping_cost=?, packaging_cost=?,
-          grading_cost=?, tax_collected=?, payout_amount=?, net_profit=?,
-          tracking_number=?, listing_id=?, date=?
-         WHERE id=?`,
-        [
-          body.card_id,
-          body.order_id,
-          body.card_name,
-          body.card_set,
-          body.sale_price ?? 0,
-          body.cost_basis ?? 0,
-          body.platform,
-          body.buyer_handle,
-          body.fees ?? 0,
-          body.shipping_cost ?? 0,
-          body.packaging_cost ?? 0,
-          body.grading_cost ?? 0,
-          body.tax_collected ?? 0,
-          body.payout_amount ?? 0,
-          body.net_profit ?? 0,
-          body.tracking_number ?? null,
-          body.listing_id,
-          body.date,
-          req.params.id,
-        ],
-      );
-      if (existing.order_id && existing.order_id !== nextOrderId) {
-        run(
-          `UPDATE orders
-           SET sale_id = NULL
-           WHERE id = ?
-             AND sale_id = ?`,
-          [existing.order_id, req.params.id],
-        );
-      }
-      if (nextOrderId) {
-        run(
-          `UPDATE orders
-           SET sale_id = ?
-           WHERE id = ?`,
-          [req.params.id, nextOrderId],
-        );
-      }
+      const failure = applySaleUpdate(req.params.id, existing, toSnake(req.body));
+      if (failure) return res.status(failure.status).json({ error: failure.error });
 
       res.json(toCamel(get("SELECT * FROM sales WHERE id = ?", [req.params.id]), SALE_FIELD_MAP));
     } catch (error) {

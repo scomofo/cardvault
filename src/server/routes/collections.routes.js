@@ -113,6 +113,30 @@ export function registerCollectionRoutes(app) {
       if (body.total_cost != null && isNaN(Number(body.total_cost))) {
         return res.status(400).json({ error: "total_cost must be numeric" });
       }
+      // Upsert: sync-engine create retries must update, not violate the key.
+      const existing = body.id ? get("SELECT * FROM purchases WHERE id = ?", [body.id]) : null;
+      if (existing) {
+        const merged = { ...existing, ...body };
+        run(
+          `UPDATE purchases SET
+            external_order_id=?, name=?, card_set=?, platform=?, seller=?, price=?, shipping=?, total_cost=?, date=?, notes=?
+           WHERE id=?`,
+          [
+            merged.external_order_id ?? null,
+            merged.name,
+            merged.card_set,
+            merged.platform,
+            merged.seller,
+            merged.price,
+            merged.shipping ?? 0,
+            merged.total_cost ?? 0,
+            merged.date,
+            merged.notes,
+            existing.id,
+          ],
+        );
+        return res.json(toCamel(get("SELECT * FROM purchases WHERE id = ?", [existing.id]), PURCHASE_FIELD_MAP));
+      }
       const id = body.id || uid();
       run(
         `INSERT INTO purchases (id, external_order_id, name, card_set, platform, seller, price, shipping, total_cost, date, notes)

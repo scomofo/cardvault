@@ -5,6 +5,72 @@ import { markListingSold, restoreListingAfterOperationalDelete, syncItemState } 
 import { requireJsonBody, validateNumberLike, sendValidationError } from "../validation/common.js";
 import { uid } from "./shared.js";
 
+// Fulfillment states written by shipping automation; a stale create-retry
+// must not revert them (e.g. un-ship a shipped order).
+const PROTECTED_FULFILLMENT_STATES = new Set(["shipped", "delivered", "shipping_exception"]);
+
+// Shared by PUT /api/orders/:id and the POST upsert path. Merges `updates`
+// over the existing row, validates the sale link, applies the UPDATE and
+// sale-link transitions. Returns { status, error } on failure, null on
+// success.
+function applyOrderUpdate(orderId, existing, updates) {
+  const body = { ...existing, ...updates };
+  const nextSaleId = body.sale_id || null;
+  if (nextSaleId) {
+    const linkedSale = get("SELECT id, order_id FROM sales WHERE id = ?", [nextSaleId]);
+    if (!linkedSale) {
+      return { status: 404, error: "linked sale not found" };
+    }
+    if (linkedSale.order_id && linkedSale.order_id !== orderId) {
+      return { status: 409, error: "sale already linked to a different order" };
+    }
+  }
+  run(
+    `UPDATE orders SET
+      sale_id=?, listing_id=?, item_id=?, platform=?, external_order_id=?,
+      buyer_handle=?, sale_price=?, fees=?, shipping_charge=?, tax_collected=?,
+      destination_country=?, destination_postal_code=?, payment_status=?,
+      fulfillment_status=?, sold_at=?
+     WHERE id=?`,
+    [
+      body.sale_id,
+      body.listing_id,
+      body.item_id,
+      body.platform,
+      body.external_order_id,
+      body.buyer_handle,
+      body.sale_price ?? 0,
+      body.fees ?? 0,
+      body.shipping_charge ?? 0,
+      body.tax_collected ?? 0,
+      body.destination_country ?? "CA",
+      body.destination_postal_code,
+      body.payment_status ?? "paid",
+      body.fulfillment_status ?? "pending",
+      body.sold_at,
+      orderId,
+    ],
+  );
+  if (existing.sale_id && existing.sale_id !== nextSaleId) {
+    run(
+      `UPDATE sales
+       SET order_id = NULL
+       WHERE id = ?
+         AND order_id = ?`,
+      [existing.sale_id, orderId],
+    );
+  }
+  if (nextSaleId) {
+    run(
+      `UPDATE sales
+       SET order_id = ?
+       WHERE id = ?`,
+      [orderId, nextSaleId],
+    );
+  }
+  return null;
+}
+
 export function registerOrderRoutes(app) {
   app.get("/api/orders", (_req, res) => {
     try {
@@ -37,6 +103,19 @@ export function registerOrderRoutes(app) {
   app.post("/api/orders", requireJsonBody, (req, res) => {
     try {
       const body = req.body;
+      // Upsert: a sync-engine create retry updates the record; automation-set
+      // fulfillment states are preserved so a stale retry can't un-ship.
+      const bodyId = body.id || null;
+      const existingOrder = bodyId ? get("SELECT * FROM orders WHERE id = ?", [bodyId]) : null;
+      if (existingOrder) {
+        const updates = toSnake(body);
+        if (PROTECTED_FULFILLMENT_STATES.has(existingOrder.fulfillment_status)) {
+          delete updates.fulfillment_status;
+        }
+        const failure = applyOrderUpdate(existingOrder.id, existingOrder, updates);
+        if (failure) return res.status(failure.status).json({ error: failure.error });
+        return res.json(toCamel(get("SELECT * FROM orders WHERE id = ?", [existingOrder.id]), ORDER_FIELD_MAP));
+      }
       const linkedSaleId = body.saleId || body.sale_id || null;
       const linkedSale = linkedSaleId
         ? get(
@@ -195,60 +274,8 @@ export function registerOrderRoutes(app) {
       const existing = get("SELECT * FROM orders WHERE id = ?", [req.params.id]);
       if (!existing) return res.status(404).json({ error: "Order not found" });
 
-      const body = { ...existing, ...toSnake(req.body) };
-      const nextSaleId = body.sale_id || null;
-      if (nextSaleId) {
-        const linkedSale = get("SELECT id, order_id FROM sales WHERE id = ?", [nextSaleId]);
-        if (!linkedSale) {
-          return res.status(404).json({ error: "linked sale not found" });
-        }
-        if (linkedSale.order_id && linkedSale.order_id !== req.params.id) {
-          return res.status(409).json({ error: "sale already linked to a different order" });
-        }
-      }
-      run(
-        `UPDATE orders SET
-          sale_id=?, listing_id=?, item_id=?, platform=?, external_order_id=?,
-          buyer_handle=?, sale_price=?, fees=?, shipping_charge=?, tax_collected=?,
-          destination_country=?, destination_postal_code=?, payment_status=?,
-          fulfillment_status=?, sold_at=?
-         WHERE id=?`,
-        [
-          body.sale_id,
-          body.listing_id,
-          body.item_id,
-          body.platform,
-          body.external_order_id,
-          body.buyer_handle,
-          body.sale_price ?? 0,
-          body.fees ?? 0,
-          body.shipping_charge ?? 0,
-          body.tax_collected ?? 0,
-          body.destination_country ?? "CA",
-          body.destination_postal_code,
-          body.payment_status ?? "paid",
-          body.fulfillment_status ?? "pending",
-          body.sold_at,
-          req.params.id,
-        ],
-      );
-      if (existing.sale_id && existing.sale_id !== nextSaleId) {
-        run(
-          `UPDATE sales
-           SET order_id = NULL
-           WHERE id = ?
-             AND order_id = ?`,
-          [existing.sale_id, req.params.id],
-        );
-      }
-      if (nextSaleId) {
-        run(
-          `UPDATE sales
-           SET order_id = ?
-           WHERE id = ?`,
-          [req.params.id, nextSaleId],
-        );
-      }
+      const failure = applyOrderUpdate(req.params.id, existing, toSnake(req.body));
+      if (failure) return res.status(failure.status).json({ error: failure.error });
 
       res.json(toCamel(get("SELECT * FROM orders WHERE id = ?", [req.params.id]), ORDER_FIELD_MAP));
     } catch (error) {
