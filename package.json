@@ -14,6 +14,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --test",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-exclude='tests/**'",
     "lint": "eslint -c config/eslint.config.js \"src/**/*.{js,jsx}\" \"tests/**/*.js\" server.js vite.config.js",
     "mac:dev": "npm rebuild better-sqlite3 && concurrently -k -n vite,api,electron -c cyan,magenta,green \"npm:dev\" \"npm:server\" \"wait-on http://127.0.0.1:3000 http://127.0.0.1:3001/api/ai/status && CARDVAULT_DEV_URL=http://127.0.0.1:3000 electron .\"",
     "mac:build": "vite build && electron-builder --mac --universal",

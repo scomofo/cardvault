@@ -245,7 +245,16 @@ const isMainModule = (() => {
 })();
 
 if (isMainModule) {
-  startServer();
+  startServer().then((server) => {
+    // Exit via process.exit so exit hooks run (e.g. NODE_V8_COVERAGE flushes
+    // coverage data when integration tests terminate the server).
+    const shutdown = () => {
+      server.close(() => process.exit(0));
+      server.closeAllConnections?.();
+    };
+    process.on("SIGTERM", shutdown);
+    process.on("SIGINT", shutdown);
+  });
 }
 
 export { app };
