@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { diffById } from "../src/lib/sync/diffById.js";
-import { createSyncEngine } from "../src/lib/sync/syncEngine.js";
+import { createCollectionSetter, createSyncEngine } from "../src/lib/sync/syncEngine.js";
 
 function wait(ms = 0) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -170,4 +170,134 @@ test("sync engine keeps the global syncing state true until all collections fini
   releaseSales();
   await wait(20);
   assert.deepEqual(syncStates, [true, false]);
+});
+
+test("diffById compares timestamps, key counts, nested objects, and primitives", () => {
+  const stamped = diffById(
+    [{ id: "a", name: "old", updatedAt: "1" }],
+    [{ id: "a", name: "new", updatedAt: "1" }],
+  );
+  assert.equal(stamped.changed.length, 0, "matching updatedAt short-circuits field comparison");
+
+  const extraKey = diffById([{ id: "a", name: "x" }], [{ id: "a", name: "x", note: "hi" }]);
+  assert.deepEqual(extraKey.changed.map((item) => item.id), ["a"]);
+
+  const sameNested = diffById(
+    [{ id: "a", meta: { grade: 8 } }],
+    [{ id: "a", meta: { grade: 8 } }],
+  );
+  assert.equal(sameNested.changed.length, 0);
+
+  const changedNested = diffById(
+    [{ id: "a", meta: { grade: 8 } }],
+    [{ id: "a", meta: { grade: 9 } }],
+  );
+  assert.equal(changedNested.changed.length, 1);
+
+  const changedPrimitive = diffById([{ id: "a", name: "x" }], [{ id: "a", name: "y" }]);
+  assert.equal(changedPrimitive.changed.length, 1);
+});
+
+test("sync engine settles immediately when there is nothing to sync", async () => {
+  const syncStates = [];
+  const engine = createSyncEngine({
+    onSyncStateChange: (value) => syncStates.push(value),
+  });
+  const snapshot = [{ id: "a", name: "same" }];
+  engine.setSnapshot({ catalog: snapshot });
+
+  const api = {
+    create: async () => {
+      throw new Error("no operations expected");
+    },
+    update: async () => {
+      throw new Error("no operations expected");
+    },
+    delete: async () => {
+      throw new Error("no operations expected");
+    },
+  };
+  engine.scheduleCollectionSync("catalog", api, [{ id: "a", name: "same" }], 0);
+  await wait(20);
+  assert.deepEqual(syncStates, [true, false]);
+});
+
+test("sync engine keeps the previous snapshot when operations fail", async () => {
+  const attempts = [];
+  const engine = createSyncEngine();
+  engine.setSnapshot({ catalog: [] });
+
+  const api = {
+    create: async (item) => {
+      attempts.push(item.id);
+      throw new Error("create rejected");
+    },
+    update: async () => {},
+    delete: async () => {},
+  };
+
+  engine.scheduleCollectionSync("catalog", api, [{ id: "a" }], 0);
+  await wait(20);
+  engine.scheduleCollectionSync("catalog", api, [{ id: "a" }], 0);
+  await wait(20);
+
+  assert.deepEqual(attempts, ["a", "a"], "failed items are retried on the next sync");
+});
+
+test("scheduleValueSync debounces, delivers values, and swallows rejections", async () => {
+  const values = [];
+  const engine = createSyncEngine();
+
+  engine.scheduleValueSync("settings", async (value) => values.push(value), "stale", 30);
+  engine.scheduleValueSync("settings", async (value) => values.push(value), "fresh", 0);
+  await wait(50);
+  assert.deepEqual(values, ["fresh"], "reschedule replaces the pending value");
+
+  engine.scheduleValueSync("settings", async () => {
+    throw new Error("value sync rejected");
+  }, "boom", 0);
+  await wait(20);
+  assert.deepEqual(values, ["fresh"], "rejections are logged, not thrown");
+});
+
+test("clearTimers cancels pending scheduled syncs", async () => {
+  const values = [];
+  const engine = createSyncEngine();
+  engine.scheduleValueSync("settings", async (value) => values.push(value), "cancelled", 30);
+  engine.clearTimers();
+  await wait(60);
+  assert.deepEqual(values, []);
+});
+
+test("createCollectionSetter persists and syncs only when server-backed", () => {
+  const persisted = [];
+  const synced = [];
+  let state = ["one"];
+  const setState = (updater) => {
+    state = updater(state);
+  };
+
+  const serverSetter = createCollectionSetter({
+    key: "cards",
+    persist: (next) => persisted.push(next),
+    scheduleSync: (key, next) => synced.push([key, next]),
+    setState,
+    useServerRef: { current: true },
+  });
+  serverSetter((previous) => [...previous, "two"]);
+  assert.deepEqual(state, ["one", "two"]);
+  assert.deepEqual(persisted, [["one", "two"]]);
+  assert.deepEqual(synced, [["cards", ["one", "two"]]]);
+
+  const localSetter = createCollectionSetter({
+    key: "cards",
+    persist: (next) => persisted.push(next),
+    scheduleSync: (key, next) => synced.push([key, next]),
+    setState,
+    useServerRef: { current: false },
+  });
+  localSetter(["replaced"]);
+  assert.deepEqual(state, ["replaced"], "non-function updaters are applied directly");
+  assert.equal(persisted.length, 2);
+  assert.equal(synced.length, 1, "local-only mode skips the server sync");
 });

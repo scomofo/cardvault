@@ -13,6 +13,7 @@ test("decision store persistence and market trend automation", async (t) => {
 
   const database = await import("../src/server/database.js");
   const store = await import("../src/server/services/decisions/decisionStore.js");
+  const { evaluateSubject } = await import("../src/server/services/decisions/decisionEngine.js");
   const { runMarketTrendAutomation } = await import("../src/server/services/automation/marketTrendAutomation.js");
 
   const db = database.initDB();
@@ -142,6 +143,26 @@ test("decision store persistence and market trend automation", async (t) => {
       // A second run reports the same trends but does not duplicate open alerts
       assert.equal(runMarketTrendAutomation().length, 4);
       assert.equal(database.all("SELECT * FROM market_alerts").length, 4);
+    });
+
+    await t.test("evaluateSubject builds order and purchase contexts", () => {
+      assert.throws(() => evaluateSubject("order", "missing"), /Order not found/);
+      assert.throws(() => evaluateSubject("purchase", "missing"), /Purchase not found/);
+      assert.throws(() => evaluateSubject("shipment", "any"), /Unsupported subject_type shipment/);
+
+      database.run(
+        `INSERT INTO orders (id, platform, sale_price) VALUES (?,?,?)`,
+        ["engine-order", "ebay", 55],
+      );
+      const orderDecisions = evaluateSubject("order", "engine-order", { persist: false });
+      assert.ok(Array.isArray(orderDecisions));
+
+      database.run(
+        `INSERT INTO purchases (id, name, price) VALUES (?,?,?)`,
+        ["engine-purchase", "Sealed Box", 120],
+      );
+      const purchaseDecisions = evaluateSubject("purchase", "engine-purchase", { persist: false });
+      assert.ok(Array.isArray(purchaseDecisions));
     });
   } finally {
     db.close();
