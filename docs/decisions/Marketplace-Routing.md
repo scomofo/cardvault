@@ -85,6 +85,14 @@ can see the gap. Current default fee rates used by `computeExpectedNet`:
 | Consignment | 20% | $0 |
 | Local cash | 0% | $0 |
 
+These are defaults only. A rate stored in the `fee_models` table (via
+`PUT /api/fee-models/:platform`, surfaced in Settings) overrides the default
+for that platform, so routing scores negotiated rates rather than list rates.
+Flat fees stay at the default because `fee_models` models a percentage rate
+only; a stored rate for a platform with no default entry is priced with a $0
+flat fee. Platform matching is case-insensitive, and a stored rate outside
+0..1 is ignored in favour of the default.
+
 `inputsUsed` carries the full scoring context: `eligibleChannels`,
 `selectedChannel`, `expectedNet`, `targetMarketplaces`, `channelNets` (all
 fee-table entries), `unavailableChannels`, `unconstrainedBest` (the global
@@ -101,7 +109,7 @@ constraint visible to operators.
 
 ## Known limitations
 
-- Fee rates are defaults, not negotiated per-account. Override-via-settings is a future feature.
+- Flat fees are not overridable per-account — only the percentage rate is (`fee_models` has no flat-fee column).
 - TCGplayer and Mercari are scored but have no adapter, so they are disclosed but not selected.
 - Persisted inventory rows do not yet have a dedicated `storage_type`; exact `storage_location` tags and structured context fields can carry the store signal.
 - No per-sport or per-era routing (e.g., vintage → PWCC, modern breaks → Fanatics).
@@ -111,5 +119,4 @@ constraint visible to operators.
 1. Replace `storage_location` substring match with a structured `storage_type` enum.
 2. Track channel outcomes (sold / unsold / days-to-sell) per category and learn routing from history.
 3. Add marketplace blacklists (e.g., suspended eBay account) as hard filters.
-4. Expose per-account negotiated fee rates via settings so `computeExpectedNet` uses real numbers.
-5. Land TCGplayer / Mercari adapters so scored channels are actually routable.
+4. Land TCGplayer / Mercari adapters so scored channels are actually routable.
