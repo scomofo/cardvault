@@ -87,3 +87,25 @@ test("pricing recommendations route lists latest recommendations and applies or 
     db.close();
   }
 });
+
+test("pricing recommendations route validates the strategy filter", async (t) => {
+  const { baseUrl } = await startTestServer(t, {
+    dirPrefix: "cardvault-pricing-recs-validation-",
+  });
+
+  const unknownStrategy = await fetch(`${baseUrl}/api/pricing-recommendations?strategy=bogus`);
+  assert.equal(unknownStrategy.status, 400);
+  assert.equal(
+    (await unknownStrategy.json()).error,
+    "strategy must be one of: quick_sale, market, premium",
+  );
+
+  const repeatedStrategy = await fetch(
+    `${baseUrl}/api/pricing-recommendations?strategy=market&strategy=premium`,
+  );
+  assert.equal(repeatedStrategy.status, 400);
+
+  const emptyStrategy = await fetch(`${baseUrl}/api/pricing-recommendations?strategy=`);
+  assert.equal(emptyStrategy.status, 200);
+  assert.deepEqual(await emptyStrategy.json(), []);
+});

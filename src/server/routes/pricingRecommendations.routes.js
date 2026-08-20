@@ -1,5 +1,9 @@
 import { all, get, run } from "../database.js";
 import { toCamelArray } from "../mappers/recordMappers.js";
+import { sendValidationError } from "../validation/common.js";
+
+// Strategies written by pricingService.insertSnapshot via recommendationFromSnapshot.
+const VALID_STRATEGIES = ["quick_sale", "market", "premium"];
 
 const FIELD_MAP = {
   item_id: "itemId",
@@ -15,7 +19,10 @@ const FIELD_MAP = {
 export function registerPricingRecommendationsRoutes(app) {
   app.get("/api/pricing-recommendations", (req, res) => {
     try {
-      const strategy = typeof req.query.strategy === "string" ? req.query.strategy : null;
+      const strategy = req.query.strategy || null;
+      if (strategy != null && (typeof strategy !== "string" || !VALID_STRATEGIES.includes(strategy))) {
+        return sendValidationError(res, `strategy must be one of: ${VALID_STRATEGIES.join(", ")}`);
+      }
       const strategyClause = strategy ? "AND pr.strategy = ?" : "";
       const params = strategy ? [strategy] : [];
       const rows = all(
