@@ -50,7 +50,7 @@ const STATUS_FILTERS = [
   { v: "sold", l: "Sold" },
 ];
 
-const EXPORTABLE_LISTING_STATUSES = new Set(["draft", "active", "revised"]);
+const EXPORTABLE_LISTING_STATUSES = new Set(["draft", "active", "revised", "handoff_ready"]);
 const HANDOFF_PLATFORMS = new Set(["comc", "consignment"]);
 
 function daysSince(dateStr) {

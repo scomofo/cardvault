@@ -93,6 +93,16 @@ test("missing remote state is a blocking error", () => {
   assert.equal(result.hasBlockingConflict, true);
 });
 
+test("null synced input does not throw and is a blocking missing remote", () => {
+  for (const synced of [null, undefined]) {
+    const result = reconcileSyncResult(listing, channel, synced);
+    assert.equal(result.conflicts.length, 1);
+    assert.equal(result.conflicts[0].type, "missing_remote");
+    assert.equal(result.hasBlockingConflict, true);
+    assert.equal(result.safeToApply, false);
+  }
+});
+
 test("remote state can be read from marketplace-native payload fields", () => {
   const result = reconcileSyncResult(listing, channel, {
     payload: {

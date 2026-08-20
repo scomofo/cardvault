@@ -122,7 +122,10 @@ function insertSnapshot(itemId, snapshot) {
   return { snapshotId, recommendations };
 }
 
-const SNAPSHOT_TTL_HOURS = parseInt(process.env.SNAPSHOT_TTL_HOURS || "24", 10);
+const parsedSnapshotTtlHours = parseInt(process.env.SNAPSHOT_TTL_HOURS || "24", 10);
+const SNAPSHOT_TTL_HOURS = Number.isFinite(parsedSnapshotTtlHours) && parsedSnapshotTtlHours > 0
+  ? parsedSnapshotTtlHours
+  : 24;
 
 function getRecentSnapshot(itemId, ttlHours) {
   return get(
