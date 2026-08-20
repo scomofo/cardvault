@@ -95,6 +95,45 @@ export async function getOrders({ limit = 200, offset = 0, filter = null } = {})
   return fulfillmentApiCall("GET", `/order?${params.toString()}`);
 }
 
+/**
+ * Upload an image to eBay Picture Services via UploadSiteHostedPictures
+ * (multipart: XML payload + binary image part).
+ * @param {Buffer} imageBuffer
+ * @param {string} [mime]
+ * @returns {Promise<string|null>} hosted picture URL
+ */
+export async function uploadSiteHostedPictures(imageBuffer, mime = "image/jpeg") {
+  const token = await getAccessToken();
+  const creds = getEbayCredentials();
+  const url = creds.sandbox ? SANDBOX_TRADING : PROD_TRADING;
+  const xml = `<?xml version="1.0" encoding="utf-8"?>
+<UploadSiteHostedPicturesRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <RequesterCredentials><eBayAuthToken>${token}</eBayAuthToken></RequesterCredentials>
+  <PictureName>CardVault</PictureName>
+</UploadSiteHostedPicturesRequest>`;
+  const form = new FormData();
+  form.append("XML Payload", xml);
+  form.append("image", new Blob([imageBuffer], { type: mime }), "card-image");
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "X-EBAY-API-CALL-NAME": "UploadSiteHostedPictures",
+      "X-EBAY-API-SITEID": "0",
+      "X-EBAY-API-COMPATIBILITY-LEVEL": "1155",
+      "X-EBAY-API-IAF-TOKEN": token,
+    },
+    body: form,
+  });
+  const text = await res.text();
+  const ack = text.match(/<Ack>(\w+)<\/Ack>/)?.[1];
+  if (ack === "Failure") {
+    const errMsg = text.match(/<ShortMessage>([^<]+)<\/ShortMessage>/)?.[1] || "Unknown error";
+    throw new Error("eBay UploadSiteHostedPictures failed: " + errMsg);
+  }
+  const fullUrl = text.match(/<FullURL>([^<]+)<\/FullURL>/)?.[1] || null;
+  return fullUrl ? fullUrl.replace(/&amp;/g, "&") : null;
+}
+
 /** @returns {Promise<string>} eBay ItemID */
 export async function addItem(itemXml) {
   const res = await tradingApiCall("AddItem", itemXml);

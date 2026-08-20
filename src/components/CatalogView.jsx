@@ -8,7 +8,7 @@ import { genCSV, genEbayCSV, genInsurancePDF } from "../lib/exports";
 import { IconSearch, IconDownload, IconChevron } from "./Icons";
 import CardDetail from "./CardDetail";
 
-export default function CatalogView() {
+export default function CatalogView({ focus, onFocusConsumed }) {
   const toast = useToast();
   const { catalog, setCatalog, sales, setSales, listings, setListings, userName, shipFrom } = useData();
   const [view, setView] = useState("list");
@@ -22,6 +22,17 @@ export default function CatalogView() {
   const thumbAttempted = useRef(new Set());
 
   const detail = useMemo(() => detailId ? catalog.find((c) => c.id === detailId) || null : null, [detailId, catalog]);
+
+  // Record-level deep links (Next Best Action, action queue, global search):
+  // open the focused card's detail directly.
+  useEffect(() => {
+    if (!focus?.id) return;
+    if (catalog.some((c) => c.id === focus.id)) {
+      setDetailId(focus.id);
+      setView("detail");
+    }
+    onFocusConsumed?.();
+  }, [focus]);
 
   const binders = useMemo(() => {
     const s = new Set(["All"]);

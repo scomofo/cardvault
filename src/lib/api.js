@@ -52,6 +52,10 @@ export const ordersAPI = {
 };
 
 // Listings
+export const imagesAPI = {
+  upload: (id, dataUrl) => request(`/images/${id}`, { method: "POST", body: { dataUrl } }),
+};
+
 export const listingsAPI = {
   list: (params) => request(`/listings${toQuery(params)}`),
   create: (data) => request("/listings", { method: "POST", body: data }),
@@ -154,6 +158,7 @@ export const marketplacesAPI = {
   },
   connections: () => request("/marketplace-connections"),
   connect: (data) => request("/marketplace-connections", { method: "POST", body: data }),
+  testConnection: (id, data = {}) => request(`/marketplace-connections/${id}/test`, { method: "POST", body: data }),
   publish: (data) => request("/marketplaces/publish", { method: "POST", body: data }),
   revise: (data) => request("/marketplaces/revise", { method: "POST", body: data }),
   end: (data) => request("/marketplaces/end", { method: "POST", body: data }),

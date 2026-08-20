@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useToast } from "./Toast";
 import { useData } from "../lib/DataContext";
 import { uid } from "../lib/utils";
@@ -6,13 +6,30 @@ import { IconPlus, IconX } from "./Icons";
 
 const COMPANY_COLORS = { PSA: "var(--red)", BGS: "var(--blue)", SGC: "var(--grn)", CGC: "var(--purple)" };
 
-export default function GradeTracker() {
-  const { gradings, setGradings } = useData();
+export default function GradeTracker({ focus, onFocusConsumed }) {
+  const { catalog, gradings, setGradings } = useData();
   const toast = useToast();
   const [input, setInput] = useState({
     cardName: "", set: "", number: "", company: "PSA",
     service: "Economy", cost: "", dateSent: "", preValue: "", status: "sent",
   });
+
+  // grade_now deep links land here with an inventory item to submit —
+  // prefill the new-submission form from the catalog card.
+  useEffect(() => {
+    if (!focus?.id) return;
+    const card = catalog.find((c) => c.id === focus.id);
+    if (card) {
+      setInput((previous) => ({
+        ...previous,
+        cardName: card.name || "",
+        set: card.set || "",
+        number: card.number || "",
+        preValue: card.priceEstimate?.mid ? String(card.priceEstimate.mid) : previous.preValue,
+      }));
+    }
+    onFocusConsumed?.();
+  }, [focus]);
 
   const submit = () => {
     if (!input.cardName) { toast.error("Enter card name"); return; }

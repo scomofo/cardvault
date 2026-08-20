@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import BatchCaptureMode from "./BatchCaptureMode";
 import BatchProcessView from "./BatchProcessView";
 import ScanCaptureStep from "./scan/ScanCaptureStep";
@@ -8,6 +8,74 @@ import ScanListingStep from "./scan/ScanListingStep";
 import ScanStepper from "./scan/ScanStepper";
 import { useFeeModels } from "../hooks/useFeeModels";
 import { useScanWorkflow } from "../hooks/useScanWorkflow";
+import { describeCatalogCard } from "../lib/identificationDisplay";
+
+function IdentificationBanner({ result, actions }) {
+  const [showAlternatives, setShowAlternatives] = useState(false);
+  const match = describeCatalogCard(result.finalCatalogCard);
+  const alternatives = (result.candidates || []).filter(
+    (candidate) => candidate?.card?.id && candidate.card.id !== result.finalCatalogCardId,
+  );
+
+  return (
+    <div className="card mb-12" style={{ borderColor: "var(--acc-brd)" }}>
+      <div className="lbl" style={{ margin: 0 }}>
+        Server Identification — {Math.round((result.confidence || 0) * 100)}%
+        {result.confidence >= 0.8 ? " (auto-confirmed)" : ""}
+      </div>
+      {match ? (
+        <div className="text-xs mt-4"><strong>{match.label}</strong></div>
+      ) : (
+        <div className="text-xs mt-4">No confident catalog match — review before listing</div>
+      )}
+      {result.explanation && (
+        <div className="text-xxs text-dim mt-4">{result.explanation}</div>
+      )}
+      <div className="flex gap-8 mt-8 flex-wrap">
+        {result.confidence < 0.8 && result.finalCatalogCard && (
+          <button
+            className="btn btn-outline btn-sm"
+            onClick={() => {
+              actions.confirmIdentification(result.itemId, result.id);
+              actions.dismissIdentificationResult();
+            }}
+          >
+            Confirm match
+          </button>
+        )}
+        {alternatives.length > 0 && (
+          <button className="btn btn-ghost btn-sm" onClick={() => setShowAlternatives((v) => !v)}>
+            Not this card?
+          </button>
+        )}
+        <button className="btn btn-ghost btn-sm" onClick={actions.dismissIdentificationResult}>
+          Dismiss
+        </button>
+      </div>
+      {showAlternatives && (
+        <div className="mt-8">
+          <div className="text-xxs text-dim mb-4">Pick the correct card — this fixes the saved entry and teaches the identifier:</div>
+          {alternatives.map((candidate) => {
+            const described = describeCatalogCard(candidate.card);
+            return (
+              <button
+                key={candidate.card.id}
+                className="card-interactive mb-6"
+                style={{ width: "100%", textAlign: "left", cursor: "pointer", padding: "8px 12px" }}
+                onClick={() => actions.applyIdentificationCorrection(candidate)}
+              >
+                <span className="text-xs fw-700">{described?.label || "Unknown card"}</span>
+                <span className="text-xxs text-dim" style={{ marginLeft: 8 }}>
+                  {Math.round((candidate.score || 0) * 100)}%
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function ScanView({ onNavigate, pendingImage, onPendingImageConsumed }) {
   const { actions, state } = useScanWorkflow();
@@ -27,11 +95,14 @@ export default function ScanView({ onNavigate, pendingImage, onPendingImageConsu
     cvAnalyzing,
     cvOnline,
     cvResult,
+    duplicateWarning,
     frontImg,
     gradingData,
     listing,
     priceEst,
     priceHistory,
+    publishing,
+    publishTarget,
     recognizing,
     results,
     saving,
@@ -42,6 +113,7 @@ export default function ScanView({ onNavigate, pendingImage, onPendingImageConsu
     status,
     step,
     visualSearching,
+    identificationResult,
     batchMode,
     batchQueue,
     batchProcessing,
@@ -88,6 +160,34 @@ export default function ScanView({ onNavigate, pendingImage, onPendingImageConsu
         Batch Capture Mode
       </button>
       <ScanStepper step={step} steps={steps} onStepChange={setStep} />
+
+      {duplicateWarning && !duplicateWarning.dismissed && (
+        <div className="card mb-12" style={{ borderColor: "var(--acc-solid)" }}>
+          <div className="lbl" style={{ margin: 0 }}>Possible Duplicate</div>
+          <div className="text-xs mt-4">
+            This looks like <strong>{duplicateWarning.card.name || "a card you already own"}</strong>
+            {duplicateWarning.card.set
+              ? ` (${duplicateWarning.card.set}${duplicateWarning.card.number ? ` #${duplicateWarning.card.number}` : ""})`
+              : ""}
+            , which is already in your collection.
+          </div>
+          <div className="flex gap-8 mt-8">
+            <button
+              className="btn btn-outline btn-sm"
+              onClick={() => onNavigate?.({ view: "cards", focus: { type: "card", id: duplicateWarning.card.id } })}
+            >
+              View existing card
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={actions.dismissDuplicateWarning}>
+              Scan anyway
+            </button>
+          </div>
+        </div>
+      )}
+
+      {identificationResult && !identificationResult.dismissed && (
+        <IdentificationBanner result={identificationResult} actions={actions} />
+      )}
 
       {step === 0 && (
         <ScanCaptureStep
@@ -173,6 +273,8 @@ export default function ScanView({ onNavigate, pendingImage, onPendingImageConsu
             actions.reset();
           }}
           saving={saving}
+          publishing={publishing}
+          publishTarget={publishTarget}
           costBasis={parseFloat(card.costBasis) || 0}
           feeRate={getFeeRate(listing.platform)}
           comps={results}

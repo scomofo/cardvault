@@ -32,7 +32,7 @@ export const ROADMAP = {
       name: "Consignment / COMC integrations",
       status: "partial",
       module: "integrations/marketplaces/comcAdapter.js + consignmentAdapter.js",
-      notes: "Handoff export, status sync, direct submission, and operator UX are implemented; partner-specific live validation is still required.",
+      notes: "Handoff export, status sync, direct submission, operator UX, and partner connection validation are implemented; real COMC/consignment credential validation is still required.",
     },
   ],
 };

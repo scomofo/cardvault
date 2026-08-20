@@ -4,7 +4,7 @@ import { MARKETPLACE_CONNECTION_FIELD_MAP } from "../mappers/fieldMaps.js";
 import { toCamel, toCamelArray } from "../mappers/recordMappers.js";
 import { requireJsonBody } from "../validation/common.js";
 import { uid } from "./shared.js";
-import { listSupportedMarketplaces } from "../integrations/marketplaces/marketplaceRegistry.js";
+import { getMarketplaceAdapter, listSupportedMarketplaces } from "../integrations/marketplaces/marketplaceRegistry.js";
 import {
   publishListingToMarketplace,
   reviseListingOnMarketplace,
@@ -20,6 +20,8 @@ function firstDefined(...values) {
   return values.find((value) => value != null && value !== "");
 }
 
+const HANDOFF_MARKETPLACES = new Set(["comc", "consignment"]);
+
 function normalizeOptionalSecret(value, fieldName) {
   if (value == null || value === "") return null;
   if (typeof value !== "string") {
@@ -31,6 +33,10 @@ function normalizeOptionalSecret(value, fieldName) {
     throw new Error(`${fieldName} is too long`);
   }
   return trimmed;
+}
+
+function normalizeMarketplace(value) {
+  return String(value || "").trim().toLowerCase();
 }
 
 export function registerMarketplaceRoutes(app) {
@@ -87,6 +93,54 @@ export function registerMarketplaceRoutes(app) {
       if (error.message?.includes("must be") || error.message?.includes("too long")) {
         return res.status(400).json({ error: error.message });
       }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/marketplace-connections/:id/test", requireProtectedConfigWrite, requireJsonBody, async (req, res) => {
+    try {
+      const connection = get("SELECT * FROM marketplace_connections WHERE id = ?", [req.params.id]);
+      if (!connection) return res.status(404).json({ error: "Marketplace connection not found" });
+
+      const marketplace = normalizeMarketplace(connection.marketplace);
+      if (!HANDOFF_MARKETPLACES.has(marketplace)) {
+        return res.status(400).json({ error: "Marketplace connection tests are available for COMC and consignment handoff partners" });
+      }
+
+      const adapter = getMarketplaceAdapter(marketplace);
+      const validation = await adapter.testHandoffConnection({
+        connection,
+        listingId: req.body.listingId || req.body.listing_id || "connection-test",
+        submissionReference: req.body.submissionReference || req.body.submission_reference || "connection-test",
+      });
+
+      const attemptedEndpoints = Object.values(validation.endpointValidation || {})
+        .filter((entry) => entry?.attempted);
+      if (attemptedEndpoints.length === 0) {
+        return res.status(400).json({
+          ...validation,
+          error: "Configure a handoff status or submission URL before testing this marketplace connection",
+          authStatus: connection.auth_status,
+        });
+      }
+      if (!validation.ok) {
+        return res.status(400).json({
+          ...validation,
+          error: "Marketplace partner validation failed",
+          authStatus: connection.auth_status,
+        });
+      }
+
+      run(
+        "UPDATE marketplace_connections SET auth_status = ?, updated_at = datetime('now') WHERE id = ?",
+        ["connected", req.params.id],
+      );
+
+      res.json({
+        ...validation,
+        authStatus: "connected",
+      });
+    } catch (error) {
       res.status(500).json({ error: error.message });
     }
   });

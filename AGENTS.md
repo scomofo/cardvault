@@ -2,7 +2,7 @@
 
 CardVault is a single-user sports-card cataloging, pricing, and sales app: scan a card with the camera, identify and price it with Claude, track it in a SQLite-backed collection, publish listings to marketplaces, and manage orders/shipping (Canada-focused: CAD, Canada Post). It ships as a web app (Vite + Express) and a macOS Electron app.
 
-Keep this file in sync with AGENTS.md (same content, two filenames for different agents).
+Keep this file in sync with CLAUDE.md (same content, two filenames for different agents).
 
 ## Commands
 

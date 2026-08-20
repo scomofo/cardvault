@@ -106,6 +106,36 @@ export function getActionQueue() {
     });
   }
 
+  // Stub publishes: the eBay adapter falls back to a local stub when not
+  // connected, minting external ids of the form `${marketplace}-${listingId
+  // slice 12}` — the listing claims "active" but nothing is live.
+  for (const channel of all(`
+    SELECT
+      listing_channels.listing_id,
+      listing_channels.marketplace,
+      listings.card_name,
+      listings.start_price
+    FROM listing_channels
+    JOIN listings ON listings.id = listing_channels.listing_id
+    WHERE listing_channels.marketplace = 'ebay'
+      AND listing_channels.status IN ('active', 'revised')
+      AND listing_channels.external_listing_id = listing_channels.marketplace || '-' || substr(listing_channels.listing_id, 1, 12)
+  `)) {
+    queue.push({
+      queue: "stub_publish",
+      item: channel.card_name || channel.listing_id,
+      itemId: channel.listing_id,
+      itemName: channel.card_name || null,
+      reason: `${channel.marketplace} publish ran while disconnected — nothing is live`,
+      marketplace: channel.marketplace,
+      listingId: channel.listing_id,
+      suggestedAction: "republish_listing",
+      priorityScore: score({ base: 150, marketPrice: Number(channel.start_price || 0), risk: 30 }),
+      subjectType: "listing",
+      subjectId: channel.listing_id,
+    });
+  }
+
   for (const order of all(`SELECT id, sale_price, platform FROM orders WHERE fulfillment_status IN ('pending', 'paid')`)) {
     queue.push({
       queue: "ship_now",
@@ -134,7 +164,12 @@ export function getActionQueue() {
     });
   }
 
-  for (const item of all(`SELECT item_id, name, age_days, market_price FROM aging_inventory_view WHERE age_days >= 30 ORDER BY age_days DESC LIMIT 25`)) {
+  for (const item of all(`
+    SELECT item_id, name, age_days, market_price,
+      (SELECT recommended_price_cents FROM pricing_recommendations
+       WHERE pricing_recommendations.item_id = aging_inventory_view.item_id
+       ORDER BY created_at DESC LIMIT 1) AS recommended_price_cents
+    FROM aging_inventory_view WHERE age_days >= 30 ORDER BY age_days DESC LIMIT 25`)) {
     const marketMovement = Number(item.market_price || 0) > 0 ? 10 : 0;
     queue.push({
       queue: "reprice_now",
@@ -143,6 +178,8 @@ export function getActionQueue() {
       itemName: item.name,
       reason: `${item.age_days} days in inventory`,
       suggestedAction: "revise_listing_price",
+      recommendedPrice:
+        item.recommended_price_cents != null ? item.recommended_price_cents / 100 : null,
       priorityScore: score({ base: 90, marketPrice: Number(item.market_price || 0), ageDays: item.age_days, risk: 15, marketMovement }),
       subjectType: "inventory_item",
       subjectId: item.item_id,

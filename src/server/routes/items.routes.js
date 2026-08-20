@@ -9,6 +9,86 @@ import {
 import { validateItemPayload } from "../validation/writeValidators.js";
 import { uid } from "./shared.js";
 
+// Shared by PUT /api/items/:id and the POST upsert path. `body` is the merged
+// snake_case row ({ ...existing, ...updates }).
+function updateItemRow(id, body) {
+  run(
+    `UPDATE user_items SET
+      parallel_id=?, intake_batch_id=?, purchase_id=?, name=?, player_name=?,
+      manufacturer=?, sport=?, team=?, card_set=?, year=?, card_number=?, type=?,
+      rarity=?, condition=?, parallel=?, binder=?, storage_location=?,
+      cost_basis=?, acquisition_date=?, acquisition_source=?, status=?,
+      listing_status=?, sale_status=?, listed_on=?, front_img_id=?, back_img_id=?,
+      front_img_phash=?, price_estimate=?, price_history=?, market_price=?, suggested_listing_price=?,
+      min_acceptable_price=?, last_comp_price=?, average_comp_price=?,
+      psa9_price=?, psa10_price=?, profit_realized=?, sold_at=?, notes=?,
+      centering=?, corners=?, edges=?, surface=?, projected_grade=?,
+      grading_candidate=?, grading_decision=?, vault_status=?, condition_report=?,
+      cv_centering_lr=?, cv_centering_tb=?, cv_centering_score=?, cv_processed=?,
+      ebay_centering=?, ebay_corner_sharpness=?, ebay_edge_chipping=?,
+      updated_at=datetime('now')
+     WHERE id=?`,
+    [
+      body.parallel_id,
+      body.intake_batch_id,
+      body.purchase_id,
+      body.name,
+      body.player_name,
+      body.manufacturer,
+      body.sport,
+      body.team,
+      body.card_set,
+      body.year,
+      body.card_number,
+      body.type,
+      body.rarity,
+      body.condition,
+      body.parallel,
+      body.binder,
+      body.storage_location,
+      body.cost_basis ?? 0,
+      body.acquisition_date,
+      body.acquisition_source,
+      body.status,
+      body.listing_status,
+      body.sale_status,
+      json(body.listed_on),
+      body.front_img_id,
+      body.back_img_id,
+      body.front_img_phash,
+      json(body.price_estimate),
+      json(body.price_history),
+      body.market_price,
+      body.suggested_listing_price,
+      body.min_acceptable_price,
+      body.last_comp_price,
+      body.average_comp_price,
+      body.psa9_price,
+      body.psa10_price,
+      body.profit_realized,
+      body.sold_at,
+      body.notes,
+      body.centering,
+      body.corners,
+      body.edges,
+      body.surface,
+      body.projected_grade,
+      body.grading_candidate,
+      body.grading_decision,
+      body.vault_status,
+      body.condition_report,
+      body.cv_centering_lr,
+      body.cv_centering_tb,
+      body.cv_centering_score,
+      body.cv_processed,
+      body.ebay_centering,
+      body.ebay_corner_sharpness,
+      body.ebay_edge_chipping,
+      id,
+    ],
+  );
+}
+
 export function registerItemRoutes(app) {
   app.get("/api/items", (req, res) => {
     try {
@@ -57,6 +137,24 @@ export function registerItemRoutes(app) {
   app.post("/api/items", validateItemPayload, (req, res) => {
     try {
       const body = toSnake(req.body);
+      // Upsert: the client sync engine retries creates after partial failures and
+      // the scan flow creates items directly before the debounced sync runs, so a
+      // re-POST of an existing id must update instead of violating the primary key.
+      const existing = body.id
+        ? get("SELECT * FROM user_items WHERE id = ?", [body.id])
+        : null;
+      if (existing) {
+        const merged = { ...existing, ...body };
+        // A create-retry must not blank coerced defaults or revert a
+        // server-managed sale (marketplace sync marks items sold).
+        merged.type = body.type || existing.type;
+        merged.condition = body.condition || existing.condition;
+        merged.status = existing.status === "sold" ? "sold" : body.status || existing.status;
+        updateItemRow(existing.id, merged);
+        return res.json(
+          toCamel(get("SELECT * FROM user_items WHERE id = ?", [existing.id]), ITEM_FIELD_MAP),
+        );
+      }
       const id = body.id || uid();
       const values = [
         id,
@@ -147,81 +245,7 @@ export function registerItemRoutes(app) {
       if (!existing) return res.status(404).json({ error: "Item not found" });
 
       const body = { ...existing, ...toSnake(req.body) };
-      run(
-        `UPDATE user_items SET
-          parallel_id=?, intake_batch_id=?, purchase_id=?, name=?, player_name=?,
-          manufacturer=?, sport=?, team=?, card_set=?, year=?, card_number=?, type=?,
-          rarity=?, condition=?, parallel=?, binder=?, storage_location=?,
-          cost_basis=?, acquisition_date=?, acquisition_source=?, status=?,
-          listing_status=?, sale_status=?, listed_on=?, front_img_id=?, back_img_id=?,
-          front_img_phash=?, price_estimate=?, price_history=?, market_price=?, suggested_listing_price=?,
-          min_acceptable_price=?, last_comp_price=?, average_comp_price=?,
-          psa9_price=?, psa10_price=?, profit_realized=?, sold_at=?, notes=?,
-          centering=?, corners=?, edges=?, surface=?, projected_grade=?,
-          grading_candidate=?, grading_decision=?, vault_status=?, condition_report=?,
-          cv_centering_lr=?, cv_centering_tb=?, cv_centering_score=?, cv_processed=?,
-          ebay_centering=?, ebay_corner_sharpness=?, ebay_edge_chipping=?,
-          updated_at=datetime('now')
-         WHERE id=?`,
-        [
-          body.parallel_id,
-          body.intake_batch_id,
-          body.purchase_id,
-          body.name,
-          body.player_name,
-          body.manufacturer,
-          body.sport,
-          body.team,
-          body.card_set,
-          body.year,
-          body.card_number,
-          body.type,
-          body.rarity,
-          body.condition,
-          body.parallel,
-          body.binder,
-          body.storage_location,
-          body.cost_basis ?? 0,
-          body.acquisition_date,
-          body.acquisition_source,
-          body.status,
-          body.listing_status,
-          body.sale_status,
-          json(body.listed_on),
-          body.front_img_id,
-          body.back_img_id,
-          body.front_img_phash,
-          json(body.price_estimate),
-          json(body.price_history),
-          body.market_price,
-          body.suggested_listing_price,
-          body.min_acceptable_price,
-          body.last_comp_price,
-          body.average_comp_price,
-          body.psa9_price,
-          body.psa10_price,
-          body.profit_realized,
-          body.sold_at,
-          body.notes,
-          body.centering,
-          body.corners,
-          body.edges,
-          body.surface,
-          body.projected_grade,
-          body.grading_candidate,
-          body.grading_decision,
-          body.vault_status,
-          body.condition_report,
-          body.cv_centering_lr,
-          body.cv_centering_tb,
-          body.cv_centering_score,
-          body.cv_processed,
-          body.ebay_centering,
-          body.ebay_corner_sharpness,
-          body.ebay_edge_chipping,
-          req.params.id,
-        ],
-      );
+      updateItemRow(req.params.id, body);
       res.json(
         toCamel(get("SELECT * FROM user_items WHERE id = ?", [req.params.id]), ITEM_FIELD_MAP),
       );

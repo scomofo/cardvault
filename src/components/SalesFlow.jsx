@@ -7,6 +7,7 @@ import { uid, fmtShort } from "../lib/utils";
 import { actionQueueAPI, marketplacesAPI, ordersAPI, listingsAPI, salesAPI, automationAPI, purchasesAPI, itemsAPI } from "../lib/api";
 import { importEbayPurchasesLocal, parseEbayPurchaseImport } from "../lib/ebayPurchaseImport";
 import { buildManualSaleFulfillment, loadServerSalesState, summarizeMarketplaceCrosspostResults, summarizeMarketplaceSyncResults } from "../lib/salesViewState";
+import { applyChannelToListing, summarizePublishOutcome } from "../lib/scanPublish";
 import { requestNotificationPermission, canNotify, sendNotification, scheduleAuctionNotification, cancelNotificationTimer } from "../lib/notifications";
 import { IconPlus, IconBell, IconCheck, IconX, IconUpload, IconRefresh, Spinner } from "./Icons";
 import EbayExport from "./EbayExport";
@@ -16,11 +17,12 @@ const TABS = ["active", "completed", "orders", "purchases"];
 
 export { PLATFORM_FEES };
 
-export default function SalesFlow({ onNavigate }) {
+export default function SalesFlow({ onNavigate, focus, onFocusConsumed }) {
   const toast = useToast();
   const { catalog, setCatalog, sales, setSales, orders, setOrders, listings, setListings, purchases, setPurchases, shipFrom, useServer } = useData();
   const { getFeeRate } = useFeeModels(useServer);
   const [tab, setTab] = useState("active");
+  const [highlightId, setHighlightId] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showBuy, setShowBuy] = useState(false);
   const [showImport, setShowImport] = useState(false);
@@ -63,6 +65,51 @@ export default function SalesFlow({ onNavigate }) {
   }, [activeListings]);
   const unlistedCards = useMemo(() => catalog.filter((c) => c.status === "inventory" && c.name), [catalog]);
 
+  // Record-level deep links (Next Best Action, action queue, global search):
+  // switch to the tab holding the record, then highlight and scroll to it.
+  // inventory_item focuses carry an intent — "list" opens the create form
+  // preselected; "reprice" opens the reprice panel on the item's listing.
+  useEffect(() => {
+    if (!focus?.id) return;
+    if (focus.type === "inventory_item") {
+      if (focus.intent === "list") {
+        setShowCreate(true);
+        setNewListing((previous) => ({ ...previous, cardId: focus.id }));
+      } else {
+        const listing = listings.find((l) => l.cardId === focus.id && l.status === "active");
+        if (listing) {
+          setTab("active");
+          setHighlightId(listing.id);
+          if (focus.intent === "reprice") {
+            setRepricingId(listing.id);
+            setRepriceVal(String(focus.price ?? listing.startPrice ?? ""));
+            setSellingId(null);
+          }
+        }
+      }
+      onFocusConsumed?.();
+      return;
+    }
+    const targetTab =
+      focus.type === "order" ? "orders"
+        : focus.type === "purchase" ? "purchases"
+        : focus.type === "listing" || focus.type === "sale"
+          ? (listings.find((l) => l.id === focus.id && l.status === "active") ? "active" : "completed")
+          : null;
+    if (targetTab) {
+      setTab(targetTab);
+      setHighlightId(focus.id);
+    }
+    onFocusConsumed?.();
+  }, [focus]);
+
+  useEffect(() => {
+    if (!highlightId) return;
+    document.getElementById(`sf-rec-${highlightId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const timer = setTimeout(() => setHighlightId(null), 4000);
+    return () => clearTimeout(timer);
+  }, [highlightId, tab]);
+
   const enableNotifications = async () => {
     const ok = await requestNotificationPermission();
     setNotifEnabled(ok);
@@ -73,7 +120,7 @@ export default function SalesFlow({ onNavigate }) {
     onNavigate?.({ view: "tools", toolsTab: "batch" });
   };
 
-  const createListing = () => {
+  const createListing = async () => {
     const card = catalog.find((c) => c.id === newListing.cardId);
     if (!card) {
       toast.error(unlistedCards.length === 0 ? "Add a card before creating a listing" : "Select a card");
@@ -82,6 +129,7 @@ export default function SalesFlow({ onNavigate }) {
     if (!newListing.startPrice) { toast.error("Enter a price"); return; }
     const listing = {
       id: uid(), cardId: card.id, cardName: card.name, set: card.set, number: card.number,
+      cardSet: card.set, cardNumber: card.number,
       platform: newListing.platform, format: newListing.format,
       startPrice: parseFloat(newListing.startPrice),
       buyNowPrice: newListing.format === "auction" ? parseFloat(newListing.buyNowPrice) || null : null,
@@ -95,6 +143,15 @@ export default function SalesFlow({ onNavigate }) {
     if (listing.format === "auction" && listing.auctionEndDate) scheduleAuctionNotification(listing);
     setShowCreate(false);
     setNewListing({ cardId: "", platform: "ebay", format: "fixed", startPrice: "", buyNowPrice: "", auctionEndDate: "", shipping: "4.99", notes: "" });
+    if (useServer) {
+      // Persist now so Publish can't race the 500ms-debounced sync — item
+      // first (listings POST 404s on a missing card_id). Creates are
+      // idempotent upserts; on failure the sync engine retries anyway.
+      await itemsAPI
+        .create({ ...card, status: "listed", listedOn: [...(card.listedOn || []), newListing.platform] })
+        .then(() => listingsAPI.create(listing))
+        .catch(() => {});
+    }
     toast.success(`Listed: ${card.name}`);
   };
 
@@ -319,18 +376,13 @@ export default function SalesFlow({ onNavigate }) {
       const channel = await marketplacesAPI.publish({ listingId, marketplace });
       setListings((prev) =>
         prev.map((listing) =>
-          listing.id === listingId
-            ? {
-                ...listing,
-                publishStatus: channel.status,
-                externalListingId: channel.externalListingId || channel.external_listing_id,
-                lastSyncAt: channel.lastSyncAt || channel.last_sync_at,
-              }
-            : listing,
+          listing.id === listingId ? applyChannelToListing(listing, channel) : listing,
         ),
       );
       await refreshServerSalesState();
-      toast.success(`Published to ${marketplace}`);
+      const label = PLATFORMS.find((p) => p.v === marketplace)?.l || marketplace;
+      const summary = summarizePublishOutcome(channel, { marketplace, label, listingId });
+      (toast[summary.type] || toast.info)(summary.message);
     } catch (error) {
       toast.error(error.message);
     } finally {
@@ -715,6 +767,7 @@ export default function SalesFlow({ onNavigate }) {
               onCancelReprice={() => { setRepricingId(null); setRepriceVal(""); }}
               getFeeRate={getFeeRate}
               timeLeft={timeLeft}
+              highlighted={highlightId === l.id}
             />
           ))}
         </>
@@ -728,7 +781,7 @@ export default function SalesFlow({ onNavigate }) {
             </div>
           )}
           {completedListings.map((l) => (
-            <div key={l.id} className="card mb-8" style={{ borderColor: l.status === "sold" ? "var(--grn-brd)" : undefined }}>
+            <div key={l.id} id={`sf-rec-${l.id}`} className="card mb-8" style={{ borderColor: highlightId === l.id ? "var(--acc-solid)" : l.status === "sold" ? "var(--grn-brd)" : undefined }}>
               <div className="flex justify-between">
                 <div>
                   <strong className="text-sm">{l.cardName}</strong>
@@ -754,7 +807,7 @@ export default function SalesFlow({ onNavigate }) {
             </div>
           ) : (
             orders.map((o) => (
-              <div key={o.id} className="card mb-8">
+              <div key={o.id} id={`sf-rec-${o.id}`} className="card mb-8" style={{ borderColor: highlightId === o.id ? "var(--acc-solid)" : undefined }}>
                 <div className="flex justify-between" style={{ alignItems: "start" }}>
                   <div>
                     <strong className="text-sm">{o.cardName || o.card_name || "Order"}</strong>
@@ -792,7 +845,7 @@ export default function SalesFlow({ onNavigate }) {
             </div>
           )}
           {purchases.map((p) => (
-            <div key={p.id} className="card mb-8">
+            <div key={p.id} id={`sf-rec-${p.id}`} className="card mb-8" style={{ borderColor: highlightId === p.id ? "var(--acc-solid)" : undefined }}>
               <div className="flex justify-between">
                 <div>
                   <strong className="text-sm">{p.name}</strong>

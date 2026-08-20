@@ -23,6 +23,10 @@ export function listingToTradingXml(listing, item, options = {}) {
   const condId = conditionToEbayCode(item.condition);
   const price = listing.start_price || listing.startPrice || 0;
   const shipping = listing.shipping || 4.99;
+  const pictureUrls = (options.pictureUrls || []).filter(Boolean);
+  const pictureDetails = pictureUrls.length
+    ? `\n  <PictureDetails>\n    ${pictureUrls.map((url) => `<PictureURL>${esc(url)}</PictureURL>`).join("\n    ")}\n  </PictureDetails>`
+    : "";
 
   const specifics = [
     item.sport ? `<NameValueList><Name>Sport</Name><Value>${esc(item.sport)}</Value></NameValueList>` : "",
@@ -36,7 +40,7 @@ export function listingToTradingXml(listing, item, options = {}) {
 
   return `<Item>
   <Title>${esc(listing.listing_title || listing.listingTitle || listing.cardName || item.name)}</Title>
-  <Description><![CDATA[${listing.listing_description || listing.listingDescription || ""}]]></Description>
+  <Description><![CDATA[${listing.listing_description || listing.listingDescription || ""}]]></Description>${pictureDetails}
   <PrimaryCategory><CategoryID>261328</CategoryID></PrimaryCategory>
   <StartPrice>${price}</StartPrice>
   <ConditionID>${condId}</ConditionID>
@@ -71,13 +75,15 @@ export function listingToTradingXml(listing, item, options = {}) {
  * @param {object} item
  * @returns {object}
  */
-export function listingToInventoryItem(listing, item) {
+export function listingToInventoryItem(listing, item, options = {}) {
+  const pictureUrls = (options.pictureUrls || []).filter(Boolean);
   return {
     availability: { shipToLocationAvailability: { quantity: 1 } },
     condition: conditionToEbayCode(item.condition) <= 3000 ? "NEW_OTHER" : "USED_VERY_GOOD",
     product: {
       title: listing.listing_title || listing.listingTitle || listing.cardName || item.name,
       description: listing.listing_description || listing.listingDescription || "",
+      ...(pictureUrls.length ? { imageUrls: pictureUrls } : {}),
       aspects: {
         Sport: [item.sport || "Baseball"],
         ...(item.player_name || item.playerName ? { "Player/Athlete": [item.player_name || item.playerName] } : {}),

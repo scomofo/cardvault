@@ -1,7 +1,28 @@
 import { MarketplaceAdapter } from "./marketplaceAdapter.js";
+import { get } from "../../database.js";
+import { readImageFile } from "../../services/imageStore.js";
 import { getEbayStatus } from "../ebay/ebayAuth.js";
-import { addItem, addFixedPriceItem, reviseItem, endItem, createInventoryItem, createOffer, publishOffer, getOrders } from "../ebay/ebayClient.js";
+import { addItem, addFixedPriceItem, reviseItem, endItem, createInventoryItem, createOffer, publishOffer, getOrders, uploadSiteHostedPictures } from "../ebay/ebayClient.js";
 import { listingToTradingXml, listingToInventoryItem, listingToOffer } from "../ebay/ebayMapper.js";
+
+// Upload the item's stored front/back images to eBay Picture Services.
+// Per-image failures are tolerated — a listing without one photo is still
+// better than a failed publish.
+async function collectPictureUrls(item) {
+  const urls = [];
+  for (const imageId of [item.front_img_id, item.back_img_id]) {
+    if (!imageId) continue;
+    const stored = readImageFile(imageId);
+    if (!stored) continue;
+    try {
+      const url = await uploadSiteHostedPictures(stored.buffer, stored.mime);
+      if (url) urls.push(url);
+    } catch {
+      // non-fatal: continue with whatever uploaded
+    }
+  }
+  return urls;
+}
 
 export class EbayAdapter extends MarketplaceAdapter {
   constructor() { super("ebay"); }
@@ -21,28 +42,32 @@ export class EbayAdapter extends MarketplaceAdapter {
 
   /**
    * Publish a listing to eBay. Uses real API if connected, falls back to stub.
+   * The item row is loaded from the DB — publishService's second argument is
+   * an options object, not the item.
    * @param {object} listing
-   * @param {object} [item]
    * @returns {Promise<object>}
    */
-  async publish(listing, item = {}) {
+  async publish(listing) {
     if (!this.isConnected()) return super.publish(listing);
 
+    const item = (listing.card_id
+      && get(`SELECT * FROM user_items WHERE id = ?`, [listing.card_id])) || {};
+    const pictureUrls = await collectPictureUrls(item);
     const isAuction = listing.format === "auction";
     let externalId;
 
     if (isAuction) {
-      const xml = listingToTradingXml(listing, item);
+      const xml = listingToTradingXml(listing, item, { pictureUrls });
       externalId = await addItem(xml);
     } else {
       try {
         const sku = "CV-" + listing.id;
-        await createInventoryItem(sku, listingToInventoryItem(listing, item));
+        await createInventoryItem(sku, listingToInventoryItem(listing, item, { pictureUrls }));
         const offer = await createOffer(listingToOffer(listing, sku));
         const pub = await publishOffer(offer.offerId);
         externalId = pub.listingId || offer.offerId;
       } catch {
-        const xml = listingToTradingXml(listing, item);
+        const xml = listingToTradingXml(listing, item, { pictureUrls });
         externalId = await addFixedPriceItem(xml);
       }
     }

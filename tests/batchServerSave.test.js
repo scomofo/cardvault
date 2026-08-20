@@ -52,26 +52,32 @@ test("dealer mode exposes direct marketplace handoff submission", async () => {
 test("settings exposes shipping provider connection management", async () => {
   const api = await readFile(new URL("../src/lib/api.js", import.meta.url), "utf8");
   const settings = await readFile(new URL("../src/components/Settings.jsx", import.meta.url), "utf8");
+  const shippingSection = await readFile(
+    new URL("../src/components/settings/ShippingProviderConnectionsSection.jsx", import.meta.url),
+    "utf8",
+  );
 
   assert.match(api, /export const shippingProvidersAPI\s*=/);
   assert.match(api, /shipping-provider-connections/);
   assert.match(settings, /ShippingProviderConnectionsSection/);
-  assert.match(settings, /shippingProvidersAPI\.connections\(\)/);
-  assert.match(settings, /shippingProvidersAPI\.connect\(newConn/);
-  assert.match(settings, /shippingProvidersAPI\.test\(conn\.id/);
-  assert.match(settings, /labelPurchaseUrl/);
-  assert.match(settings, /apiKeyHeader/);
-  assert.match(settings, /apiKeyPrefix/);
-  assert.match(settings, /labelPurchaseTimeoutMs/);
-  assert.match(settings, /labelPurchaseTimeoutMs:\s*e\.target\.value\s*===\s*""\s*\?\s*""\s*:\s*Number\(e\.target\.value\)/);
-  assert.doesNotMatch(settings, /labelPurchaseTimeoutMs:\s*Number\(e\.target\.value\)\s*\|\|\s*10000/);
-  assert.match(settings, /endpointValidation\?\.attempted/);
-  assert.match(settings, /type="password"[\s\S]*value=\{newConn\.apiKey\}/);
+  assert.match(shippingSection, /shippingProvidersAPI\.connections\(\)/);
+  assert.match(shippingSection, /shippingProvidersAPI\.connect\(newConn/);
+  assert.match(shippingSection, /shippingProvidersAPI\.test\(conn\.id/);
+  assert.match(shippingSection, /labelPurchaseUrl/);
+  assert.match(shippingSection, /apiKeyHeader/);
+  assert.match(shippingSection, /apiKeyPrefix/);
+  assert.match(shippingSection, /labelPurchaseTimeoutMs/);
+  assert.match(shippingSection, /labelPurchaseTimeoutMs:\s*e\.target\.value\s*===\s*""\s*\?\s*""\s*:\s*Number\(e\.target\.value\)/);
+  assert.doesNotMatch(shippingSection, /labelPurchaseTimeoutMs:\s*Number\(e\.target\.value\)\s*\|\|\s*10000/);
+  assert.match(shippingSection, /endpointValidation\?\.attempted/);
+  assert.match(shippingSection, /type="password"[\s\S]*value=\{newConn\.apiKey\}/);
 });
 
 test("settings exposes marketplace handoff connection configuration", async () => {
+  const api = await readFile(new URL("../src/lib/api.js", import.meta.url), "utf8");
   const settings = await readFile(new URL("../src/components/Settings.jsx", import.meta.url), "utf8");
 
+  assert.match(api, /testConnection:\s*\(id,\s*data\s*=\s*\{\}\)\s*=>\s*request\(`\/marketplace-connections\/\$\{id\}\/test`,\s*\{\s*method:\s*"POST",\s*body:\s*data\s*\}\)/);
   assert.match(settings, /function\s+cloneDefaultMarketplaceConnection\(\)/);
   assert.match(settings, /accessToken:\s*""/);
   assert.match(settings, /handoffSubmissionUrl:\s*""/);
@@ -90,6 +96,10 @@ test("settings exposes marketplace handoff connection configuration", async () =
   assert.match(settings, /Submission Timeout \(ms\)/);
   assert.match(settings, /Status Timeout \(ms\)/);
   assert.match(settings, /handoffSubmissionTimeoutMs:\s*e\.target\.value\s*===\s*""\s*\?\s*""\s*:\s*Number\(e\.target\.value\)/);
+  assert.match(settings, /const\s+\[testingMarketplaceId,\s*setTestingMarketplaceId\]\s*=\s*useState\(null\)/);
+  assert.match(settings, /marketplacesAPI\.testConnection\(conn\.id,\s*\{\s*listingId:\s*"connection-test"/s);
+  assert.match(settings, /HANDOFF_MARKETPLACES\.has\(String\(conn\.marketplace\s*\|\|\s*""\)\.toLowerCase\(\)\)/);
+  assert.match(settings, /Partner validation ready/);
 });
 
 test("roadmap reflects completed handoff operator UX and remaining partner validation", async () => {
@@ -97,8 +107,8 @@ test("roadmap reflects completed handoff operator UX and remaining partner valid
   const roadmapData = await readFile(new URL("../src/server/services/dashboard/roadmapData.js", import.meta.url), "utf8");
 
   assert.match(roadmapData, /Consignment \/ COMC integrations",\s*status:\s*"partial"/);
-  assert.match(roadmap, /operator UX for direct submissions is implemented/);
-  assert.match(roadmap, /partner-specific live validation/);
+  assert.match(roadmap, /validate configured partner endpoints from Settings/);
+  assert.match(roadmap, /real COMC\/consignment credentials and live acceptance evidence/);
   assert.doesNotMatch(roadmap, /operator UX for triggering direct submissions/);
 });
 
@@ -115,60 +125,101 @@ test("automation API exposes Canada Post manifest transmit helper", async () => 
 });
 
 test("settings exposes Canada Post production connection profile defaults", async () => {
-  const settings = await readFile(new URL("../src/components/Settings.jsx", import.meta.url), "utf8");
+  const shippingSection = await readFile(
+    new URL("../src/components/settings/ShippingProviderConnectionsSection.jsx", import.meta.url),
+    "utf8",
+  );
 
-  assert.match(settings, /CANADA_POST_ENDPOINTS/);
-  assert.match(settings, /sandbox:\s*"https:\/\/ct\.soa-gw\.canadapost\.ca"/);
-  assert.match(settings, /production:\s*"https:\/\/soa-gw\.canadapost\.ca"/);
-  assert.match(settings, /providerClient:\s*"canada_post"/);
-  assert.match(settings, /environment:\s*"sandbox"/);
-  assert.match(settings, /labelPurchaseMode:\s*"proxy"/);
-  assert.match(settings, /apiKeyPrefix:\s*"Basic "/);
-  assert.match(settings, /const\s+CANADA_POST_LABEL_URL_TEMPLATE\s*=\s*"labels\/canada-post\/\{trackingNumber\}\/\{shipmentId\}\.pdf"/);
-  assert.match(settings, /labelUrlTemplate:\s*CANADA_POST_LABEL_URL_TEMPLATE/);
-  assert.match(settings, /customerNumber:\s*""/);
-  assert.match(settings, /contractId:\s*""/);
-  assert.match(settings, /originPostalCode:\s*""/);
-  assert.match(settings, /packageDimensionsCm:\s*\{/);
-  assert.match(settings, /Customer Number/);
-  assert.match(settings, /Contract ID/);
-  assert.match(settings, /Origin Postal/);
-  assert.match(settings, /Origin Address/);
-  assert.match(settings, /Origin City/);
-  assert.match(settings, /Origin Province/);
-  assert.match(settings, /Package L\/W\/H/);
-  assert.match(settings, /Canada Post Sandbox/);
-  assert.match(settings, /Canada Post Production/);
-  assert.match(settings, /Purchase Mode/);
-  assert.match(settings, /Native Canada Post/);
+  assert.match(shippingSection, /CANADA_POST_ENDPOINTS/);
+  assert.match(shippingSection, /sandbox:\s*"https:\/\/ct\.soa-gw\.canadapost\.ca"/);
+  assert.match(shippingSection, /production:\s*"https:\/\/soa-gw\.canadapost\.ca"/);
+  assert.match(shippingSection, /providerClient:\s*"canada_post"/);
+  assert.match(shippingSection, /environment:\s*"sandbox"/);
+  assert.match(shippingSection, /labelPurchaseMode:\s*"proxy"/);
+  assert.match(shippingSection, /apiKeyPrefix:\s*"Basic "/);
+  assert.match(shippingSection, /const\s+CANADA_POST_LABEL_URL_TEMPLATE\s*=\s*"labels\/canada-post\/\{trackingNumber\}\/\{shipmentId\}\.pdf"/);
+  assert.match(shippingSection, /labelUrlTemplate:\s*CANADA_POST_LABEL_URL_TEMPLATE/);
+  assert.match(shippingSection, /customerNumber:\s*""/);
+  assert.match(shippingSection, /contractId:\s*""/);
+  assert.match(shippingSection, /originPostalCode:\s*""/);
+  assert.match(shippingSection, /packageDimensionsCm:\s*\{/);
+  assert.match(shippingSection, /Customer Number/);
+  assert.match(shippingSection, /Contract ID/);
+  assert.match(shippingSection, /Origin Postal/);
+  assert.match(shippingSection, /Origin Address/);
+  assert.match(shippingSection, /Origin City/);
+  assert.match(shippingSection, /Origin Province/);
+  assert.match(shippingSection, /Package L\/W\/H/);
+  assert.match(shippingSection, /Canada Post Sandbox/);
+  assert.match(shippingSection, /Canada Post Production/);
+  assert.match(shippingSection, /Purchase Mode/);
+  assert.match(shippingSection, /Native Canada Post/);
 });
 
 test("settings keeps shipping provider countries input as raw text", async () => {
-  const settings = await readFile(new URL("../src/components/Settings.jsx", import.meta.url), "utf8");
+  const shippingSection = await readFile(
+    new URL("../src/components/settings/ShippingProviderConnectionsSection.jsx", import.meta.url),
+    "utf8",
+  );
 
-  assert.match(settings, /const\s+\[countriesText,\s*setCountriesText\]\s*=\s*useState\("CA"\)/);
-  assert.match(settings, /setNewConn\(cloneDefaultShippingProvider\(\)\);\s*setCountriesText\("CA"\);/s);
-  assert.match(settings, /value=\{countriesText\}/);
-  assert.match(settings, /const\s+val\s*=\s*e\.target\.value;\s*setCountriesText\(val\);/s);
-  assert.match(settings, /updateRate\(\{\s*countries:\s*val\.split\(","\)\.map\(\(entry\)\s*=>\s*entry\.trim\(\)\)\.filter\(Boolean\)\s*\}\)/s);
-  assert.doesNotMatch(settings, /value=\{rate\.countries\.join\(", "\)\}/);
+  assert.match(shippingSection, /const\s+\[countriesText,\s*setCountriesText\]\s*=\s*useState\("CA"\)/);
+  assert.match(shippingSection, /setNewConn\(cloneDefaultShippingProvider\(\)\);\s*setCountriesText\("CA"\);/s);
+  assert.match(shippingSection, /value=\{countriesText\}/);
+  assert.match(shippingSection, /const\s+val\s*=\s*e\.target\.value;\s*setCountriesText\(val\);/s);
+  assert.match(shippingSection, /updateRate\(\{\s*countries:\s*val\.split\(","\)\.map\(\(entry\)\s*=>\s*entry\.trim\(\)\)\.filter\(Boolean\)\s*\}\)/s);
+  assert.doesNotMatch(shippingSection, /value=\{rate\.countries\.join\(", "\)\}/);
 });
 
 test("settings exposes Canada Post manifest operations controls", async () => {
-  const settings = await readFile(new URL("../src/components/Settings.jsx", import.meta.url), "utf8");
+  const shippingSection = await readFile(
+    new URL("../src/components/settings/ShippingProviderConnectionsSection.jsx", import.meta.url),
+    "utf8",
+  );
 
-  assert.match(settings, /const\s+\[manifestGroupText,\s*setManifestGroupText\]\s*=\s*useState\(""\)/);
-  assert.match(settings, /const\s+\[canadaPostValidation,\s*setCanadaPostValidation\]\s*=\s*useState\(null\)/);
-  assert.match(settings, /automationAPI\.canadaPostManifests\(\)/);
-  assert.match(settings, /automationAPI\.validateCanadaPost\(\{/);
-  assert.match(settings, /automationAPI\.transmitCanadaPostManifest\(\{/);
-  assert.match(settings, /automationAPI\.canadaPostManifestArtifactUrl\(run\.id,\s*artifact\.id\)/);
-  assert.match(settings, /Validate Setup/);
-  assert.match(settings, /Canada Post Validation/);
-  assert.match(settings, /canadaPostValidation\.checks/);
-  assert.match(settings, /Canada Post Manifests/);
-  assert.match(settings, /Transmit Manifest/);
-  assert.match(settings, /Group IDs/);
+  assert.match(shippingSection, /const\s+\[manifestGroupText,\s*setManifestGroupText\]\s*=\s*useState\(""\)/);
+  assert.match(shippingSection, /const\s+\[canadaPostValidation,\s*setCanadaPostValidation\]\s*=\s*useState\(null\)/);
+  assert.match(shippingSection, /automationAPI\.canadaPostManifests\(\)/);
+  assert.match(shippingSection, /automationAPI\.validateCanadaPost\(\{/);
+  assert.match(shippingSection, /automationAPI\.transmitCanadaPostManifest\(\{/);
+  assert.match(shippingSection, /automationAPI\.canadaPostManifestArtifactUrl\(run\.id,\s*artifact\.id\)/);
+  assert.match(shippingSection, /Validate Setup/);
+  assert.match(shippingSection, /Canada Post Validation/);
+  assert.match(shippingSection, /canadaPostValidation\.checks/);
+  assert.match(shippingSection, /Canada Post Manifests/);
+  assert.match(shippingSection, /Transmit Manifest/);
+  assert.match(shippingSection, /Group IDs/);
+});
+
+test("scan flow persists the item before server identification instead of racing the sync on a timer", async () => {
+  const scanWorkflow = await readFile(new URL("../src/hooks/useScanWorkflow.js", import.meta.url), "utf8");
+
+  assert.doesNotMatch(scanWorkflow, /setTimeout\(async/);
+  const createIndex = scanWorkflow.indexOf("await itemsAPI.create(entry)");
+  const identifyIndex = scanWorkflow.indexOf("identificationAPI.identify({ itemId: id");
+  assert.ok(createIndex > -1, "item upsert before identification missing");
+  assert.ok(identifyIndex > createIndex, "identify must run after the item create");
+  assert.match(scanWorkflow, /scanItemRef\.current === id/);
+  assert.match(scanWorkflow, /if \(useServer\) runIdentification\(\)/);
+
+  const scanView = await readFile(new URL("../src/components/ScanView.jsx", import.meta.url), "utf8");
+  assert.match(scanView, /identificationResult\.dismissed/);
+  assert.match(scanView, /confirmIdentification\(result\.itemId,\s*result\.id\)/);
+  assert.match(scanView, /applyIdentificationCorrection\(candidate\)/);
+  assert.match(scanView, /candidate\.card\.id !== result\.finalCatalogCardId/);
+});
+
+test("sales flow persists listings server-side before publish and reports stub publishes honestly", async () => {
+  const salesFlow = await readFile(new URL("../src/components/SalesFlow.jsx", import.meta.url), "utf8");
+
+  assert.match(salesFlow, /listingsAPI\.create\(listing\)/);
+  assert.match(salesFlow, /itemsAPI\s*\n?\s*\.create\(/);
+  assert.match(salesFlow, /summarizePublishOutcome\(channel/);
+  assert.match(salesFlow, /applyChannelToListing\(listing,\s*channel\)/);
+  assert.doesNotMatch(salesFlow, /toast\.success\(`Published to \$\{marketplace\}`\)/);
+
+  const activeListingCard = await readFile(new URL("../src/components/ActiveListingCard.jsx", import.meta.url), "utf8");
+  assert.match(activeListingCard, /isStubChannel/);
+  assert.match(activeListingCard, /!isStubPublish/);
 });
 
 test("sales flow blocks duplicate manual sale submissions while saving", async () => {
