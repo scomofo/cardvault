@@ -14,7 +14,7 @@ test("marketplace sold sync preserves buyer and destination metadata from the ad
   const database = await import("../src/server/database.js");
   const shared = await import("../src/server/routes/shared.js");
   const registry = await import("../src/server/integrations/marketplaces/marketplaceRegistry.js");
-  const syncService = await import(`../src/server/services/marketplaces/syncService.js?ts=${Date.now()}`);
+  const syncService = await import("../src/server/services/marketplaces/syncService.js");
 
   const db = database.initDB();
   const adapter = registry.getMarketplaceAdapter("ebay");
@@ -123,7 +123,7 @@ test("marketplace sold sync backfills metadata on existing sale and order rows",
 
   const database = await import("../src/server/database.js");
   const registry = await import("../src/server/integrations/marketplaces/marketplaceRegistry.js");
-  const syncService = await import(`../src/server/services/marketplaces/syncService.js?ts=${Date.now()}`);
+  const syncService = await import("../src/server/services/marketplaces/syncService.js");
 
   const db = database.initDB();
   const adapter = registry.getMarketplaceAdapter("ebay");
@@ -281,7 +281,7 @@ test("marketplace sold sync repairs stale sale and order platform metadata", asy
 
   const database = await import("../src/server/database.js");
   const registry = await import("../src/server/integrations/marketplaces/marketplaceRegistry.js");
-  const syncService = await import(`../src/server/services/marketplaces/syncService.js?ts=${Date.now()}`);
+  const syncService = await import("../src/server/services/marketplaces/syncService.js");
 
   const db = database.initDB();
   const adapter = registry.getMarketplaceAdapter("shopify");
@@ -429,7 +429,7 @@ test("marketplace sold sync relinks an existing order to the reused sale", async
 
   const database = await import("../src/server/database.js");
   const registry = await import("../src/server/integrations/marketplaces/marketplaceRegistry.js");
-  const syncService = await import(`../src/server/services/marketplaces/syncService.js?ts=${Date.now()}`);
+  const syncService = await import("../src/server/services/marketplaces/syncService.js");
 
   const db = database.initDB();
   const adapter = registry.getMarketplaceAdapter("ebay");
@@ -576,7 +576,7 @@ test("marketplace sync applies payload-native remote state", async () => {
 
   const database = await import("../src/server/database.js");
   const registry = await import("../src/server/integrations/marketplaces/marketplaceRegistry.js");
-  const syncService = await import(`../src/server/services/marketplaces/syncService.js?ts=${Date.now()}`);
+  const syncService = await import("../src/server/services/marketplaces/syncService.js");
 
   const db = database.initDB();
   const adapter = registry.getMarketplaceAdapter("ebay");
@@ -672,7 +672,7 @@ test("marketplace sync persists remote update timestamp and price history", asyn
 
   const database = await import("../src/server/database.js");
   const registry = await import("../src/server/integrations/marketplaces/marketplaceRegistry.js");
-  const syncService = await import(`../src/server/services/marketplaces/syncService.js?ts=${Date.now()}`);
+  const syncService = await import("../src/server/services/marketplaces/syncService.js");
 
   const db = database.initDB();
   const adapter = registry.getMarketplaceAdapter("ebay");
@@ -768,7 +768,7 @@ test("blocking reconciliation conflicts surface on channel and listing errors", 
 
   const database = await import("../src/server/database.js");
   const registry = await import("../src/server/integrations/marketplaces/marketplaceRegistry.js");
-  const syncService = await import(`../src/server/services/marketplaces/syncService.js?ts=${Date.now()}`);
+  const syncService = await import("../src/server/services/marketplaces/syncService.js");
 
   const db = database.initDB();
   const adapter = registry.getMarketplaceAdapter("ebay");

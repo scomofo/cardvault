@@ -66,6 +66,8 @@ export async function startTestServer(t, { dirPrefix }) {
   const script = [
     'import { startServer } from "./server.js";',
     'const server = await startServer({ port: 0, host: "127.0.0.1" });',
+    // Exit via process.exit so exit hooks run (e.g. NODE_V8_COVERAGE flushes).
+    'process.on("SIGTERM", () => { server.close(() => process.exit(0)); server.closeAllConnections?.(); });',
     'console.log("CARDVAULT_TEST_PORT:" + server.address().port);',
   ].join("\n");
 
