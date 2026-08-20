@@ -38,7 +38,9 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: false
         run: |
           echo "runner arch: $(uname -m)"
-          npx electron-builder --mac --arm64 --publish never
+          # dmg:arm64 rather than --arm64: build.mac.target hardcodes both
+          # arches, which overrides the flag and also builds the Intel DMG.
+          npx electron-builder --mac dmg:arm64 --publish never
 
       - uses: actions/upload-artifact@v4
         with:
