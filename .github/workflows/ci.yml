@@ -25,7 +25,6 @@ jobs:
           node-version: 22
           cache: npm
 
-      # better-sqlite3 ships no prebuild for this version and compiles from source.
       - run: npm ci
 
       - run: npm run lint
