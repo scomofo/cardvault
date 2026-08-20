@@ -1,0 +1,47 @@
+name: macOS build
+
+# Not on every push — macOS runners are slow, and the DMG is only wanted on demand.
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mac-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dmg:
+    # macos-latest is Apple Silicon, so better-sqlite3 builds arm64 natively
+    # rather than cross-compiling.
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - name: Package arm64 DMG
+        env:
+          # The build is deliberately unsigned (build.mac.identity is null);
+          # stop electron-builder from hunting for a keychain identity.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: |
+          echo "runner arch: $(uname -m)"
+          npx electron-builder --mac --arm64 --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CardVault-macOS-arm64
+          path: dist-electron/*.dmg
+          if-no-files-found: error
