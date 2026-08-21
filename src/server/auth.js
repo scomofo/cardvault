@@ -5,10 +5,7 @@ import {
   normalizeAddress,
   requestHasTrustedOrigin,
 } from "./networkTrust.js";
-
-function getProxyToken() {
-  return process.env.PROXY_TOKEN?.trim() || "";
-}
+import { getProxyToken } from "./runtimeConfig.js";
 
 export function isLoopbackRequest(req) {
   const candidates = [

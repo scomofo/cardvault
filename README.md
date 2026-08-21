@@ -54,9 +54,12 @@ Supports error taxonomy (ERR/COR/UER), parallel tiers, serial numbering (/99, /2
 
 ```bash
 npm install                    # Install dependencies
-cp .env.example .env           # Add ANTHROPIC_API_KEY
+cp .env.example .env           # Optionally add ANTHROPIC_API_KEY, or use Settings
 npm start                      # Server :3001  +  Frontend :3000
 ```
+
+`PROXY_TOKEN` is optional and intended for API-only deployments whose clients send
+`Authorization: Bearer <token>`. Leave it blank when using CardVault's built-in UI.
 
 ### Mac AirBook Card Studio (native `.app`)
 

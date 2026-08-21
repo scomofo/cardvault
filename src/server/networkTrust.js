@@ -37,11 +37,18 @@ export function getTrustedDevHosts() {
   const hosts = new Set(["localhost", "127.0.0.1", "::1"]);
   const configuredHost = normalizeAddress(process.env.DEV_HOSTNAME?.trim() || "");
   const boundHost = normalizeAddress(process.env.HOST?.trim() || "");
+  let interfaces = {};
 
   if (configuredHost) hosts.add(configuredHost);
   if (boundHost && boundHost !== "0.0.0.0" && boundHost !== "::") hosts.add(boundHost);
 
-  for (const entries of Object.values(networkInterfaces())) {
+  try {
+    interfaces = networkInterfaces();
+  } catch {
+    // Keep loopback and explicitly configured hosts when interface discovery is unavailable.
+  }
+
+  for (const entries of Object.values(interfaces)) {
     for (const entry of entries || []) {
       if (entry.internal) continue;
       if (entry.family !== "IPv4" && entry.family !== "IPv6") continue;

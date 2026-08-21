@@ -10,6 +10,7 @@ import { seedReferenceData } from "./src/server/seed.js";
 import { registerRoutes } from "./src/server/routes/index.js";
 import { authCheck, requireProtectedConfigWrite } from "./src/server/auth.js";
 import { getTrustedDevHosts, isAllowedDevOrigin } from "./src/server/networkTrust.js";
+import { getAnthropicApiKey, normalizeAnthropicApiKey } from "./src/server/runtimeConfig.js";
 
 config({ path: process.env.CARDVAULT_ENV_FILE || undefined });
 
@@ -18,7 +19,7 @@ const PORT = Number(process.env.PORT || 3001);
 const HOST = process.env.HOST || "0.0.0.0";
 const CV_SERVICE_URL = (process.env.CV_SERVICE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 
-let anthropicKey = process.env.ANTHROPIC_API_KEY || "";
+let anthropicKey = getAnthropicApiKey();
 
 // Initialize database and seed reference data
 initDB();
@@ -28,8 +29,9 @@ seedReferenceData();
 if (!anthropicKey) {
   try {
     const row = dbGet("SELECT value FROM settings WHERE key = ?", ["anthropic_api_key"]);
-    if (row?.value) {
-      anthropicKey = row.value;
+    const persistedKey = normalizeAnthropicApiKey(row?.value);
+    if (persistedKey) {
+      anthropicKey = persistedKey;
       console.log("Loaded API key from database");
     }
   } catch {
@@ -137,11 +139,12 @@ app.get("/api/ai/status", authCheck, (_req, res) => {
 // POST: set the API key at runtime and persist to database
 app.post("/api/ai/key", requireProtectedConfigWrite, (req, res) => {
   const { key } = req.body;
-  if (!key || typeof key !== "string" || !key.startsWith("sk-ant-")) {
+  const normalizedKey = normalizeAnthropicApiKey(key);
+  if (!normalizedKey || !normalizedKey.startsWith("sk-ant-")) {
     return res.status(400).json({ error: "Invalid API key format. Must start with sk-ant-" });
   }
 
-  anthropicKey = key.trim();
+  anthropicKey = normalizedKey;
 
   try {
     dbRun(
