@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { copyFile, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawn } from "node:child_process";
@@ -60,9 +60,25 @@ export async function waitForServer(baseUrl, timeoutMs = 10000) {
   throw new Error(`Server did not become ready within ${timeoutMs}ms`);
 }
 
-export async function startTestServer(t, { dirPrefix }) {
+export async function startTestServer(t, { dirPrefix, env = {}, envFileSource, unsetEnv = [] }) {
   const tempDir = await mkdtemp(join(tmpdir(), dirPrefix));
   const dbPath = join(tempDir, "cardvault-test.db");
+  const childEnv = {
+    ...process.env,
+    ...env,
+    CARDVAULT_DB_PATH: dbPath,
+  };
+
+  if (envFileSource) {
+    const envFilePath = join(tempDir, ".env");
+    await copyFile(envFileSource, envFilePath);
+    childEnv.CARDVAULT_ENV_FILE = envFilePath;
+  }
+
+  for (const key of unsetEnv) {
+    delete childEnv[key];
+  }
+
   const script = [
     'import { startServer } from "./server.js";',
     'const server = await startServer({ port: 0, host: "127.0.0.1" });',
@@ -73,10 +89,7 @@ export async function startTestServer(t, { dirPrefix }) {
 
   const server = spawn(process.execPath, ["--input-type=module", "--eval", script], {
     cwd: process.cwd(),
-    env: {
-      ...process.env,
-      CARDVAULT_DB_PATH: dbPath,
-    },
+    env: childEnv,
     stdio: ["ignore", "pipe", "pipe"],
   });
   const exitPromise = new Promise((resolve) => server.once("exit", resolve));
