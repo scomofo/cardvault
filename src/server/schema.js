@@ -61,7 +61,7 @@ export function createTables(db) {
 
     CREATE TABLE IF NOT EXISTS sales (
       id TEXT PRIMARY KEY,
-      card_id TEXT REFERENCES user_items(id),
+      card_id TEXT REFERENCES user_items(id) ON DELETE SET NULL,
       order_id TEXT,
       card_name TEXT,
       card_set TEXT,
@@ -83,7 +83,7 @@ export function createTables(db) {
 
     CREATE TABLE IF NOT EXISTS listings (
       id TEXT PRIMARY KEY,
-      card_id TEXT REFERENCES user_items(id),
+      card_id TEXT REFERENCES user_items(id) ON DELETE SET NULL,
       external_listing_id TEXT,
       card_name TEXT,
       card_set TEXT,
@@ -220,9 +220,9 @@ export function createTables(db) {
 
     CREATE TABLE IF NOT EXISTS orders (
       id TEXT PRIMARY KEY,
-      sale_id TEXT REFERENCES sales(id),
-      listing_id TEXT REFERENCES listings(id),
-      item_id TEXT REFERENCES user_items(id),
+      sale_id TEXT REFERENCES sales(id) ON DELETE SET NULL,
+      listing_id TEXT REFERENCES listings(id) ON DELETE SET NULL,
+      item_id TEXT REFERENCES user_items(id) ON DELETE SET NULL,
       platform TEXT NOT NULL,
       external_order_id TEXT,
       buyer_handle TEXT,
@@ -241,7 +241,7 @@ export function createTables(db) {
     CREATE TABLE IF NOT EXISTS shipments (
       id TEXT PRIMARY KEY,
       order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-      item_id TEXT REFERENCES user_items(id),
+      item_id TEXT REFERENCES user_items(id) ON DELETE SET NULL,
       carrier TEXT,
       service_level TEXT,
       package_type TEXT,

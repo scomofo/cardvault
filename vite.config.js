@@ -34,7 +34,9 @@ function loadHttpsConfig(env) {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const host = env.HOST || "0.0.0.0";
+  // Loopback by default; set HOST=0.0.0.0 (see .env.example) to allow a
+  // phone on the same Wi-Fi to reach the dev server.
+  const host = env.HOST || "127.0.0.1";
   const apiTarget = env.CARDVAULT_API_URL || "http://127.0.0.1:3001";
   const cvTarget = env.CARDVAULT_CV_URL || "http://127.0.0.1:8000";
   const https = loadHttpsConfig(env);

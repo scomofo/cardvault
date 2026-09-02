@@ -16,14 +16,9 @@ export function diffById(previous = [], next = []) {
       return true;
     }
 
-    if (
-      item.updatedAt &&
-      existing.updatedAt &&
-      item.updatedAt === existing.updatedAt
-    ) {
-      return false;
-    }
-
+    // A matching (or absent) updatedAt is not proof the record is unchanged:
+    // local edits never bump updatedAt themselves, so fall through to a
+    // field-by-field comparison instead of trusting the timestamp alone.
     const keys = Object.keys(item);
     if (keys.length !== Object.keys(existing).length) return true;
 

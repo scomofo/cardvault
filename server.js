@@ -16,7 +16,10 @@ config({ path: process.env.CARDVAULT_ENV_FILE || undefined });
 
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
-const HOST = process.env.HOST || "0.0.0.0";
+// Loopback by default so a fresh checkout never exposes the API (and its
+// settings, which include API keys) to the LAN. Set HOST=0.0.0.0 to opt in
+// to phone scanning over Wi-Fi (see .env.example).
+const HOST = process.env.HOST || "127.0.0.1";
 const CV_SERVICE_URL = (process.env.CV_SERVICE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 
 let anthropicKey = getAnthropicApiKey();

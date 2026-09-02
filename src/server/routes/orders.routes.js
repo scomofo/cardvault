@@ -1,4 +1,4 @@
-import { all, get, run } from "../database.js";
+import { all, get, run, runInImmediateTransaction } from "../database.js";
 import { ORDER_FIELD_MAP } from "../mappers/fieldMaps.js";
 import { toCamel, toCamelArray, toSnake } from "../mappers/recordMappers.js";
 import { markListingSold, restoreListingAfterOperationalDelete, syncItemState } from "../services/listingStateSync.js";
@@ -112,7 +112,7 @@ export function registerOrderRoutes(app) {
         if (PROTECTED_FULFILLMENT_STATES.has(existingOrder.fulfillment_status)) {
           delete updates.fulfillment_status;
         }
-        const failure = applyOrderUpdate(existingOrder.id, existingOrder, updates);
+        const failure = runInImmediateTransaction(() => applyOrderUpdate(existingOrder.id, existingOrder, updates));
         if (failure) return res.status(failure.status).json({ error: failure.error });
         return res.json(toCamel(get("SELECT * FROM orders WHERE id = ?", [existingOrder.id]), ORDER_FIELD_MAP));
       }
@@ -208,62 +208,65 @@ export function registerOrderRoutes(app) {
         return res.status(404).json({ error: "linked item not found" });
       }
       const soldAt = body.soldAt || body.sold_at || linkedSale?.date || new Date().toISOString();
-      run(
-        `INSERT INTO orders
-         (id, sale_id, listing_id, item_id, platform, external_order_id, buyer_handle, sale_price, fees, shipping_charge, tax_collected, destination_country, destination_postal_code, payment_status, fulfillment_status, sold_at, created_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))`,
-        [
-          id,
-          linkedSaleId,
-          linkedListingId,
-          linkedItemId,
-          resolvedPlatform,
-          body.externalOrderId || body.external_order_id || null,
-          body.buyerHandle || body.buyer_handle || linkedSale?.buyer_handle || null,
-          resolvedSalePrice || 0,
-          body.fees || 0,
-          body.shippingCharge || body.shipping_charge || 0,
-          body.taxCollected || body.tax_collected || 0,
-          body.destinationCountry || body.destination_country || "CA",
-          body.destinationPostalCode || body.destination_postal_code || null,
-          body.paymentStatus || body.payment_status || "paid",
-          body.fulfillmentStatus || body.fulfillment_status || "pending",
-          soldAt,
-        ],
-      );
-      if (linkedSaleId) {
+      const saved = runInImmediateTransaction(() => {
         run(
-          `UPDATE sales
-           SET order_id = COALESCE(order_id, ?)
-           WHERE id = ?`,
-          [id, linkedSaleId],
-        );
-      }
-      if (linkedListingId) {
-        markListingSold(linkedListingId, resolvedSalePrice || 0, soldAt);
-      }
-      if (linkedItemId) {
-        run(
-          `UPDATE user_items
-           SET status = 'sold',
-                listing_status = CASE WHEN ? IS NOT NULL THEN 'ended' ELSE listing_status END,
-                sale_status = 'sold',
-                profit_realized = CASE
-                  WHEN profit_realized IS NULL OR profit_realized = 0 THEN ?
-                  ELSE profit_realized
-                END,
-                sold_at = COALESCE(?, sold_at),
-                updated_at = datetime('now')
-             WHERE id = ?`,
+          `INSERT INTO orders
+           (id, sale_id, listing_id, item_id, platform, external_order_id, buyer_handle, sale_price, fees, shipping_charge, tax_collected, destination_country, destination_postal_code, payment_status, fulfillment_status, sold_at, created_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))`,
           [
+            id,
+            linkedSaleId,
             linkedListingId,
-            linkedSale?.net_profit || 0,
-            soldAt,
             linkedItemId,
+            resolvedPlatform,
+            body.externalOrderId || body.external_order_id || null,
+            body.buyerHandle || body.buyer_handle || linkedSale?.buyer_handle || null,
+            resolvedSalePrice || 0,
+            body.fees || 0,
+            body.shippingCharge || body.shipping_charge || 0,
+            body.taxCollected || body.tax_collected || 0,
+            body.destinationCountry || body.destination_country || "CA",
+            body.destinationPostalCode || body.destination_postal_code || null,
+            body.paymentStatus || body.payment_status || "paid",
+            body.fulfillmentStatus || body.fulfillment_status || "pending",
+            soldAt,
           ],
         );
-      }
-      res.status(201).json(toCamel(get(`SELECT * FROM orders WHERE id = ?`, [id]), ORDER_FIELD_MAP));
+        if (linkedSaleId) {
+          run(
+            `UPDATE sales
+             SET order_id = COALESCE(order_id, ?)
+             WHERE id = ?`,
+            [id, linkedSaleId],
+          );
+        }
+        if (linkedListingId) {
+          markListingSold(linkedListingId, resolvedSalePrice || 0, soldAt);
+        }
+        if (linkedItemId) {
+          run(
+            `UPDATE user_items
+             SET status = 'sold',
+                  listing_status = CASE WHEN ? IS NOT NULL THEN 'ended' ELSE listing_status END,
+                  sale_status = 'sold',
+                  profit_realized = CASE
+                    WHEN profit_realized IS NULL OR profit_realized = 0 THEN ?
+                    ELSE profit_realized
+                  END,
+                  sold_at = COALESCE(?, sold_at),
+                  updated_at = datetime('now')
+               WHERE id = ?`,
+            [
+              linkedListingId,
+              linkedSale?.net_profit || 0,
+              soldAt,
+              linkedItemId,
+            ],
+          );
+        }
+        return get(`SELECT * FROM orders WHERE id = ?`, [id]);
+      });
+      res.status(201).json(toCamel(saved, ORDER_FIELD_MAP));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -274,7 +277,7 @@ export function registerOrderRoutes(app) {
       const existing = get("SELECT * FROM orders WHERE id = ?", [req.params.id]);
       if (!existing) return res.status(404).json({ error: "Order not found" });
 
-      const failure = applyOrderUpdate(req.params.id, existing, toSnake(req.body));
+      const failure = runInImmediateTransaction(() => applyOrderUpdate(req.params.id, existing, toSnake(req.body)));
       if (failure) return res.status(failure.status).json({ error: failure.error });
 
       res.json(toCamel(get("SELECT * FROM orders WHERE id = ?", [req.params.id]), ORDER_FIELD_MAP));
@@ -288,22 +291,25 @@ export function registerOrderRoutes(app) {
       const existing = get("SELECT * FROM orders WHERE id = ?", [req.params.id]);
       if (!existing) return res.status(404).json({ error: "Order not found" });
 
-      const result = run("DELETE FROM orders WHERE id = ?", [req.params.id]);
-      if (existing.sale_id) {
-        run(
-          `UPDATE sales
-           SET order_id = NULL
-           WHERE id = ?`,
-          [existing.sale_id],
-        );
-      }
-      if (existing.listing_id) {
-        restoreListingAfterOperationalDelete(existing.listing_id);
-      }
-      if (existing.item_id) {
-        syncItemState(existing.item_id);
-      }
-      if (result.changes === 0) return res.status(404).json({ error: "Order not found" });
+      const changes = runInImmediateTransaction(() => {
+        const result = run("DELETE FROM orders WHERE id = ?", [req.params.id]);
+        if (existing.sale_id) {
+          run(
+            `UPDATE sales
+             SET order_id = NULL
+             WHERE id = ?`,
+            [existing.sale_id],
+          );
+        }
+        if (existing.listing_id) {
+          restoreListingAfterOperationalDelete(existing.listing_id);
+        }
+        if (existing.item_id) {
+          syncItemState(existing.item_id);
+        }
+        return result.changes;
+      });
+      if (changes === 0) return res.status(404).json({ error: "Order not found" });
       res.json({ deleted: true });
     } catch (error) {
       res.status(500).json({ error: error.message });

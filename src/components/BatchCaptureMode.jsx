@@ -95,16 +95,21 @@ export default function BatchCaptureMode({ queue, onAddToQueue, onDone, onCancel
         <div className="text-xs fw-700 mb-6" style={{ color: capturingSide === "front" ? "var(--acc)" : "var(--grn)" }}>
           {capturingSide === "front" ? "Snap FRONT" : "Snap BACK (or skip)"}
         </div>
+        {/* Rendered unconditionally so vRef is attached before start() acquires the stream. */}
+        <video
+          ref={vRef}
+          style={{ display: live ? "block" : "none", width: "100%", maxHeight: 300, borderRadius: "var(--radius)", objectFit: "cover", background: "#000" }}
+          playsInline
+          muted
+          autoPlay
+        />
+        <canvas ref={cRef} style={{ display: "none" }} />
         {live ? (
-          <div>
-            <video ref={vRef} style={{ width: "100%", maxHeight: 300, borderRadius: "var(--radius)", objectFit: "cover", background: "#000" }} playsInline muted autoPlay />
-            <canvas ref={cRef} style={{ display: "none" }} />
-            <div className="flex gap-8 justify-center mt-8">
-              <button onClick={snap} aria-label="Capture" style={{ width: 56, height: 56, borderRadius: 2, border: "3px solid var(--acc)", background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transform: "rotate(45deg)" }}>
-                <div style={{ width: 28, height: 28, background: "var(--acc)", transform: "rotate(-45deg)" }} />
-              </button>
-              {capturingSide === "back" && <button className="btn btn-ghost btn-sm" onClick={skipBack}>Skip Back</button>}
-            </div>
+          <div className="flex gap-8 justify-center mt-8">
+            <button onClick={snap} aria-label="Capture" style={{ width: 56, height: 56, borderRadius: 2, border: "3px solid var(--acc)", background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transform: "rotate(45deg)" }}>
+              <div style={{ width: 28, height: 28, background: "var(--acc)", transform: "rotate(-45deg)" }} />
+            </button>
+            {capturingSide === "back" && <button className="btn btn-ghost btn-sm" onClick={skipBack}>Skip Back</button>}
           </div>
         ) : (
           <div style={{ padding: "20px 0", textAlign: "center" }}>
