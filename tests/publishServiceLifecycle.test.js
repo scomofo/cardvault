@@ -249,6 +249,65 @@ test("publish service covers publish, revise, end, and handoff lifecycle", async
       assert.equal(badHandoff.note, "Submission endpoint unavailable");
       assert.equal(channelEvents("handoff-bad-channel", "handoff_submission").length, 1);
     });
+
+    await t.test("publish and revise are locked once a handoff channel has left handoff_ready", async () => {
+      seedListing("handoff-locked");
+      database.run(
+        `INSERT INTO listing_channels (id, listing_id, marketplace, status, overrides)
+         VALUES (?,?,?,?,?)`,
+        [
+          "handoff-locked-channel",
+          "handoff-locked-listing",
+          "comc",
+          "handoff_submitted",
+          JSON.stringify({ handoff: { submissionType: "comc_submission", submissionReference: "SUB-77" } }),
+        ],
+      );
+
+      await assert.rejects(
+        () => publishListingToMarketplace("handoff-locked-listing", "comc"),
+        (error) => {
+          assert.match(error.message, /already has an external handoff in progress/);
+          assert.equal(error.code, "HANDOFF_LOCKED");
+          return true;
+        },
+      );
+      await assert.rejects(
+        () => reviseListingOnMarketplace("handoff-locked-listing", "comc", { price: 40 }),
+        (error) => {
+          assert.equal(error.code, "HANDOFF_LOCKED");
+          return true;
+        },
+      );
+
+      // Neither rejected call may have touched the channel's handoff record.
+      const channel = getChannel("handoff-locked-listing");
+      assert.equal(channel.status, "handoff_submitted");
+      assert.equal(JSON.parse(channel.overrides).handoff.submissionReference, "SUB-77");
+    });
+
+    await t.test("upsertChannel merges the handoff sub-object instead of replacing it", async () => {
+      seedListing("handoff-merge");
+      database.run(
+        `INSERT INTO listing_channels (id, listing_id, marketplace, status, overrides)
+         VALUES (?,?,?,?,?)`,
+        [
+          "handoff-merge-channel",
+          "handoff-merge-listing",
+          "comc",
+          "handoff_ready",
+          JSON.stringify({ handoff: { submissionType: "comc_submission", submissionReference: "KEEP-ME" } }),
+        ],
+      );
+
+      // A republish while still handoff_ready is allowed (not locked) and
+      // must not drop the submissionReference a prior handoff step recorded.
+      const republished = await publishListingToMarketplace("handoff-merge-listing", "comc");
+      assert.equal(republished.status, "handoff_ready");
+      const overrides = JSON.parse(republished.overrides);
+      assert.equal(overrides.handoff.submissionReference, "KEEP-ME", "prior handoff fields survive a republish");
+      assert.equal(overrides.handoff.submissionStatus, "ready_to_ship", "the fresh publish's own fields still land");
+    });
   } finally {
     comcAdapter.revise = originalRevise;
     comcAdapter.end = originalEnd;

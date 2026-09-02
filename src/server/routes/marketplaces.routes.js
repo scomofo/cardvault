@@ -153,6 +153,9 @@ export function registerMarketplaceRoutes(app) {
       }
       res.json(await publishListingToMarketplace(listingId, marketplace, { connectionId }));
     } catch (error) {
+      if (error.code === "HANDOFF_LOCKED") {
+        return res.status(409).json({ error: error.message });
+      }
       res.status(500).json({ error: error.message });
     }
   });
@@ -165,6 +168,9 @@ export function registerMarketplaceRoutes(app) {
       }
       res.json(await reviseListingOnMarketplace(listingId, marketplace, overrides || {}));
     } catch (error) {
+      if (error.code === "HANDOFF_LOCKED") {
+        return res.status(409).json({ error: error.message });
+      }
       res.status(500).json({ error: error.message });
     }
   });

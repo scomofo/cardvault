@@ -123,6 +123,24 @@ test("eBay auth, client, and browse layers", async (t) => {
       assert.equal(status.connected, true);
     });
 
+    await t.test("getEbayStatus treats an expired token with a refresh token as connected", () => {
+      // Regression: connected used to require an unexpired access token,
+      // so the adapter fell back to a fake stub publish the instant the
+      // (short-lived) access token expired even though getAccessToken()
+      // would have silently refreshed it on the next real API call.
+      saveSetting("ebay_access_token", "tok-expired");
+      saveSetting("ebay_token_expires", new Date(Date.now() - 1000).toISOString());
+      saveSetting("ebay_refresh_token", "ref-1");
+      assert.equal(auth.getEbayStatus().connected, true);
+
+      saveSetting("ebay_refresh_token", "");
+      assert.equal(auth.getEbayStatus().connected, false, "no refresh token and an expired access token is disconnected");
+
+      saveSetting("ebay_access_token", "tok-live");
+      saveSetting("ebay_token_expires", futureExpiry());
+      saveSetting("ebay_refresh_token", "ref-1");
+    });
+
     await t.test("tradingApiCall builds XML requests and parses acknowledgements", async () => {
       calls.length = 0;
       stubResponse("<AddItemResponse><Ack>Success</Ack><ItemID>555</ItemID></AddItemResponse>", { status: 200 });
@@ -132,8 +150,13 @@ test("eBay auth, client, and browse layers", async (t) => {
       assert.match(calls[0].options.body, /<eBayAuthToken>tok-live<\/eBayAuthToken>/);
       assert.match(calls[0].options.body, /<AddItemRequest xmlns=/);
 
+      // A Success Ack with no ItemID is not a real success — it must throw
+      // rather than let the caller record a listing with a null id.
       stubResponse("<R><Ack>Success</Ack></R>", { status: 200 });
-      assert.equal(await client.addFixedPriceItem("<Title>x</Title>"), null);
+      await assert.rejects(
+        () => client.addFixedPriceItem("<Title>x</Title>"),
+        /AddFixedPriceItem succeeded with no ItemID/,
+      );
 
       stubResponse("<R><Ack>Success</Ack><ItemID>777</ItemID></R>", { status: 200 });
       assert.equal(await client.reviseItem("<ItemID>777</ItemID>"), "777");
@@ -145,6 +168,11 @@ test("eBay auth, client, and browse layers", async (t) => {
 
       stubResponse("<R><Ack>Failure</Ack><ShortMessage>Bad title</ShortMessage></R>", { status: 200 });
       await assert.rejects(() => client.tradingApiCall("AddItem", ""), /eBay AddItem failed: Bad title/);
+
+      // An HTTP-level failure (a 5xx gateway error page) has no <Ack> tag at
+      // all, so it must not be treated as a silent success.
+      stubResponse("<html>Bad Gateway</html>", { status: 502 });
+      await assert.rejects(() => client.tradingApiCall("AddItem", ""), /eBay AddItem failed: HTTP 502/);
     });
 
     await t.test("inventoryApiCall handles success, no-content, and error responses", async () => {

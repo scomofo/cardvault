@@ -104,7 +104,7 @@ export function listingToInventoryItem(listing, item, options = {}) {
 export function listingToOffer(listing, sku) {
   return {
     sku,
-    marketplaceId: "EBAY_US",
+    marketplaceId: "EBAY_CA", // must match Currency: CAD below
     format: "FIXED_PRICE",
     listingDescription: listing.listing_description || listing.listingDescription || "",
     pricingSummary: { price: { value: String(listing.start_price || listing.startPrice || 0), currency: "CAD" } },

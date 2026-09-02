@@ -5,6 +5,18 @@ import { refreshListingAggregateState } from "./listingAggregateState.js";
 
 const HANDOFF_MARKETPLACES = new Set(["comc", "consignment"]);
 const SUBMITTABLE_HANDOFF_STATUSES = new Set(["handoff_ready", "handoff_exported", "handoff_exception"]);
+// Once a handoff channel moves past handoff_ready, the partner (COMC, a
+// consignment shop) owns it — advancing it further has to go through
+// submitMarketplaceHandoffs/updateMarketplaceHandoffStatus, which merge
+// into the channel's handoff record. A stray re-publish or revise (a
+// crosspost, a redundant scan retry) must not regress that state.
+const LOCKED_HANDOFF_STATUSES = new Set([
+  "handoff_exported",
+  "handoff_submitted",
+  "handoff_accepted",
+  "handoff_settled",
+  "handoff_exception",
+]);
 const HANDOFF_STATUS_MAP = new Map([
   ["ready", "handoff_ready"],
   ["ready_for_review", "handoff_ready"],
@@ -76,6 +88,21 @@ function assertHandoffSubmissionConfigured(marketplace, channel, connection) {
   throw error;
 }
 
+// Preserve the existing overrides.handoff sub-object (submissionReference,
+// exportId, etc. set by the handoff-specific update paths) instead of
+// wholesale-replacing overrides with whatever this call's payload carries —
+// a plain adapter publish/revise payload for a handoff marketplace only
+// ever knows the boilerplate "ready" shape, not what the partner side has
+// since recorded.
+function mergeChannelOverrides(existingOverrides, payload) {
+  const nextPayload = payload || {};
+  const mergedHandoff = { ...(existingOverrides.handoff || {}), ...(nextPayload.handoff || {}) };
+  return {
+    ...nextPayload,
+    ...(Object.keys(mergedHandoff).length ? { handoff: mergedHandoff } : {}),
+  };
+}
+
 function upsertChannel({ listingId, marketplace, connectionId, externalListingId, status, payload, publishError }) {
   const existing = get(
     `SELECT * FROM listing_channels WHERE listing_id = ? AND marketplace = ?`,
@@ -83,6 +110,7 @@ function upsertChannel({ listingId, marketplace, connectionId, externalListingId
   );
 
   if (existing) {
+    const nextOverrides = mergeChannelOverrides(parseJsonObject(existing.overrides), payload);
     run(
       `UPDATE listing_channels
        SET connection_id = ?,
@@ -98,7 +126,7 @@ function upsertChannel({ listingId, marketplace, connectionId, externalListingId
         externalListingId || existing.external_listing_id,
         status,
         publishError || null,
-        JSON.stringify(payload || {}),
+        JSON.stringify(nextOverrides),
         existing.id,
       ],
     );
@@ -122,6 +150,17 @@ function upsertChannel({ listingId, marketplace, connectionId, externalListingId
     ],
   );
   return channelId;
+}
+
+function assertHandoffNotLocked(marketplace, channel, action) {
+  if (!channel || !HANDOFF_MARKETPLACES.has(marketplace)) return;
+  if (!LOCKED_HANDOFF_STATUSES.has(channel.status)) return;
+  const error = new Error(
+    `Cannot ${action} this ${handoffMarketplaceLabel(marketplace)} listing — it already has an external handoff in progress (${channel.status}). Use the handoff status tools instead.`,
+  );
+  error.code = "HANDOFF_LOCKED";
+  error.listingId = channel.listing_id;
+  throw error;
 }
 
 function addChannelEvent(channelId, eventType, status, payload) {
@@ -291,6 +330,12 @@ export async function publishListingToMarketplace(listingId, marketplace, option
   const listing = get(`SELECT * FROM listings WHERE id = ?`, [listingId]);
   if (!listing) throw new Error("Listing not found");
 
+  const existingChannel = get(
+    `SELECT * FROM listing_channels WHERE listing_id = ? AND marketplace = ?`,
+    [listingId, marketplace],
+  );
+  assertHandoffNotLocked(marketplace, existingChannel, "publish");
+
   const adapter = getMarketplaceAdapter(marketplace);
   const result = await adapter.publish(listing, options);
   const channelId = upsertChannel({
@@ -308,7 +353,8 @@ export async function publishListingToMarketplace(listingId, marketplace, option
 }
 
 export async function reviseListingOnMarketplace(listingId, marketplace, overrides = {}) {
-  const { listing } = getListingForMarketplace(listingId, marketplace);
+  const { listing, channel } = getListingForMarketplace(listingId, marketplace);
+  assertHandoffNotLocked(marketplace, channel, "revise");
 
   const adapter = getMarketplaceAdapter(marketplace);
   const result = await adapter.revise(listing, overrides);

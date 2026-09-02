@@ -27,13 +27,19 @@ export async function tradingApiCall(callName, xmlBody) {
     headers: {
       "Content-Type": "text/xml",
       "X-EBAY-API-CALL-NAME": callName,
-      "X-EBAY-API-SITEID": "0",
+      "X-EBAY-API-SITEID": "2", // eBay.ca — must match <Country>CA</Country><Currency>CAD</Currency>
       "X-EBAY-API-COMPATIBILITY-LEVEL": "1155",
       "X-EBAY-API-IAF-TOKEN": token,
     },
     body: xml,
   });
   const text = await res.text();
+  // An HTTP-level failure (5xx, a gateway error page) never has an <Ack>
+  // tag, so without this check the caller sees ack !== "Failure" and
+  // treats a blank response as success.
+  if (!res.ok) {
+    throw new Error("eBay " + callName + " failed: HTTP " + res.status + " " + text.slice(0, 200));
+  }
   const ack = text.match(/<Ack>(\w+)<\/Ack>/)?.[1];
   if (ack === "Failure") {
     const errMsg = text.match(/<ShortMessage>([^<]+)<\/ShortMessage>/)?.[1] || "Unknown error";
@@ -118,13 +124,16 @@ export async function uploadSiteHostedPictures(imageBuffer, mime = "image/jpeg")
     method: "POST",
     headers: {
       "X-EBAY-API-CALL-NAME": "UploadSiteHostedPictures",
-      "X-EBAY-API-SITEID": "0",
+      "X-EBAY-API-SITEID": "2", // eBay.ca — must match <Country>CA</Country><Currency>CAD</Currency>
       "X-EBAY-API-COMPATIBILITY-LEVEL": "1155",
       "X-EBAY-API-IAF-TOKEN": token,
     },
     body: form,
   });
   const text = await res.text();
+  if (!res.ok) {
+    throw new Error("eBay UploadSiteHostedPictures failed: HTTP " + res.status + " " + text.slice(0, 200));
+  }
   const ack = text.match(/<Ack>(\w+)<\/Ack>/)?.[1];
   if (ack === "Failure") {
     const errMsg = text.match(/<ShortMessage>([^<]+)<\/ShortMessage>/)?.[1] || "Unknown error";
@@ -134,22 +143,31 @@ export async function uploadSiteHostedPictures(imageBuffer, mime = "image/jpeg")
   return fullUrl ? fullUrl.replace(/&amp;/g, "&") : null;
 }
 
+// A Success Ack with no <ItemID> means the listing was not actually
+// created/revised despite passing the Ack check above — treat it as a
+// failure rather than letting the caller record a listing with a null id.
+function requireItemId(callName, text) {
+  const itemId = text.match(/<ItemID>(\d+)<\/ItemID>/)?.[1];
+  if (!itemId) throw new Error("eBay " + callName + " succeeded with no ItemID in the response");
+  return itemId;
+}
+
 /** @returns {Promise<string>} eBay ItemID */
 export async function addItem(itemXml) {
   const res = await tradingApiCall("AddItem", itemXml);
-  return res.match(/<ItemID>(\d+)<\/ItemID>/)?.[1] || null;
+  return requireItemId("AddItem", res);
 }
 
 /** @returns {Promise<string>} eBay ItemID */
 export async function addFixedPriceItem(itemXml) {
   const res = await tradingApiCall("AddFixedPriceItem", itemXml);
-  return res.match(/<ItemID>(\d+)<\/ItemID>/)?.[1] || null;
+  return requireItemId("AddFixedPriceItem", res);
 }
 
 /** @returns {Promise<string>} eBay ItemID */
 export async function reviseItem(itemXml) {
   const res = await tradingApiCall("ReviseItem", itemXml);
-  return res.match(/<ItemID>(\d+)<\/ItemID>/)?.[1] || null;
+  return requireItemId("ReviseItem", res);
 }
 
 /** @returns {Promise<void>} */
