@@ -8,6 +8,7 @@ import { syncSpotlightIndex, readCardvaultFile } from "./spotlight.js";
 import { canGrantRendererPermission, getOrigin } from "./permissions.js";
 import { buildCvServiceDependencyMessage, buildCvServiceProbeArgs } from "./cvService.js";
 import { getScanImageRejection, isScanImageExtension } from "./scanImage.js";
+import { isAllowedExternalUrl, isAllowedNavigation } from "./navigation.js";
 
 app.setName("CardVault");
 
@@ -454,8 +455,19 @@ async function createWindow() {
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url: target }) => {
-    shell.openExternal(target);
+    if (isAllowedExternalUrl(target)) shell.openExternal(target);
     return { action: "deny" };
+  });
+
+  // The renderer only ever needs its own origin (including a same-origin
+  // redirect, e.g. /api/ebay/callback back to /#settings). Anything else —
+  // an OAuth provider's page, a stray link — must not load into the main
+  // window, where the preload bridge and IPC channels are attached.
+  mainWindow.webContents.on("will-navigate", (event, targetUrl) => {
+    if (!isAllowedNavigation({ targetUrl, allowedOrigins: allowedRendererOrigins })) {
+      event.preventDefault();
+      if (isAllowedExternalUrl(targetUrl)) shell.openExternal(targetUrl);
+    }
   });
 
   mainWindow.once("ready-to-show", () => mainWindow.show());
@@ -480,6 +492,13 @@ ipcMain.on("cardvault:set-badge", (_event, count) => {
     app.setBadgeCount(Number.isFinite(count) && count > 0 ? count : 0);
   }
   setTrayBadge(count);
+});
+
+// Used for flows that must not run inside the app's own BrowserWindow (eBay
+// OAuth: the local /api/ebay/auth kickoff redirects to eBay's login page,
+// which should never load with this app's preload bridge attached).
+ipcMain.on("cardvault:open-external", (_event, url) => {
+  if (isAllowedExternalUrl(url)) shell.openExternal(url);
 });
 
 app.whenReady().then(async () => {

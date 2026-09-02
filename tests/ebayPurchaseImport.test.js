@@ -1,47 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { spawn } from "node:child_process";
-
-async function waitForServer(baseUrl, timeoutMs = 10000) {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    try {
-      const response = await fetch(`${baseUrl}/api/settings`);
-      if (response.ok) return;
-    } catch {}
-    await new Promise((resolve) => setTimeout(resolve, 150));
-  }
-  throw new Error(`Server did not become ready within ${timeoutMs}ms`);
-}
+import { startTestServer } from "./helpers/testServer.js";
 
 test("eBay CSV import creates purchases, inventory items, and skips duplicates", async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-ebay-purchase-import-"));
-  const dbPath = join(tempDir, "cardvault-test.db");
-  const port = 7200 + Math.floor(Math.random() * 200);
-  const baseUrl = `http://127.0.0.1:${port}`;
-
-  const server = spawn(process.execPath, ["server.js"], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      PORT: String(port),
-      CARDVAULT_DB_PATH: dbPath,
-    },
-    stdio: "ignore",
-  });
-
-  t.after(async () => {
-    if (!server.killed) {
-      server.kill("SIGTERM");
-    }
-    await new Promise((resolve) => server.once("exit", resolve));
-    await rm(tempDir, { recursive: true, force: true });
-  });
-
-  await waitForServer(baseUrl);
+  const { baseUrl } = await startTestServer(t, { dirPrefix: "cardvault-ebay-purchase-import-" });
 
   const csv = [
     "Order number,Item title,Seller,Item subtotal,Shipping and handling,Total,Quantity,Paid on",
@@ -97,30 +59,7 @@ test("eBay CSV import creates purchases, inventory items, and skips duplicates",
 });
 
 test("eBay import accepts tabular HTML-like exports", async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-ebay-purchase-import-html-"));
-  const dbPath = join(tempDir, "cardvault-test.db");
-  const port = 7400 + Math.floor(Math.random() * 200);
-  const baseUrl = `http://127.0.0.1:${port}`;
-
-  const server = spawn(process.execPath, ["server.js"], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      PORT: String(port),
-      CARDVAULT_DB_PATH: dbPath,
-    },
-    stdio: "ignore",
-  });
-
-  t.after(async () => {
-    if (!server.killed) {
-      server.kill("SIGTERM");
-    }
-    await new Promise((resolve) => server.once("exit", resolve));
-    await rm(tempDir, { recursive: true, force: true });
-  });
-
-  await waitForServer(baseUrl);
+  const { baseUrl } = await startTestServer(t, { dirPrefix: "cardvault-ebay-purchase-import-html-" });
 
   const html = `
     <table>
@@ -154,30 +93,7 @@ test("eBay import accepts tabular HTML-like exports", async (t) => {
 });
 
 test("eBay import keeps distinct items from the same order and skips only exact reimports", async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-ebay-purchase-import-multi-"));
-  const dbPath = join(tempDir, "cardvault-test.db");
-  const port = 7600 + Math.floor(Math.random() * 200);
-  const baseUrl = `http://127.0.0.1:${port}`;
-
-  const server = spawn(process.execPath, ["server.js"], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      PORT: String(port),
-      CARDVAULT_DB_PATH: dbPath,
-    },
-    stdio: "ignore",
-  });
-
-  t.after(async () => {
-    if (!server.killed) {
-      server.kill("SIGTERM");
-    }
-    await new Promise((resolve) => server.once("exit", resolve));
-    await rm(tempDir, { recursive: true, force: true });
-  });
-
-  await waitForServer(baseUrl);
+  const { baseUrl } = await startTestServer(t, { dirPrefix: "cardvault-ebay-purchase-import-multi-" });
 
   const csv = [
     "Order number,Item title,Seller,Total,Quantity,Paid on",

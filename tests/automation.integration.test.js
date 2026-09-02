@@ -1,51 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { spawn } from "node:child_process";
 import Database from "better-sqlite3";
-
-async function waitForServer(baseUrl, timeoutMs = 10000) {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    try {
-      const response = await fetch(`${baseUrl}/api/settings`);
-      if (response.ok) return;
-    } catch {}
-    await new Promise((resolve) => setTimeout(resolve, 150));
-  }
-  throw new Error(`Server did not become ready within ${timeoutMs}ms`);
-}
+import { startTestServer } from "./helpers/testServer.js";
 
 test("automation routes handle identify-price, listing generation, aging repricing, shipping, and action queue", async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-automation-"));
-  const dbPath = join(tempDir, "cardvault-test.db");
-  const port = 3950 + Math.floor(Math.random() * 100);
-  const baseUrl = `http://127.0.0.1:${port}`;
-
-  const server = spawn(process.execPath, ["server.js"], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      PORT: String(port),
-      CARDVAULT_DB_PATH: dbPath,
-      // Force the deterministic simulator so the automation pipeline produces
-      // stable pricing output without needing eBay credentials in CI.
-      PRICING_SOURCE: "sportscardspro",
-    },
-    stdio: "ignore",
-  });
-
-  t.after(async () => {
-    if (!server.killed) {
-      server.kill("SIGTERM");
-    }
-    await new Promise((resolve) => server.once("exit", resolve));
-    await rm(tempDir, { recursive: true, force: true });
-  });
-
-  await waitForServer(baseUrl);
+  const { baseUrl } = await startTestServer(t, { dirPrefix: "cardvault-automation-", env: { PRICING_SOURCE: "sportscardspro" } });
 
   const itemResponse = await fetch(`${baseUrl}/api/items`, {
     method: "POST",
@@ -141,30 +100,7 @@ test("automation routes handle identify-price, listing generation, aging reprici
 });
 
 test("shipping automation records tracking against the order marketplace channel", async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-automation-shipping-"));
-  const dbPath = join(tempDir, "cardvault-test.db");
-  const port = 4050 + Math.floor(Math.random() * 100);
-  const baseUrl = `http://127.0.0.1:${port}`;
-
-  const server = spawn(process.execPath, ["server.js"], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      PORT: String(port),
-      CARDVAULT_DB_PATH: dbPath,
-    },
-    stdio: "ignore",
-  });
-
-  t.after(async () => {
-    if (!server.killed) {
-      server.kill("SIGTERM");
-    }
-    await new Promise((resolve) => server.once("exit", resolve));
-    await rm(tempDir, { recursive: true, force: true });
-  });
-
-  await waitForServer(baseUrl);
+  const { baseUrl, dbPath } = await startTestServer(t, { dirPrefix: "cardvault-automation-shipping-" });
 
   await fetch(`${baseUrl}/api/items`, {
     method: "POST",
@@ -261,30 +197,7 @@ test("shipping automation records tracking against the order marketplace channel
 });
 
 test("shipping automation uses configured provider rate and label metadata", async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-automation-shipping-provider-"));
-  const dbPath = join(tempDir, "cardvault-test.db");
-  const port = 4100 + Math.floor(Math.random() * 100);
-  const baseUrl = `http://127.0.0.1:${port}`;
-
-  const server = spawn(process.execPath, ["server.js"], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      PORT: String(port),
-      CARDVAULT_DB_PATH: dbPath,
-    },
-    stdio: "ignore",
-  });
-
-  t.after(async () => {
-    if (!server.killed) {
-      server.kill("SIGTERM");
-    }
-    await new Promise((resolve) => server.once("exit", resolve));
-    await rm(tempDir, { recursive: true, force: true });
-  });
-
-  await waitForServer(baseUrl);
+  const { baseUrl, dbPath } = await startTestServer(t, { dirPrefix: "cardvault-automation-shipping-provider-" });
 
   const db = new Database(dbPath);
   try {
@@ -401,30 +314,7 @@ test("shipping automation uses configured provider rate and label metadata", asy
 });
 
 test("shipping automation is idempotent for the same order", async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-automation-idempotent-"));
-  const dbPath = join(tempDir, "cardvault-test.db");
-  const port = 4150 + Math.floor(Math.random() * 100);
-  const baseUrl = `http://127.0.0.1:${port}`;
-
-  const server = spawn(process.execPath, ["server.js"], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      PORT: String(port),
-      CARDVAULT_DB_PATH: dbPath,
-    },
-    stdio: "ignore",
-  });
-
-  t.after(async () => {
-    if (!server.killed) {
-      server.kill("SIGTERM");
-    }
-    await new Promise((resolve) => server.once("exit", resolve));
-    await rm(tempDir, { recursive: true, force: true });
-  });
-
-  await waitForServer(baseUrl);
+  const { baseUrl, dbPath } = await startTestServer(t, { dirPrefix: "cardvault-automation-idempotent-" });
 
   const itemResponse = await fetch(`${baseUrl}/api/items`, {
     method: "POST",
@@ -505,30 +395,7 @@ test("shipping automation is idempotent for the same order", async (t) => {
 });
 
 test("orders API includes shipment tracking after automated shipping", async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-automation-orders-"));
-  const dbPath = join(tempDir, "cardvault-test.db");
-  const port = 4250 + Math.floor(Math.random() * 100);
-  const baseUrl = `http://127.0.0.1:${port}`;
-
-  const server = spawn(process.execPath, ["server.js"], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      PORT: String(port),
-      CARDVAULT_DB_PATH: dbPath,
-    },
-    stdio: "ignore",
-  });
-
-  t.after(async () => {
-    if (!server.killed) {
-      server.kill("SIGTERM");
-    }
-    await new Promise((resolve) => server.once("exit", resolve));
-    await rm(tempDir, { recursive: true, force: true });
-  });
-
-  await waitForServer(baseUrl);
+  const { baseUrl } = await startTestServer(t, { dirPrefix: "cardvault-automation-orders-" });
 
   const itemResponse = await fetch(`${baseUrl}/api/items`, {
     method: "POST",
@@ -599,30 +466,7 @@ test("orders API includes shipment tracking after automated shipping", async (t)
 });
 
 test("shipping automation repairs order state when a shipment already exists", async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-automation-repair-"));
-  const dbPath = join(tempDir, "cardvault-test.db");
-  const port = 4350 + Math.floor(Math.random() * 100);
-  const baseUrl = `http://127.0.0.1:${port}`;
-
-  const server = spawn(process.execPath, ["server.js"], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      PORT: String(port),
-      CARDVAULT_DB_PATH: dbPath,
-    },
-    stdio: "ignore",
-  });
-
-  t.after(async () => {
-    if (!server.killed) {
-      server.kill("SIGTERM");
-    }
-    await new Promise((resolve) => server.once("exit", resolve));
-    await rm(tempDir, { recursive: true, force: true });
-  });
-
-  await waitForServer(baseUrl);
+  const { baseUrl, dbPath } = await startTestServer(t, { dirPrefix: "cardvault-automation-repair-" });
 
   const itemResponse = await fetch(`${baseUrl}/api/items`, {
     method: "POST",
@@ -721,30 +565,7 @@ test("shipping automation repairs order state when a shipment already exists", a
 });
 
 test("manual order creation backfills the linked sale order_id", async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-orders-sale-link-"));
-  const dbPath = join(tempDir, "cardvault-test.db");
-  const port = 4450 + Math.floor(Math.random() * 100);
-  const baseUrl = `http://127.0.0.1:${port}`;
-
-  const server = spawn(process.execPath, ["server.js"], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      PORT: String(port),
-      CARDVAULT_DB_PATH: dbPath,
-    },
-    stdio: "ignore",
-  });
-
-  t.after(async () => {
-    if (!server.killed) {
-      server.kill("SIGTERM");
-    }
-    await new Promise((resolve) => server.once("exit", resolve));
-    await rm(tempDir, { recursive: true, force: true });
-  });
-
-  await waitForServer(baseUrl);
+  const { baseUrl } = await startTestServer(t, { dirPrefix: "cardvault-orders-sale-link-" });
 
   const itemResponse = await fetch(`${baseUrl}/api/items`, {
     method: "POST",
@@ -842,30 +663,7 @@ test("manual order creation backfills the linked sale order_id", async (t) => {
 });
 
 test("manual sale creation backfills the linked order sale_id", async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-sales-order-link-"));
-  const dbPath = join(tempDir, "cardvault-test.db");
-  const port = 4550 + Math.floor(Math.random() * 100);
-  const baseUrl = `http://127.0.0.1:${port}`;
-
-  const server = spawn(process.execPath, ["server.js"], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      PORT: String(port),
-      CARDVAULT_DB_PATH: dbPath,
-    },
-    stdio: "ignore",
-  });
-
-  t.after(async () => {
-    if (!server.killed) {
-      server.kill("SIGTERM");
-    }
-    await new Promise((resolve) => server.once("exit", resolve));
-    await rm(tempDir, { recursive: true, force: true });
-  });
-
-  await waitForServer(baseUrl);
+  const { baseUrl } = await startTestServer(t, { dirPrefix: "cardvault-sales-order-link-" });
 
   const itemResponse = await fetch(`${baseUrl}/api/items`, {
     method: "POST",
@@ -943,30 +741,7 @@ test("manual sale creation backfills the linked order sale_id", async (t) => {
 });
 
 test("manual sale creation closes out linked listing and item state", async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-sales-listing-close-"));
-  const dbPath = join(tempDir, "cardvault-test.db");
-  const port = 4650 + Math.floor(Math.random() * 100);
-  const baseUrl = `http://127.0.0.1:${port}`;
-
-  const server = spawn(process.execPath, ["server.js"], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      PORT: String(port),
-      CARDVAULT_DB_PATH: dbPath,
-    },
-    stdio: "ignore",
-  });
-
-  t.after(async () => {
-    if (!server.killed) {
-      server.kill("SIGTERM");
-    }
-    await new Promise((resolve) => server.once("exit", resolve));
-    await rm(tempDir, { recursive: true, force: true });
-  });
-
-  await waitForServer(baseUrl);
+  const { baseUrl } = await startTestServer(t, { dirPrefix: "cardvault-sales-listing-close-" });
 
   const itemResponse = await fetch(`${baseUrl}/api/items`, {
     method: "POST",
@@ -1048,30 +823,7 @@ test("manual sale creation closes out linked listing and item state", async (t) 
 });
 
 test("manual order creation closes out linked listing and item state", async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "cardvault-orders-listing-close-"));
-  const dbPath = join(tempDir, "cardvault-test.db");
-  const port = 4750 + Math.floor(Math.random() * 100);
-  const baseUrl = `http://127.0.0.1:${port}`;
-
-  const server = spawn(process.execPath, ["server.js"], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      PORT: String(port),
-      CARDVAULT_DB_PATH: dbPath,
-    },
-    stdio: "ignore",
-  });
-
-  t.after(async () => {
-    if (!server.killed) {
-      server.kill("SIGTERM");
-    }
-    await new Promise((resolve) => server.once("exit", resolve));
-    await rm(tempDir, { recursive: true, force: true });
-  });
-
-  await waitForServer(baseUrl);
+  const { baseUrl } = await startTestServer(t, { dirPrefix: "cardvault-orders-listing-close-" });
 
   const itemResponse = await fetch(`${baseUrl}/api/items`, {
     method: "POST",
