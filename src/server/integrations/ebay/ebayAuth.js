@@ -161,9 +161,15 @@ export function getEbayStatus() {
   const creds = getEbayCredentials();
   const token = setting("ebay_access_token");
   const expires = setting("ebay_token_expires");
+  const refresh = setting("ebay_refresh_token");
+  // An expired access token doesn't mean disconnected: every real API call
+  // goes through getAccessToken(), which silently refreshes as long as a
+  // refresh token is on file. Treating "expired" as "disconnected" here
+  // made the adapter fall back to a fake stub publish instead of refreshing.
+  const tokenValid = !!token && !!expires && new Date(expires) > new Date();
   return {
     configured: !!creds,
-    connected: !!token && !!expires && new Date(expires) > new Date(),
+    connected: tokenValid || !!refresh,
     sandbox: creds?.sandbox ?? true,
     expiresAt: expires,
   };

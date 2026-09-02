@@ -76,17 +76,22 @@ export default function Camera({ side, image, onCapture, onRetake, compact }) {
   return (
     <div style={{ flex: "1 1 140px", minWidth: 120, textAlign: "center", position: "relative", padding: 10, borderRadius: "var(--radius-lg)", border: "2px dashed var(--brd)", background: "var(--s1)" }}>
       <span className="badge badge-dim" style={{ position: "absolute", top: 8, left: 8, fontSize: 9 }}>{side}</span>
+      {/* Rendered unconditionally so vRef is attached before start() acquires the stream. */}
+      <video
+        ref={vRef}
+        style={{ display: live ? "block" : "none", width: "100%", maxHeight: mH, borderRadius: "var(--radius)", objectFit: "cover", background: "#000" }}
+        playsInline
+        muted
+        autoPlay
+      />
+      <canvas ref={cRef} style={{ display: "none" }} />
       {live ? (
-        <>
-          <video ref={vRef} style={{ width: "100%", maxHeight: mH, borderRadius: "var(--radius)", objectFit: "cover", background: "#000" }} playsInline muted autoPlay />
-          <canvas ref={cRef} style={{ display: "none" }} />
-          <div className="flex gap-8 justify-center mt-8">
-            <button onClick={snap} aria-label="Take photo" style={{ width: 48, height: 48, borderRadius: 2, border: "2px solid var(--acc)", background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transform: "rotate(45deg)" }}>
-              <div style={{ width: 24, height: 24, borderRadius: 0, background: "var(--acc)", transform: "rotate(-45deg)" }} />
-            </button>
-            <button className="btn btn-ghost btn-sm" onClick={stop}><IconX size={14} /></button>
-          </div>
-        </>
+        <div className="flex gap-8 justify-center mt-8">
+          <button onClick={snap} aria-label="Take photo" style={{ width: 48, height: 48, borderRadius: 2, border: "2px solid var(--acc)", background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transform: "rotate(45deg)" }}>
+            <div style={{ width: 24, height: 24, borderRadius: 0, background: "var(--acc)", transform: "rotate(-45deg)" }} />
+          </button>
+          <button className="btn btn-ghost btn-sm" onClick={stop}><IconX size={14} /></button>
+        </div>
       ) : (
         <div style={{ padding: compact ? "12px 0" : "20px 0" }}>
           <div style={{ fontSize: compact ? 28 : 40, opacity: .25, marginBottom: 8 }}>{side === "front" ? "\ud83c\udca0" : "\ud83c\udca1"}</div>

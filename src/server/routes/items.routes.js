@@ -1,4 +1,4 @@
-import { all, get, run } from "../database.js";
+import { all, get, run, runInImmediateTransaction } from "../database.js";
 import { ITEM_FIELD_MAP } from "../mappers/fieldMaps.js";
 import {
   json,
@@ -273,11 +273,12 @@ export function registerItemRoutes(app) {
       if (items.length > 200) {
         return res.status(400).json({ error: "max 200 items per bulk request" });
       }
-      const created = [];
       for (const raw of items) {
         if (!raw.name && !raw.card_name) {
           return res.status(400).json({ error: "name required for each item" });
         }
+      }
+      const created = runInImmediateTransaction(() => items.map((raw) => {
         const body = toSnake(raw);
         const id = body.id || uid();
         const values = [
@@ -355,8 +356,8 @@ export function registerItemRoutes(app) {
            VALUES (${placeholders})`,
           values,
         );
-        created.push(toCamel(get("SELECT * FROM user_items WHERE id = ?", [id]), ITEM_FIELD_MAP));
-      }
+        return toCamel(get("SELECT * FROM user_items WHERE id = ?", [id]), ITEM_FIELD_MAP);
+      }));
       res.status(201).json({ created, count: created.length });
     } catch (error) {
       res.status(500).json({ error: error.message });

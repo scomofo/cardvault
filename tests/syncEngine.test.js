@@ -177,7 +177,23 @@ test("diffById compares timestamps, key counts, nested objects, and primitives",
     [{ id: "a", name: "old", updatedAt: "1" }],
     [{ id: "a", name: "new", updatedAt: "1" }],
   );
-  assert.equal(stamped.changed.length, 0, "matching updatedAt short-circuits field comparison");
+  assert.equal(
+    stamped.changed.length,
+    1,
+    "matching updatedAt falls through to a field comparison instead of hiding real edits",
+  );
+
+  const untouched = diffById(
+    [{ id: "a", name: "same", updatedAt: "1" }],
+    [{ id: "a", name: "same", updatedAt: "1" }],
+  );
+  assert.equal(untouched.changed.length, 0, "matching updatedAt and identical fields is still unchanged");
+
+  const differentTimestamp = diffById(
+    [{ id: "a", name: "same", updatedAt: "1" }],
+    [{ id: "a", name: "same", updatedAt: "2" }],
+  );
+  assert.equal(differentTimestamp.changed.length, 1, "a different updatedAt is still a fast-path change");
 
   const extraKey = diffById([{ id: "a", name: "x" }], [{ id: "a", name: "x", note: "hi" }]);
   assert.deepEqual(extraKey.changed.map((item) => item.id), ["a"]);

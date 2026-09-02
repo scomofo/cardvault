@@ -20,4 +20,7 @@ contextBridge.exposeInMainWorld("cardvault", {
     ipcRenderer.on("cardvault:scan-image", listener);
     return () => ipcRenderer.removeListener("cardvault:scan-image", listener);
   },
+  openExternal: (url) => {
+    ipcRenderer.send("cardvault:open-external", String(url || ""));
+  },
 });

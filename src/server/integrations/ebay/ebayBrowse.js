@@ -30,7 +30,7 @@ export async function searchBrowse(query, { limit = 10, fetcher = fetch, timeout
       method: "GET",
       headers: {
         Authorization: `Bearer ${token}`,
-        "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+        "X-EBAY-C-MARKETPLACE-ID": "EBAY_CA", // matches the CAD currency the app assumes everywhere else
         Accept: "application/json",
       },
       signal: controller.signal,

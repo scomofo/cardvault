@@ -13,7 +13,15 @@ function EbayConnectionSection({ onStatusChange }) {
   const callbackUrl = `${window.location.origin}/api/ebay/callback`;
 
   useEffect(() => {
-    fetch(apiPath("/ebay/status")).then((r) => r.json()).then(setStatus).catch(() => {});
+    const refreshStatus = () => {
+      fetch(apiPath("/ebay/status")).then((r) => r.json()).then(setStatus).catch(() => {});
+    };
+    refreshStatus();
+    // The desktop app authorizes eBay in the system browser (see authorize
+    // below), which doesn't navigate this window, so pick up the new status
+    // when the user returns to it instead of only fetching once on mount.
+    window.addEventListener("focus", refreshStatus);
+    return () => window.removeEventListener("focus", refreshStatus);
   }, []);
 
   const saveCreds = async () => {
@@ -38,7 +46,20 @@ function EbayConnectionSection({ onStatusChange }) {
     setSaving(false);
   };
 
-  const authorize = () => { window.location.href = apiPath("/ebay/auth"); };
+  const authorize = () => {
+    const authUrl = `${window.location.origin}${apiPath("/ebay/auth")}`;
+    // In the desktop app, eBay's login page must never load inside the app
+    // window (its preload bridge and IPC channels would be reachable from
+    // eBay's page); open the system browser instead and let the local
+    // server's own redirect finish the flow. On the web, navigating the tab
+    // is the normal OAuth flow.
+    if (window.cardvault?.openExternal) {
+      window.cardvault.openExternal(authUrl);
+      toast.info("Continue in your browser, then come back here.");
+    } else {
+      window.location.href = authUrl;
+    }
+  };
 
   const disconnect = async () => {
     if (!window.confirm("Disconnect eBay?")) return;

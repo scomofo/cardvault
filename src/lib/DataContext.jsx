@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { loadData, loadString, saveData, saveString } from "./storage";
 import { scheduleAuctionNotification, clearAllTimers } from "./notifications";
 import {
@@ -52,76 +52,78 @@ export function DataProvider({ children }) {
     createSyncEngine({ onSyncStateChange: setSyncing }),
   );
 
-  const scheduleCollectionSync = (key, api, current) =>
-    syncEngineRef.current.scheduleCollectionSync(key, api, current);
-
-  const setCatalog = createCollectionSetter({
+  // Each setter's identity must stay stable across renders (useCallback with
+  // no deps): syncEngineRef, useServerRef, and the useState dispatchers are
+  // all reference-stable, so this is safe. An unstable identity here used to
+  // retrigger any effect that lists a setter as a dependency on every
+  // render, e.g. the sales view's server-state refresh looping forever.
+  const setCatalog = useCallback(createCollectionSetter({
     key: "catalog",
     persist: (next) => saveData("catalog", next),
-    scheduleSync: (key, next) => scheduleCollectionSync(key, itemsAPI, next),
+    scheduleSync: (key, next) => syncEngineRef.current.scheduleCollectionSync(key, itemsAPI, next),
     setState: _setCatalog,
     useServerRef,
-  });
+  }), []);
 
-  const setSales = createCollectionSetter({
+  const setSales = useCallback(createCollectionSetter({
     key: "sales",
     persist: (next) => saveData("sales", next),
-    scheduleSync: (key, next) => scheduleCollectionSync(key, salesAPI, next),
+    scheduleSync: (key, next) => syncEngineRef.current.scheduleCollectionSync(key, salesAPI, next),
     setState: _setSales,
     useServerRef,
-  });
+  }), []);
 
-  const setOrders = createCollectionSetter({
+  const setOrders = useCallback(createCollectionSetter({
     key: "orders",
     persist: (next) => saveData("orders", next),
-    scheduleSync: (key, next) => scheduleCollectionSync(key, ordersAPI, next),
+    scheduleSync: (key, next) => syncEngineRef.current.scheduleCollectionSync(key, ordersAPI, next),
     setState: _setOrders,
     useServerRef,
-  });
+  }), []);
 
-  const setTrades = createCollectionSetter({
+  const setTrades = useCallback(createCollectionSetter({
     key: "trades",
     persist: (next) => saveData("trades", next),
-    scheduleSync: (key, next) => scheduleCollectionSync(key, tradesAPI, next),
+    scheduleSync: (key, next) => syncEngineRef.current.scheduleCollectionSync(key, tradesAPI, next),
     setState: _setTrades,
     useServerRef,
-  });
+  }), []);
 
-  const setWatchlist = createCollectionSetter({
+  const setWatchlist = useCallback(createCollectionSetter({
     key: "watchlist",
     persist: (next) => saveData("watchlist", next),
     scheduleSync: (key, next) =>
-      scheduleCollectionSync(key, watchlistAPI, next),
+      syncEngineRef.current.scheduleCollectionSync(key, watchlistAPI, next),
     setState: _setWatchlist,
     useServerRef,
-  });
+  }), []);
 
-  const setGradings = createCollectionSetter({
+  const setGradings = useCallback(createCollectionSetter({
     key: "gradings",
     persist: (next) => saveData("gradings", next),
-    scheduleSync: (key, next) => scheduleCollectionSync(key, gradingsAPI, next),
+    scheduleSync: (key, next) => syncEngineRef.current.scheduleCollectionSync(key, gradingsAPI, next),
     setState: _setGradings,
     useServerRef,
-  });
+  }), []);
 
-  const setListings = createCollectionSetter({
+  const setListings = useCallback(createCollectionSetter({
     key: "listings",
     persist: (next) => saveData("listings", next),
-    scheduleSync: (key, next) => scheduleCollectionSync(key, listingsAPI, next),
+    scheduleSync: (key, next) => syncEngineRef.current.scheduleCollectionSync(key, listingsAPI, next),
     setState: _setListings,
     useServerRef,
-  });
+  }), []);
 
-  const setPurchases = createCollectionSetter({
+  const setPurchases = useCallback(createCollectionSetter({
     key: "purchases",
     persist: (next) => saveData("purchases", next),
     scheduleSync: (key, next) =>
-      scheduleCollectionSync(key, purchasesAPI, next),
+      syncEngineRef.current.scheduleCollectionSync(key, purchasesAPI, next),
     setState: _setPurchases,
     useServerRef,
-  });
+  }), []);
 
-  const setUserName = (value) => {
+  const setUserName = useCallback((value) => {
     _setUserName(value);
     saveString("user", value);
     if (useServerRef.current) {
@@ -131,9 +133,9 @@ export function DataProvider({ children }) {
         value,
       );
     }
-  };
+  }, []);
 
-  const setShipFrom = (value) => {
+  const setShipFrom = useCallback((value) => {
     _setShipFrom(value);
     saveString("addr", value);
     if (useServerRef.current) {
@@ -143,7 +145,7 @@ export function DataProvider({ children }) {
         value,
       );
     }
-  };
+  }, []);
 
   async function migrate(localData) {
     await migrateAPI.send({
@@ -242,7 +244,7 @@ export function DataProvider({ children }) {
     // Run once after initial load; subsequent catalog changes don't retrigger.
   }, [loading]);
 
-  const value = {
+  const value = useMemo(() => ({
     catalog,
     setCatalog,
     sales,
@@ -266,7 +268,19 @@ export function DataProvider({ children }) {
     useServer,
     loading,
     syncing,
-  };
+  }), [
+    catalog, setCatalog,
+    sales, setSales,
+    orders, setOrders,
+    trades, setTrades,
+    watchlist, setWatchlist,
+    gradings, setGradings,
+    listings, setListings,
+    purchases, setPurchases,
+    userName, setUserName,
+    shipFrom, setShipFrom,
+    useServer, loading, syncing,
+  ]);
 
   return <DataCtx.Provider value={value}>{children}</DataCtx.Provider>;
 }

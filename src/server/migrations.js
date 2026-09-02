@@ -99,7 +99,7 @@ export function runMigrations(db) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS cv_scans (
       id TEXT PRIMARY KEY,
-      item_id TEXT REFERENCES user_items(id),
+      item_id TEXT REFERENCES user_items(id) ON DELETE SET NULL,
       centering_lr TEXT,
       centering_tb TEXT,
       centering_score REAL,
@@ -158,6 +158,173 @@ export function runMigrations(db) {
       created_at TEXT DEFAULT (datetime('now'))
     );
   `);
+
+  // sales.card_id, listings.card_id, orders.sale_id/listing_id/item_id,
+  // shipments.item_id, and cv_scans.item_id were declared with no ON DELETE
+  // action, so deleting a card that was ever sold, listed, or scanned fails
+  // with a raw FOREIGN KEY constraint error instead of detaching the history
+  // row that should survive it. SQLite can't ALTER a foreign key's ON DELETE
+  // action in place, so rebuild each affected table once (guarded by
+  // inspecting the live schema, so this only runs a single time per DB).
+  const foreignKeyOnDelete = (table, column) =>
+    db.prepare(`PRAGMA foreign_key_list(${table})`).all()
+      .find((fk) => fk.from === column)?.on_delete;
+
+  const rebuildTableWithOnDeleteSetNull = (table, createRebuildTableSql) => {
+    const rebuildTable = `${table}__rebuild`;
+    const columnList = getColumns(table).join(", ");
+    // Any view whose definition names this table goes stale the instant the
+    // table is dropped, and SQLite re-validates every view on the next
+    // schema change (even one inside the same transaction) — so it has to
+    // be dropped and recreated around the rebuild, not just left alone.
+    const dependentViews = db.prepare(`SELECT name, sql FROM sqlite_master WHERE type = 'view'`)
+      .all()
+      .filter((view) => new RegExp(`\\b${table}\\b`).test(view.sql));
+    const wasForeignKeysOn = db.pragma("foreign_keys", { simple: true }) === 1;
+    if (wasForeignKeysOn) db.pragma("foreign_keys = OFF");
+    try {
+      db.transaction(() => {
+        for (const view of dependentViews) db.exec(`DROP VIEW IF EXISTS ${view.name}`);
+        db.exec(createRebuildTableSql);
+        db.exec(`INSERT INTO ${rebuildTable} (${columnList}) SELECT ${columnList} FROM ${table}`);
+        db.exec(`DROP TABLE ${table}`);
+        db.exec(`ALTER TABLE ${rebuildTable} RENAME TO ${table}`);
+        for (const view of dependentViews) db.exec(view.sql);
+      })();
+    } finally {
+      if (wasForeignKeysOn) db.pragma("foreign_keys = ON");
+    }
+  };
+
+  if (foreignKeyOnDelete("sales", "card_id") !== "SET NULL") {
+    rebuildTableWithOnDeleteSetNull("sales", `
+      CREATE TABLE sales__rebuild (
+        id TEXT PRIMARY KEY,
+        card_id TEXT REFERENCES user_items(id) ON DELETE SET NULL,
+        order_id TEXT,
+        card_name TEXT,
+        card_set TEXT,
+        sale_price REAL NOT NULL,
+        cost_basis REAL DEFAULT 0,
+        platform TEXT,
+        buyer_handle TEXT,
+        fees REAL DEFAULT 0,
+        shipping_cost REAL DEFAULT 0,
+        packaging_cost REAL DEFAULT 0,
+        grading_cost REAL DEFAULT 0,
+        tax_collected REAL DEFAULT 0,
+        payout_amount REAL DEFAULT 0,
+        net_profit REAL DEFAULT 0,
+        tracking_number TEXT,
+        listing_id TEXT,
+        date TEXT DEFAULT (datetime('now'))
+      );
+    `);
+  }
+
+  if (foreignKeyOnDelete("listings", "card_id") !== "SET NULL") {
+    rebuildTableWithOnDeleteSetNull("listings", `
+      CREATE TABLE listings__rebuild (
+        id TEXT PRIMARY KEY,
+        card_id TEXT REFERENCES user_items(id) ON DELETE SET NULL,
+        external_listing_id TEXT,
+        card_name TEXT,
+        card_set TEXT,
+        card_number TEXT,
+        platform TEXT NOT NULL,
+        listing_title TEXT,
+        listing_description TEXT,
+        category_path TEXT,
+        item_specifics TEXT,
+        shipping_profile TEXT,
+        image_count INTEGER DEFAULT 0,
+        automation_state TEXT DEFAULT 'draft',
+        pricing_strategy TEXT DEFAULT 'market',
+        format TEXT DEFAULT 'fixed',
+        start_price REAL,
+        buy_now_price REAL,
+        auction_end_date TEXT,
+        shipping REAL DEFAULT 0,
+        shipping_weight_oz REAL DEFAULT 0,
+        export_batch_id TEXT,
+        current_bid REAL,
+        quantity INTEGER DEFAULT 1,
+        status TEXT DEFAULT 'active',
+        publish_status TEXT DEFAULT 'draft',
+        publish_error TEXT,
+        last_sync_at TEXT,
+        sold_price REAL,
+        sold_date TEXT,
+        notes TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
+  }
+
+  if (foreignKeyOnDelete("orders", "sale_id") !== "SET NULL") {
+    rebuildTableWithOnDeleteSetNull("orders", `
+      CREATE TABLE orders__rebuild (
+        id TEXT PRIMARY KEY,
+        sale_id TEXT REFERENCES sales(id) ON DELETE SET NULL,
+        listing_id TEXT REFERENCES listings(id) ON DELETE SET NULL,
+        item_id TEXT REFERENCES user_items(id) ON DELETE SET NULL,
+        platform TEXT NOT NULL,
+        external_order_id TEXT,
+        buyer_handle TEXT,
+        sale_price REAL DEFAULT 0,
+        fees REAL DEFAULT 0,
+        shipping_charge REAL DEFAULT 0,
+        tax_collected REAL DEFAULT 0,
+        destination_country TEXT DEFAULT 'CA',
+        destination_postal_code TEXT,
+        payment_status TEXT DEFAULT 'paid',
+        fulfillment_status TEXT DEFAULT 'pending',
+        sold_at TEXT DEFAULT (datetime('now')),
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
+  }
+
+  if (foreignKeyOnDelete("shipments", "item_id") !== "SET NULL") {
+    rebuildTableWithOnDeleteSetNull("shipments", `
+      CREATE TABLE shipments__rebuild (
+        id TEXT PRIMARY KEY,
+        order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+        item_id TEXT REFERENCES user_items(id) ON DELETE SET NULL,
+        carrier TEXT,
+        service_level TEXT,
+        package_type TEXT,
+        label_status TEXT DEFAULT 'pending',
+        tracking_number TEXT,
+        shipping_cost REAL DEFAULT 0,
+        packaging_cost REAL DEFAULT 0,
+        weight_oz REAL DEFAULT 0,
+        purchased_at TEXT,
+        shipped_at TEXT,
+        delivered_at TEXT,
+        label_url TEXT,
+        status TEXT DEFAULT 'pending',
+        provider TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
+  }
+
+  if (foreignKeyOnDelete("cv_scans", "item_id") !== "SET NULL") {
+    rebuildTableWithOnDeleteSetNull("cv_scans", `
+      CREATE TABLE cv_scans__rebuild (
+        id TEXT PRIMARY KEY,
+        item_id TEXT REFERENCES user_items(id) ON DELETE SET NULL,
+        centering_lr TEXT,
+        centering_tb TEXT,
+        centering_score REAL,
+        detection_confidence REAL,
+        warp_quality REAL,
+        processing_ms INTEGER,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
+  }
 }
 
 export function createIndexes(db) {

@@ -95,6 +95,14 @@ export async function fetchEbayBrowsePrice(item, { search = searchBrowse, limit 
         grade: null,
         conditionBucket: "raw-active",
       })),
-    rawPayload: { query, total: results.total, itemCount: results.items.length },
+    // The Browse call is scoped to EBAY_CA, so results should already be
+    // CAD; recorded here rather than trusted blindly, since price_snapshots
+    // has no currency column of its own to convert against.
+    rawPayload: {
+      query,
+      total: results.total,
+      itemCount: results.items.length,
+      currencies: [...new Set(results.items.map((entry) => entry.currency).filter(Boolean))],
+    },
   });
 }

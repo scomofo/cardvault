@@ -1,4 +1,4 @@
-import { all, get, run } from "../database.js";
+import { all, get, run, runInImmediateTransaction } from "../database.js";
 import { SALE_FIELD_MAP } from "../mappers/fieldMaps.js";
 import {
   toCamel,
@@ -91,7 +91,7 @@ export function registerSalesRoutes(app) {
       // listing/item side effects already ran on the original create.
       const existingSale = body.id ? get("SELECT * FROM sales WHERE id = ?", [body.id]) : null;
       if (existingSale) {
-        const failure = applySaleUpdate(existingSale.id, existingSale, body);
+        const failure = runInImmediateTransaction(() => applySaleUpdate(existingSale.id, existingSale, body));
         if (failure) return res.status(failure.status).json({ error: failure.error });
         return res.json(toCamel(get("SELECT * FROM sales WHERE id = ?", [existingSale.id]), SALE_FIELD_MAP));
       }
@@ -177,64 +177,65 @@ export function registerSalesRoutes(app) {
       if (linkedOrder?.sale_id) {
         return res.status(409).json({ error: "order already linked to a sale" });
       }
-      run(
-        `INSERT INTO sales (id, card_id, order_id, card_name, card_set, sale_price,
-         cost_basis, platform, buyer_handle, fees, shipping_cost, packaging_cost,
-         grading_cost, tax_collected, payout_amount, net_profit, listing_id, date)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        [
-          id,
-          linkedCardId,
-          linkedOrderId,
-          body.card_name,
-          body.card_set,
-          salePrice,
-          body.cost_basis || 0,
-          resolvedPlatform,
-          resolvedBuyerHandle,
-          body.fees || 0,
-          body.shipping_cost || 0,
-          body.packaging_cost || 0,
-          body.grading_cost || 0,
-          body.tax_collected || 0,
-          body.payout_amount || 0,
-          body.net_profit || 0,
-          linkedListingId,
-          saleDate,
-        ],
-      );
-      if (linkedOrderId) {
+      const saved = runInImmediateTransaction(() => {
         run(
-          `UPDATE orders
-           SET sale_id = COALESCE(sale_id, ?)
-           WHERE id = ?`,
-          [id, linkedOrderId],
-        );
-      }
-      if (linkedListingId) {
-        markListingSold(linkedListingId, salePrice, saleDate);
-      }
-      if (linkedCardId) {
-        run(
-          `UPDATE user_items
-           SET status = 'sold',
-               listing_status = CASE WHEN ? IS NOT NULL THEN 'ended' ELSE listing_status END,
-               sale_status = 'sold',
-               profit_realized = ?,
-               sold_at = ?,
-               updated_at = datetime('now')
-            WHERE id = ?`,
+          `INSERT INTO sales (id, card_id, order_id, card_name, card_set, sale_price,
+           cost_basis, platform, buyer_handle, fees, shipping_cost, packaging_cost,
+           grading_cost, tax_collected, payout_amount, net_profit, listing_id, date)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           [
-            linkedListingId,
-            body.net_profit || 0,
-            saleDate,
+            id,
             linkedCardId,
+            linkedOrderId,
+            body.card_name,
+            body.card_set,
+            salePrice,
+            body.cost_basis || 0,
+            resolvedPlatform,
+            resolvedBuyerHandle,
+            body.fees || 0,
+            body.shipping_cost || 0,
+            body.packaging_cost || 0,
+            body.grading_cost || 0,
+            body.tax_collected || 0,
+            body.payout_amount || 0,
+            body.net_profit || 0,
+            linkedListingId,
+            saleDate,
           ],
         );
-      }
-      res
-        .status(201)
-        .json(toCamel(get("SELECT * FROM sales WHERE id = ?", [id]), SALE_FIELD_MAP));
+        if (linkedOrderId) {
+          run(
+            `UPDATE orders
+             SET sale_id = COALESCE(sale_id, ?)
+             WHERE id = ?`,
+            [id, linkedOrderId],
+          );
+        }
+        if (linkedListingId) {
+          markListingSold(linkedListingId, salePrice, saleDate);
+        }
+        if (linkedCardId) {
+          run(
+            `UPDATE user_items
+             SET status = 'sold',
+                 listing_status = CASE WHEN ? IS NOT NULL THEN 'ended' ELSE listing_status END,
+                 sale_status = 'sold',
+                 profit_realized = ?,
+                 sold_at = ?,
+                 updated_at = datetime('now')
+              WHERE id = ?`,
+            [
+              linkedListingId,
+              body.net_profit || 0,
+              saleDate,
+              linkedCardId,
+            ],
+          );
+        }
+        return get("SELECT * FROM sales WHERE id = ?", [id]);
+      });
+      res.status(201).json(toCamel(saved, SALE_FIELD_MAP));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -245,7 +246,7 @@ export function registerSalesRoutes(app) {
       const existing = get("SELECT * FROM sales WHERE id = ?", [req.params.id]);
       if (!existing) return res.status(404).json({ error: "Sale not found" });
 
-      const failure = applySaleUpdate(req.params.id, existing, toSnake(req.body));
+      const failure = runInImmediateTransaction(() => applySaleUpdate(req.params.id, existing, toSnake(req.body)));
       if (failure) return res.status(failure.status).json({ error: failure.error });
 
       res.json(toCamel(get("SELECT * FROM sales WHERE id = ?", [req.params.id]), SALE_FIELD_MAP));
@@ -259,22 +260,25 @@ export function registerSalesRoutes(app) {
       const existing = get("SELECT * FROM sales WHERE id = ?", [req.params.id]);
       if (!existing) return res.status(404).json({ error: "Sale not found" });
 
-      const result = run("DELETE FROM sales WHERE id = ?", [req.params.id]);
-      if (existing.order_id) {
-        run(
-          `UPDATE orders
-           SET sale_id = NULL
-           WHERE id = ?`,
-          [existing.order_id],
-        );
-      }
-      if (existing.listing_id) {
-        restoreListingAfterOperationalDelete(existing.listing_id);
-      }
-      if (existing.card_id) {
-        syncItemState(existing.card_id);
-      }
-      if (result.changes === 0) return res.status(404).json({ error: "Sale not found" });
+      const changes = runInImmediateTransaction(() => {
+        const result = run("DELETE FROM sales WHERE id = ?", [req.params.id]);
+        if (existing.order_id) {
+          run(
+            `UPDATE orders
+             SET sale_id = NULL
+             WHERE id = ?`,
+            [existing.order_id],
+          );
+        }
+        if (existing.listing_id) {
+          restoreListingAfterOperationalDelete(existing.listing_id);
+        }
+        if (existing.card_id) {
+          syncItemState(existing.card_id);
+        }
+        return result.changes;
+      });
+      if (changes === 0) return res.status(404).json({ error: "Sale not found" });
       res.json({ deleted: true });
     } catch (error) {
       res.status(500).json({ error: error.message });

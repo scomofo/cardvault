@@ -16,7 +16,10 @@ config({ path: process.env.CARDVAULT_ENV_FILE || undefined });
 
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
-const HOST = process.env.HOST || "0.0.0.0";
+// Loopback by default so a fresh checkout never exposes the API (and its
+// settings, which include API keys) to the LAN. Set HOST=0.0.0.0 to opt in
+// to phone scanning over Wi-Fi (see .env.example).
+const HOST = process.env.HOST || "127.0.0.1";
 const CV_SERVICE_URL = (process.env.CV_SERVICE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 
 let anthropicKey = getAnthropicApiKey();
@@ -225,8 +228,15 @@ if (existsSync(distDir)) {
 }
 
 export function startServer({ port = PORT, host = HOST } = {}) {
-  return new Promise((resolveStart) => {
-    const server = app.listen(port, host, () => {
+  return new Promise((resolveStart, rejectStart) => {
+    const server = app.listen(port, host);
+    // Without this, EADDRINUSE (a leftover CardVault process, another app
+    // on the port) leaves the promise pending forever — the Electron shell
+    // awaits it before showing a window, so the app would hang with no
+    // window and no error.
+    server.once("error", rejectStart);
+    server.once("listening", () => {
+      server.off("error", rejectStart);
       console.log(`CardVault API running on http://localhost:${port}`);
       for (const url of getNetworkUrls(port)) {
         console.log(`  Network: ${url}`);
@@ -257,6 +267,9 @@ if (isMainModule) {
     };
     process.on("SIGTERM", shutdown);
     process.on("SIGINT", shutdown);
+  }).catch((error) => {
+    console.error(`Failed to start CardVault API on ${HOST}:${PORT}:`, error.message);
+    process.exit(1);
   });
 }
 
