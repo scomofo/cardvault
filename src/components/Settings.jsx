@@ -433,7 +433,11 @@ export default function Settings() {
         ...gradings.map((g) => gradingsAPI.delete(g.id)),
         settingsAPI.update({ userName: "", shipFrom: "" }),
       ]);
-      const failed = results.filter((r) => r.status === "rejected").length;
+      // A 404 means the record is already gone (e.g. a prior attempt
+      // partially succeeded) — treat that as done, not a failure, or a
+      // retry after any real failure could never succeed: every
+      // already-deleted record would report "not found" forever.
+      const failed = results.filter((r) => r.status === "rejected" && r.reason?.status !== 404).length;
       if (failed > 0) {
         toast.error(`${failed} item${failed === 1 ? "" : "s"} failed to delete on the server — try again before assuming your data is gone`);
         return;

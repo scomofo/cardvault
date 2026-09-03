@@ -76,3 +76,35 @@ export async function assertPublicOutboundUrl(rawUrl, label) {
 
   return endpoint;
 }
+
+const MAX_REDIRECTS = 5;
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+
+/**
+ * fetch() that revalidates every redirect hop through assertPublicOutboundUrl
+ * instead of letting fetch follow it automatically — a URL that passed the
+ * check could still 307/308 the request into a private/link-local address
+ * with the same method, body, and auth headers still attached, since a
+ * plain `fetch(validatedUrl, ...)` follows redirects with no further checks.
+ * `endpoint` must already be validated (e.g. via assertPublicOutboundUrl).
+ */
+export async function fetchPublic(endpoint, options, label) {
+  let target = endpoint;
+  let init = { ...options, redirect: "manual" };
+
+  for (let hop = 0; ; hop++) {
+    const response = await fetch(target, init);
+    if (!REDIRECT_STATUSES.has(response.status)) return response;
+
+    const location = response.headers.get("location");
+    if (!location) return response;
+    if (hop >= MAX_REDIRECTS) {
+      throw new Error(`${label} exceeded ${MAX_REDIRECTS} redirects`);
+    }
+
+    target = await assertPublicOutboundUrl(new URL(location, target).href, label);
+    if (response.status === 303 && init.method && init.method !== "GET") {
+      init = { ...init, method: "GET", body: undefined };
+    }
+  }
+}

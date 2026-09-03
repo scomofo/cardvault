@@ -28,7 +28,9 @@ async function request(path, options = {}) {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || `API error ${res.status}`);
+    const apiError = new Error(err.error || `API error ${res.status}`);
+    apiError.status = res.status;
+    throw apiError;
   }
   return res.json();
 }

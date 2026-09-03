@@ -103,11 +103,15 @@ app.use(express.json({ limit: "2mb" }));
 
 // CORS only stops browser-issued cross-origin requests — it does nothing
 // against a bare curl/script on the LAN. Every state-changing API request
-// (everything but GET/HEAD/OPTIONS) must come from this app's own trusted
-// origin (or carry PROXY_TOKEN), the same bar already required for settings
-// and connection writes, so HOST=0.0.0.0 (the documented way to scan from a
-// phone) doesn't leave the whole inventory and marketplace publishing open
-// to anyone on the network.
+// (everything but GET/HEAD/OPTIONS) now requires the same bar already used
+// for settings/connection writes: loopback, or a trusted-LAN source with a
+// matching Origin/Referer. That stops accidental cross-origin writes and a
+// browser-based attacker, but NOT a deliberate one on the same network —
+// Origin/Referer are request headers a bare curl/script can set to whatever
+// it wants, so this is not a real credential. Set PROXY_TOKEN for that; it's
+// the only unspoofable option today, and HOST=0.0.0.0 (the documented way to
+// scan from a phone) without one should be treated as trusting the network,
+// not the request.
 app.use("/api", (req, res, next) => {
   if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
   return requireProtectedConfigWrite(req, res, next);

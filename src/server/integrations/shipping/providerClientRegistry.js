@@ -4,7 +4,7 @@ import {
   parseCanadaPostCreateShipmentResponse,
   parseCanadaPostManifestLinks,
 } from "./canadaPostNativeAdapter.js";
-import { assertPublicOutboundUrl } from "../../outboundUrlGuard.js";
+import { assertPublicOutboundUrl, fetchPublic } from "../../outboundUrlGuard.js";
 
 const DEFAULT_LABEL_PURCHASE_TIMEOUT_MS = 10000;
 const PROVIDER_ERROR_TEXT_LIMIT = 200;
@@ -160,21 +160,23 @@ function nativeCanadaPostEnabled(metadata = {}, rate = {}) {
   return String(mode || "").trim().toLowerCase() === "native";
 }
 
-function canadaPostBaseUrl(metadata = {}) {
+async function canadaPostBaseUrl(metadata = {}) {
   const configuredBase = firstDefined(
     metadata.canadaPostBaseUrl,
     metadata.canada_post_base_url,
     metadata.apiBaseUrl,
     metadata.api_base_url,
   );
-  const environment = String(firstDefined(metadata.environment, metadata.env, "sandbox")).toLowerCase();
-  const base = configuredBase || (environment === "production"
-    ? CANADA_POST_PRODUCTION_BASE_URL
-    : CANADA_POST_DEVELOPMENT_BASE_URL);
+
+  // The hardcoded fallbacks are trusted Canada Post hosts — only a
+  // user-configured override needs the SSRF check.
+  if (!configuredBase) {
+    const environment = String(firstDefined(metadata.environment, metadata.env, "sandbox")).toLowerCase();
+    return new URL(environment === "production" ? CANADA_POST_PRODUCTION_BASE_URL : CANADA_POST_DEVELOPMENT_BASE_URL);
+  }
+
   try {
-    const url = new URL(base);
-    if (!["http:", "https:"].includes(url.protocol)) return null;
-    return url;
+    return await assertPublicOutboundUrl(configuredBase, "Canada Post base");
   } catch {
     return null;
   }
@@ -198,12 +200,12 @@ async function purchaseLabelViaHttp({ connection, metadata, rate, service, shipm
   const timeoutId = setTimeout(() => controller.abort(), labelPurchaseTimeoutMs(metadata, rate));
 
   try {
-    const response = await fetch(endpoint, {
+    const response = await fetchPublic(endpoint, {
       method: "POST",
       headers,
       body: JSON.stringify(purchasePayload({ connection, service, shipment })),
       signal: controller.signal,
-    });
+    }, "Provider label purchase");
     const payload = await readProviderPayload(response, { parseCanadaPostXml });
     if (!response.ok) {
       return failedPurchase(firstDefined(payload.error, payload.message, `Provider label purchase failed (${response.status})`));
@@ -220,7 +222,7 @@ async function purchaseLabelViaHttp({ connection, metadata, rate, service, shipm
 }
 
 async function purchaseLabelViaNativeCanadaPost({ connection, metadata, rate, nativePayload }) {
-  const baseUrl = canadaPostBaseUrl(metadata);
+  const baseUrl = await canadaPostBaseUrl(metadata);
   if (!baseUrl) return failedPurchase("Invalid Canada Post base URL");
 
   const endpoint = new URL(nativePayload.endpointPath, baseUrl);
@@ -234,12 +236,12 @@ async function purchaseLabelViaNativeCanadaPost({ connection, metadata, rate, na
   const timeoutId = setTimeout(() => controller.abort(), labelPurchaseTimeoutMs(metadata, rate));
 
   try {
-    const response = await fetch(endpoint, {
+    const response = await fetchPublic(endpoint, {
       method: "POST",
       headers,
       body: nativePayload.xml,
       signal: controller.signal,
-    });
+    }, "Canada Post Create Shipment");
     const payload = await readProviderPayload(response, { parseCanadaPostXml: true });
     if (!response.ok) {
       return failedPurchase(firstDefined(payload.error, payload.message, `Canada Post Create Shipment failed (${response.status})`));
@@ -277,11 +279,11 @@ async function fetchCanadaPostResource({ url, headers, timeoutMs, accept }) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(url, {
+    const response = await fetchPublic(url, {
       method: "GET",
       headers: { ...headers, Accept: accept },
       signal: controller.signal,
-    });
+    }, "Canada Post manifest resource");
     const contentType = response.headers.get("content-type") || "";
     const bytes = Buffer.from(await response.arrayBuffer());
     if (!response.ok) {
@@ -300,7 +302,7 @@ async function fetchCanadaPostResource({ url, headers, timeoutMs, accept }) {
 }
 
 export async function transmitCanadaPostManifest({ connection, metadata = {}, groupIds = [] } = {}) {
-  const baseUrl = canadaPostBaseUrl(metadata);
+  const baseUrl = await canadaPostBaseUrl(metadata);
   if (!baseUrl) throw new Error("Invalid Canada Post base URL");
 
   const payload = buildCanadaPostTransmitShipmentsPayload({ metadata, groupIds });
@@ -319,12 +321,12 @@ export async function transmitCanadaPostManifest({ connection, metadata = {}, gr
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   let transmitText;
   try {
-    const response = await fetch(transmitUrl, {
+    const response = await fetchPublic(transmitUrl, {
       method: "POST",
       headers: manifestHeaders,
       body: payload.xml,
       signal: controller.signal,
-    });
+    }, "Canada Post Transmit Shipments");
     transmitText = await response.text();
     if (!response.ok) {
       throw new Error(truncateProviderError(transmitText) || `Canada Post Transmit Shipments failed (${response.status})`);

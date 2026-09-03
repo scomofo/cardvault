@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useToast } from "./Toast";
 import { PLATFORMS } from "../lib/constants";
 import { useFeeModels } from "../hooks/useFeeModels";
@@ -31,6 +31,11 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
   const [autoGrading, setAutoGrading] = useState(null);
   const [autoDuplicates, setAutoDuplicates] = useState(null);
   const isListed = detail?.status === "listed" || (detail?.listedOn || []).length > 0;
+  // Sales/orders POST are idempotent upserts by id (server reconciles a
+  // retry against the same record). A retry after markSold's sale succeeds
+  // but its order fails must reuse the same ids, or it mints a duplicate
+  // sale instead of completing the missing order.
+  const saleAttemptRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -73,8 +78,12 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
     const fees = parseFloat(saleFees) || 0;
     const shippingCost = parseFloat(saleShipping) || 0;
     const costBasis = parseFloat(c.costBasis) || 0;
+    if (saleAttemptRef.current?.cardId !== id) {
+      saleAttemptRef.current = { cardId: id, saleId: uid(), orderId: uid() };
+    }
+    const { saleId, orderId } = saleAttemptRef.current;
     const sale = {
-      id: uid(), cardId: id, cardName: c.name, set: c.set,
+      id: saleId, cardId: id, cardName: c.name, set: c.set,
       salePrice: price, costBasis,
       platform: salePlatform, fees, shippingCost,
       netProfit: price - costBasis - fees - shippingCost,
@@ -84,7 +93,7 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
     // Mirrors SalesFlow.completeSale: a sale without an order can never show
     // up under Orders for shipping/tracking, so create both together.
     const order = {
-      id: uid(), saleId: sale.id, listingId: null, itemId: id,
+      id: orderId, saleId: sale.id, listingId: null, itemId: id,
       cardName: c.name, platform: salePlatform, salePrice: price,
       fees, shippingCharge: shippingCost, paymentStatus: "paid",
       fulfillmentStatus: "pending", soldAt: sale.date,
@@ -96,11 +105,12 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
         await salesAPI.create(sale);
         await ordersAPI.create(order);
       } catch (error) {
-        toast.error(`Mark sold failed: ${error.message}`);
+        toast.error(`Mark sold failed: ${error.message}. Try again — it'll pick up where this left off.`);
         return;
       }
     }
 
+    saleAttemptRef.current = null;
     setSales((p) => [sale, ...p]);
     setOrders((p) => [order, ...p]);
     setCatalog((p) => p.map((x) => (x.id === id ? updatedCard : x)));

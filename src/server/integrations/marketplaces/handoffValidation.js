@@ -1,4 +1,4 @@
-import { assertPublicOutboundUrl } from "../../outboundUrlGuard.js";
+import { assertPublicOutboundUrl, fetchPublic } from "../../outboundUrlGuard.js";
 
 const DEFAULT_HANDOFF_STATUS_TIMEOUT_MS = 10000;
 const DEFAULT_HANDOFF_SUBMISSION_TIMEOUT_MS = 10000;
@@ -169,14 +169,14 @@ async function testHandoffStatusEndpoint({ marketplace, connection, metadata, te
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), handoffStatusTimeoutMs(metadata));
   try {
-    const response = await fetch(endpoint, {
+    const response = await fetchPublic(endpoint, {
       method: "GET",
       headers: {
         Accept: "application/json",
         ...handoffAuthHeaders(connection, metadata),
       },
       signal: controller.signal,
-    });
+    }, `${marketplace} handoff status`);
     const payload = await readHandoffPayload(response);
     if (!response.ok) {
       return {
@@ -249,7 +249,7 @@ async function testHandoffSubmissionEndpoint({ adapter, connection, metadata, te
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), handoffSubmissionTimeoutMs(metadata));
   try {
-    const response = await fetch(endpoint, {
+    const response = await fetchPublic(endpoint, {
       method: "POST",
       headers: {
         Accept: "application/json",
@@ -258,7 +258,7 @@ async function testHandoffSubmissionEndpoint({ adapter, connection, metadata, te
       },
       body: JSON.stringify(validationSubmissionPayload(adapter, values)),
       signal: controller.signal,
-    });
+    }, `${adapter.marketplace} handoff submission`);
     const payload = await readHandoffPayload(response);
     if (!response.ok) {
       return {
