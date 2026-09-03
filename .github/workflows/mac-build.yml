@@ -29,6 +29,8 @@ jobs:
 
       - run: npm ci
 
+      - run: npm test
+
       - run: npm run build
 
       - name: Package arm64 DMG
@@ -41,6 +43,12 @@ jobs:
           # dmg:arm64 rather than --arm64: build.mac.target hardcodes both
           # arches, which overrides the flag and also builds the Intel DMG.
           npx electron-builder --mac dmg:arm64 --publish never
+
+      # Sanity-check the packaged .app (Info.plist keys, asar contents,
+      # a 5s launch smoke test) before publishing the DMG as an artifact —
+      # this previously only ran manually, so a broken bundle would only
+      # surface when a user opened the DMG.
+      - run: npm run mac:verify
 
       - uses: actions/upload-artifact@v4
         with:

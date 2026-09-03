@@ -185,35 +185,41 @@ function AppContent() {
       </header>
 
       <main>
-        {view === "dashboard" && <DashboardView onNavigate={handleNavigate} />}
-        {view === "scan" && (
-          <ScanView
-            onNavigate={handleNavigate}
-            pendingImage={pendingScanImage}
-            onPendingImageConsumed={() => setPendingScanImage(null)}
-          />
-        )}
-        {view === "cards" && (
-          <CatalogView focus={pendingFocus} onFocusConsumed={() => setPendingFocus(null)} />
-        )}
-        {view === "sales" && (
-          <SalesFlow
-            onNavigate={handleNavigate}
-            focus={pendingFocus}
-            onFocusConsumed={() => setPendingFocus(null)}
-          />
-        )}
-        {view === "dealer" && <DealerModeView />}
-        {view === "tools" && (
-          <ToolsView
-            tab={toolsTab}
-            setTab={setToolsTab}
-            focus={pendingFocus}
-            onFocusConsumed={() => setPendingFocus(null)}
-          />
-        )}
-        {view === "more" && <MoreView onNavigate={handleNavigate} />}
-        {view === "settings" && <Settings />}
+        {/* Keyed by view so a crash is contained to the tab it happened on —
+            switching tabs remounts a fresh boundary instead of carrying the
+            error state into an unrelated view, and the header/nav above stay
+            usable so the user can navigate away from the broken one. */}
+        <ErrorBoundary key={view} fullScreen={false}>
+          {view === "dashboard" && <DashboardView onNavigate={handleNavigate} />}
+          {view === "scan" && (
+            <ScanView
+              onNavigate={handleNavigate}
+              pendingImage={pendingScanImage}
+              onPendingImageConsumed={() => setPendingScanImage(null)}
+            />
+          )}
+          {view === "cards" && (
+            <CatalogView focus={pendingFocus} onFocusConsumed={() => setPendingFocus(null)} />
+          )}
+          {view === "sales" && (
+            <SalesFlow
+              onNavigate={handleNavigate}
+              focus={pendingFocus}
+              onFocusConsumed={() => setPendingFocus(null)}
+            />
+          )}
+          {view === "dealer" && <DealerModeView />}
+          {view === "tools" && (
+            <ToolsView
+              tab={toolsTab}
+              setTab={setToolsTab}
+              focus={pendingFocus}
+              onFocusConsumed={() => setPendingFocus(null)}
+            />
+          )}
+          {view === "more" && <MoreView onNavigate={handleNavigate} />}
+          {view === "settings" && <Settings />}
+        </ErrorBoundary>
       </main>
 
       <nav className="nav-bar" role="tablist">

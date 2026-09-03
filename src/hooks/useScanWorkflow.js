@@ -264,12 +264,12 @@ export function useScanWorkflow() {
       setVisualSearchResult(response);
       setCard((previous) => ({
         ...previous,
-        name: response.name,
-        set: response.set || previous.set,
-        year: response.year || previous.year,
-        number: response.number || previous.number,
-        rarity: response.rarity || previous.rarity,
-        parallel: response.parallel || "",
+        name: previous.name || response.name,
+        set: previous.set || response.set,
+        year: previous.year || response.year,
+        number: previous.number || response.number,
+        rarity: previous.rarity || response.rarity,
+        parallel: previous.parallel || response.parallel || "",
         type: response.type || previous.type,
       }));
       setSearchQ(
@@ -330,12 +330,12 @@ export function useScanWorkflow() {
     if (response?.name) {
       setCard((previous) => ({
         ...previous,
-        name: response.name,
-        set: response.set || previous.set,
-        year: response.year || previous.year,
-        number: response.number || previous.number,
-        rarity: response.rarity || previous.rarity,
-        parallel: response.parallel || "",
+        name: previous.name || response.name,
+        set: previous.set || response.set,
+        year: previous.year || response.year,
+        number: previous.number || response.number,
+        rarity: previous.rarity || response.rarity,
+        parallel: previous.parallel || response.parallel || "",
         type: response.type || previous.type,
       }));
       setSearchQ(
@@ -554,6 +554,8 @@ export function useScanWorkflow() {
       } else {
         toast.success(`Listed on ${listing.platform} for ${fmtShort(listing.price)} (tracked locally)`);
       }
+    } else if (entry) {
+      toast.info("Saved to collection — enter a price to also create a listing");
     }
     reset();
   }
@@ -601,9 +603,13 @@ export function useScanWorkflow() {
       const entryId = crypto.randomUUID();
       const frontImgId = item.front ? `img_${entryId}_front` : null;
       const backImgId = item.back ? `img_${entryId}_back` : null;
+      let frontImgPhash = null;
       if (frontImgId) {
         await saveImage(frontImgId, item.front);
         if (useServer) await imagesAPI.upload(frontImgId, item.front).catch(() => {});
+        // Without this, batch-scanned cards are invisible to
+        // findLikelyDuplicate — it only matches records with frontImgPhash.
+        frontImgPhash = await computeDHash(item.front);
       }
       if (backImgId) {
         await saveImage(backImgId, item.back);
@@ -614,7 +620,7 @@ export function useScanWorkflow() {
         name: item.result.name, set: item.result.set, number: item.result.number,
         year: item.result.year, rarity: item.result.rarity, condition: "NM",
         binder: "", type: item.result.type || "sports", status: "inventory",
-        costBasis: 0, frontImgId, backImgId,
+        costBasis: 0, frontImgId, backImgId, frontImgPhash,
         priceEstimate: item.result.priceEstimate, priceHistory: item.result.priceHistory,
         listedOn: [], createdAt: new Date().toISOString(),
       });

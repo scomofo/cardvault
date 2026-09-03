@@ -156,6 +156,9 @@ if __name__ == "__main__":
 
     uvicorn.run(
         app,
-        host=os.getenv("CV_HOST", "0.0.0.0"),
+        # Loopback by default so `python main.py` never exposes this
+        # unauthenticated service to the LAN. The Electron shell already
+        # pins 127.0.0.1 explicitly; set CV_HOST=0.0.0.0 to opt in.
+        host=os.getenv("CV_HOST", "127.0.0.1"),
         port=int(os.getenv("CV_PORT", "8000")),
     )

@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "main": "src/electron/main.js",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "vite",
     "dev:secure": "vite",
