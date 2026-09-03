@@ -53,7 +53,8 @@ export async function waitForServer(baseUrl, timeoutMs = 10000) {
   while (Date.now() - start < timeoutMs) {
     try {
       const response = await fetch(`${baseUrl}/api/settings`);
-      if (response.ok) return;
+      // 401 means the server is up but PROXY_TOKEN is configured.
+      if (response.ok || response.status === 401) return;
     } catch {}
     await new Promise((resolve) => setTimeout(resolve, 150));
   }

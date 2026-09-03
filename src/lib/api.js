@@ -1,6 +1,13 @@
 import { API_BASE, apiPath } from "./apiBase";
 
-const DEFAULT_TIMEOUT_MS = 15_000;
+function getStoredProxyToken() {
+  try {
+    if (typeof localStorage === "undefined") return "";
+    return localStorage.getItem("cv_proxy_token") || "";
+  } catch {
+    return "";
+  }
+}
 
 async function request(path, options = {}) {
   const { method = "GET", body, timeoutMs = DEFAULT_TIMEOUT_MS } = options;
@@ -8,6 +15,8 @@ async function request(path, options = {}) {
     method,
     headers: { "Content-Type": "application/json" },
   };
+  const proxyToken = getStoredProxyToken();
+  if (proxyToken) opts.headers.Authorization = `Bearer ${proxyToken}`;
   if (body) opts.body = JSON.stringify(body);
 
   const controller = new AbortController();

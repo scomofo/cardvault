@@ -3,6 +3,9 @@ import { useToast } from "./Toast";
 import { PLATFORMS } from "../lib/constants";
 import { useFeeModels } from "../hooks/useFeeModels";
 import { condOf, fmtShort, uid } from "../lib/utils";
+import { decisionsAPI, automationAPI, salesAPI, ordersAPI } from "../lib/api";
+import { buildManualSaleFulfillment } from "../lib/salesViewState";
+import { useData } from "../lib/DataContext";
 import { decisionsAPI, automationAPI, itemsAPI, salesAPI, ordersAPI, listingsAPI } from "../lib/api";
 import { calculateGrade, gradeToTerm, generateConditionReport } from "../lib/grading";
 import PriceChart from "./PriceChart";
@@ -14,6 +17,8 @@ import SoldComps from "./SoldComps";
 export default function CardDetail({ detail, detailFrontImg, detailBackImg, catalog, setCatalog, sales, setSales, listings, setListings, setOrders, useServer, onBack }) {
   const toast = useToast();
   const { getFeeRate } = useFeeModels();
+  const { useServer, setOrders: setContextOrders } = useData() || {};
+  void sales;
   const [gradePred, setGradePred] = useState(null);
   const [predicting, setPredicting] = useState(false);
   const [salePrice, setSalePrice] = useState("");
@@ -74,47 +79,59 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
     if (!salePrice) { toast.error("Enter sale price"); return; }
     const c = catalog.find((x) => x.id === id);
     if (!c) return;
-    const price = parseFloat(salePrice);
-    const fees = parseFloat(saleFees) || 0;
-    const shippingCost = parseFloat(saleShipping) || 0;
-    const costBasis = parseFloat(c.costBasis) || 0;
-    if (saleAttemptRef.current?.cardId !== id) {
-      saleAttemptRef.current = { cardId: id, saleId: uid(), orderId: uid() };
-    }
-    const { saleId, orderId } = saleAttemptRef.current;
-    const sale = {
-      id: saleId, cardId: id, cardName: c.name, set: c.set,
-      salePrice: price, costBasis,
-      platform: salePlatform, fees, shippingCost,
-      netProfit: price - costBasis - fees - shippingCost,
-      date: new Date().toISOString(),
-    };
-    const updatedCard = { ...c, status: "sold", soldPrice: salePrice, soldPlatform: salePlatform };
-    // Mirrors SalesFlow.completeSale: a sale without an order can never show
-    // up under Orders for shipping/tracking, so create both together.
-    const order = {
-      id: orderId, saleId: sale.id, listingId: null, itemId: id,
-      cardName: c.name, platform: salePlatform, salePrice: price,
-      fees, shippingCharge: shippingCost, paymentStatus: "paid",
-      fulfillmentStatus: "pending", soldAt: sale.date,
-    };
-
-    if (useServer) {
+    const activeListing = (listings || []).find((l) => l.cardId === id && l.status === "active");
+    if (activeListing) {
       try {
-        await itemsAPI.create(updatedCard);
-        await salesAPI.create(sale);
-        await ordersAPI.create(order);
+        const { sale, order } = buildManualSaleFulfillment({
+          idFactory: uid,
+          listing: activeListing,
+          card: c,
+          feeRate: getFeeRate(activeListing.platform),
+          salePrice,
+          trackingNumber: "",
+        });
+        if (useServer) {
+          await salesAPI.create(sale);
+          await ordersAPI.create(order);
+        }
+        setSales((p) => [sale, ...p]);
+        setContextOrders?.((p) => [order, ...p]);
+        setListings((p) => p.map((l) => (l.id === activeListing.id ? { ...l, status: "sold", soldPrice: sale.salePrice, soldDate: sale.date } : l)));
+        setCatalog((p) => p.map((x) => (x.id === id ? { ...x, status: "sold", soldPrice: sale.salePrice, soldPlatform: activeListing.platform } : x)));
+        toast.success(`Sold: ${c.name}. Order queued for shipping.`);
       } catch (error) {
-        toast.error(`Mark sold failed: ${error.message}. Try again — it'll pick up where this left off.`);
+        toast.error(`Sale save failed: ${error.message}`);
+        return;
+      }
+    } else {
+      const sale = {
+        id: uid(), cardId: id, cardName: c.name, set: c.set,
+        salePrice: parseFloat(salePrice), costBasis: parseFloat(c.costBasis) || 0,
+        platform: salePlatform, fees: parseFloat(saleFees) || 0,
+        shippingCost: parseFloat(saleShipping) || 0,
+        netProfit: parseFloat(salePrice) - (parseFloat(c.costBasis) || 0) - (parseFloat(saleFees) || 0) - (parseFloat(saleShipping) || 0),
+        date: new Date().toISOString(),
+      };
+      const order = {
+        id: uid(), saleId: sale.id, listingId: null, itemId: id,
+        cardName: c.name, platform: salePlatform, salePrice: sale.salePrice,
+        fees: sale.fees, shippingCharge: sale.shippingCost,
+        paymentStatus: "paid", fulfillmentStatus: "pending", soldAt: sale.date,
+      };
+      try {
+        if (useServer) {
+          await salesAPI.create(sale);
+          await ordersAPI.create(order);
+        }
+        setSales((p) => [sale, ...p]);
+        setContextOrders?.((p) => [order, ...p]);
+        setCatalog((p) => p.map((x) => (x.id === id ? { ...x, status: "sold", soldPrice: salePrice, soldPlatform: salePlatform } : x)));
+        toast.success("Marked as sold. Order queued for shipping.");
+      } catch (error) {
+        toast.error(`Sale save failed: ${error.message}`);
         return;
       }
     }
-
-    saleAttemptRef.current = null;
-    setSales((p) => [sale, ...p]);
-    setOrders((p) => [order, ...p]);
-    setCatalog((p) => p.map((x) => (x.id === id ? updatedCard : x)));
-    toast.success("Marked as sold");
     setSalePrice(""); setSaleFees(""); setSaleShipping("");
   };
 

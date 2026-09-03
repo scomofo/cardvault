@@ -16,6 +16,23 @@ export default function GlobalSearch({ onNavigate }) {
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const inputRef = useRef(null);
   const panelRef = useRef(null);
+  const openerRef = useRef(null);
+
+  const closeSearch = useCallback(() => {
+    setOpen(false);
+    setQuery("");
+    if (openerRef.current && typeof openerRef.current.focus === "function") {
+      openerRef.current.focus();
+    }
+    openerRef.current = null;
+  }, []);
+
+  const openSearch = useCallback(() => {
+    if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
+      openerRef.current = document.activeElement;
+    }
+    setOpen(true);
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(query), 150);
@@ -27,16 +44,15 @@ export default function GlobalSearch({ onNavigate }) {
     const handler = (e) => {
       if (shouldOpenGlobalSearch(e)) {
         e.preventDefault();
-        setOpen(true);
+        openSearch();
       }
       if (e.key === "Escape" && open) {
-        setOpen(false);
-        setQuery("");
+        closeSearch();
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [open]);
+  }, [open, openSearch, closeSearch]);
 
   // Focus input when opened
   useEffect(() => {
@@ -48,12 +64,37 @@ export default function GlobalSearch({ onNavigate }) {
     if (!open) return;
     const handler = (e) => {
       if (panelRef.current && !panelRef.current.contains(e.target)) {
-        setOpen(false);
-        setQuery("");
+        closeSearch();
       }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
+  }, [open, closeSearch]);
+
+  // Contain Tab focus inside the modal while open.
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (e.key !== "Tab" || !panelRef.current) return;
+      const focusables = panelRef.current.querySelectorAll(
+        'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusables.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
   }, [open]);
 
   const results = useMemo(() => {
@@ -120,10 +161,9 @@ export default function GlobalSearch({ onNavigate }) {
   }, [debouncedQuery, catalog, sales, orders, listings, purchases, watchlist, trades]);
 
   const handleSelect = useCallback((result) => {
-    setOpen(false);
-    setQuery("");
+    closeSearch();
     onNavigate(navigationTargetForSearchResult(result.type, result.item));
-  }, [onNavigate]);
+  }, [onNavigate, closeSearch]);
 
   const typeLabel = { card: "Card", sale: "Sale", order: "Order", listing: "Listing", purchase: "Purchase", watch: "Watchlist", trade: "Trade" };
   const typeColor = { card: "var(--acc)", sale: "var(--grn)", order: "var(--gold)", listing: "var(--blue)", purchase: "var(--orange)", watch: "var(--purple)", trade: "var(--teal)" };
@@ -132,7 +172,7 @@ export default function GlobalSearch({ onNavigate }) {
     return (
       <button
         className="btn btn-ghost btn-sm"
-        onClick={() => setOpen(true)}
+        onClick={openSearch}
         style={{ gap: 5, padding: "6px 10px" }}
         title="Search (Ctrl+K)"
       >
@@ -150,7 +190,7 @@ export default function GlobalSearch({ onNavigate }) {
       WebkitBackdropFilter: "blur(4px)",
       animation: "fadeIn .15s ease",
     }}>
-      <div ref={panelRef} style={{
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-label="Global search" style={{
         position: "absolute",
         top: "12%",
         left: "50%",
@@ -175,6 +215,7 @@ export default function GlobalSearch({ onNavigate }) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search cards, sales, listings, watchlist..."
+            aria-label="Search cards, sales, listings, watchlist"
             style={{
               flex: 1, background: "transparent", border: "none", outline: "none",
               color: "var(--tx)", fontSize: 15, fontFamily: "var(--font-body)",

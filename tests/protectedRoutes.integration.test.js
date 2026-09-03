@@ -38,4 +38,19 @@ test("protected config routes require bearer auth when PROXY_TOKEN is configured
     body: JSON.stringify({ userName: "Allowed" }),
   });
   assert.equal(authorizedSettingsResponse.status, 200);
+
+  const unauthorizedItemsResponse = await fetch(`${baseUrl}/api/items`);
+  assert.equal(unauthorizedItemsResponse.status, 401);
+
+  const authorizedItemsResponse = await fetch(`${baseUrl}/api/items`, {
+    headers: { Authorization: "Bearer test-token" },
+  });
+  assert.equal(authorizedItemsResponse.status, 200);
+
+  const unauthorizedCreateResponse = await fetch(`${baseUrl}/api/items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: "proxy-token-protected", name: "Blocked" }),
+  });
+  assert.equal(unauthorizedCreateResponse.status, 401);
 });

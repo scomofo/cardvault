@@ -101,21 +101,11 @@ app.use("/api/ai", express.json({ limit: "25mb" }));
 app.use("/api/cv/analyze", express.json({ limit: "5mb" }));
 app.use(express.json({ limit: "2mb" }));
 
-// CORS only stops browser-issued cross-origin requests — it does nothing
-// against a bare curl/script on the LAN. Every state-changing API request
-// (everything but GET/HEAD/OPTIONS) now requires the same bar already used
-// for settings/connection writes: loopback, or a trusted-LAN source with a
-// matching Origin/Referer. That stops accidental cross-origin writes and a
-// browser-based attacker, but NOT a deliberate one on the same network —
-// Origin/Referer are request headers a bare curl/script can set to whatever
-// it wants, so this is not a real credential. Set PROXY_TOKEN for that; it's
-// the only unspoofable option today, and HOST=0.0.0.0 (the documented way to
-// scan from a phone) without one should be treated as trusting the network,
-// not the request.
-app.use("/api", (req, res, next) => {
-  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
-  return requireProtectedConfigWrite(req, res, next);
-});
+// When PROXY_TOKEN is configured (API-only deployments), require bearer auth
+// for every /api route. Without a token this is a no-op. The built-in UI is
+// served as static files (not under /api), and README documents leaving
+// PROXY_TOKEN blank when using the built-in UI.
+app.use("/api", authCheck);
 
 // Rate limiting on AI endpoint
 const aiLimiter = rateLimit({

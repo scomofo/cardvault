@@ -129,6 +129,10 @@ export function useScanWorkflow() {
   const [duplicateWarning, setDuplicateWarning] = useState(null);
   const [cvOnline, setCvOnline] = useState(false);
   const scanItemRef = useRef(null);
+  const batchQueueRef = useRef([]);
+  const batchProcessingRef = useRef(false);
+  const frontCaptureRef = useRef(0);
+  const backCaptureRef = useRef(0);
   const [cvAnalyzing, setCvAnalyzing] = useState(false);
   const [cvResult, setCvResult] = useState(null);
   const [showCvOverlay, setShowCvOverlay] = useState(true);
@@ -180,7 +184,13 @@ export function useScanWorkflow() {
     }
   }
 
+  useEffect(() => {
+    batchQueueRef.current = batchQueue;
+  }, [batchQueue]);
+
   async function captureFrontImg(dataUrl) {
+    frontCaptureRef.current += 1;
+    const captureId = frontCaptureRef.current;
     if (!dataUrl) {
       setFrontImg(null);
       setCvResult(null);
@@ -189,10 +199,12 @@ export function useScanWorkflow() {
     }
     setFrontImg(dataUrl);
     const processed = await processCapturedImage(dataUrl, "front");
+    if (captureId !== frontCaptureRef.current) return;
     if (processed && processed !== dataUrl) setFrontImg(processed);
     // Warn about a likely duplicate NOW, before the user invests in
     // identify/price/list work — not after save.
     const phash = await computeDHash(processed || dataUrl);
+    if (captureId !== frontCaptureRef.current) return;
     setDuplicateWarning(findLikelyDuplicate(catalog, phash));
   }
 
@@ -229,12 +241,15 @@ export function useScanWorkflow() {
   }
 
   async function captureBackImg(dataUrl) {
+    backCaptureRef.current += 1;
+    const captureId = backCaptureRef.current;
     if (!dataUrl) {
       setBackImg(null);
       return;
     }
     setBackImg(dataUrl);
     const processed = await processCapturedImage(dataUrl, "back");
+    if (captureId !== backCaptureRef.current) return;
     if (processed && processed !== dataUrl) setBackImg(processed);
   }
 
@@ -451,6 +466,8 @@ export function useScanWorkflow() {
   }
 
   function reset() {
+    frontCaptureRef.current += 1;
+    backCaptureRef.current += 1;
     setStep(0);
     setFrontImg(null);
     setBackImg(null);
@@ -562,16 +579,33 @@ export function useScanWorkflow() {
 
 
   function addToBatchQueue({ front, back }) {
-    setBatchQueue((prev) => [...prev, { id: crypto.randomUUID(), front, back, status: "captured", result: null, error: null }]);
+    const entry = { id: crypto.randomUUID(), front, back, status: "captured", result: null, error: null };
+    batchQueueRef.current = [...batchQueueRef.current, entry];
+    setBatchQueue(batchQueueRef.current);
   }
 
-  async function processBatchQueue() {
+  function applyBatchQueueUpdate(id, patch) {
+    batchQueueRef.current = batchQueueRef.current.map((q) => (q.id === id ? { ...q, ...patch } : q));
+    setBatchQueue(batchQueueRef.current);
+  }
+
+  async function processBatchQueue(targetId = null) {
+    if (batchProcessingRef.current) return;
+    batchProcessingRef.current = true;
     setBatchProcessing(true);
     setBatchProcessedCount(0);
-    const currentQueue = [...batchQueue];
-    for (let i = 0; i < currentQueue.length; i++) {
-      const item = currentQueue[i];
-      setBatchQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: "processing" } : q));
+    let queue = batchQueueRef.current;
+    if (targetId) {
+      queue = queue.map((q) => (q.id === targetId ? { ...q, status: "captured", result: null, error: null } : q));
+      batchQueueRef.current = queue;
+      setBatchQueue(queue);
+    }
+    const work = targetId
+      ? queue.filter((q) => q.id === targetId)
+      : queue.filter((q) => q.status === "captured" || q.status === "failed");
+    for (let i = 0; i < work.length; i++) {
+      const item = work[i];
+      applyBatchQueueUpdate(item.id, { status: "processing" });
       try {
         const response = await aiVisualSearch(item.front);
         if (response && response.name) {
@@ -584,20 +618,21 @@ export function useScanWorkflow() {
             confidence, type: response.type || "sports",
           };
           const status = confidence >= 0.7 ? "done" : "review";
-          setBatchQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status, result } : q));
+          applyBatchQueueUpdate(item.id, { status, result });
         } else {
-          setBatchQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: "failed", error: "Could not identify" } : q));
+          applyBatchQueueUpdate(item.id, { status: "failed", error: "Could not identify" });
         }
       } catch (e) {
-        setBatchQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: "failed", error: e.message } : q));
+        applyBatchQueueUpdate(item.id, { status: "failed", error: e.message });
       }
       setBatchProcessedCount(i + 1);
     }
+    batchProcessingRef.current = false;
     setBatchProcessing(false);
   }
 
   async function saveBatchCards() {
-    const saveable = batchQueue.filter((q) => q.status === "done" || q.status === "approved");
+    const saveable = batchQueueRef.current.filter((q) => q.status === "done" || q.status === "approved");
     const entries = [];
     for (const item of saveable) {
       const entryId = crypto.randomUUID();
@@ -627,18 +662,37 @@ export function useScanWorkflow() {
     }
     setCatalog((prev) => [...entries, ...prev]);
     toast.success(entries.length + " cards saved to collection");
+    batchQueueRef.current = [];
     setBatchQueue([]);
     setBatchMode(null);
     setBatchProcessedCount(0);
   }
 
   function retryBatchItem(id) {
-    setBatchQueue((prev) => prev.map((q) => q.id === id ? { ...q, status: "captured", result: null, error: null } : q));
+    batchQueueRef.current = batchQueueRef.current.map((q) => (q.id === id ? { ...q, status: "captured", result: null, error: null } : q));
+    setBatchQueue(batchQueueRef.current);
+  }
+
+  function approveBatchItem(id) {
+    batchQueueRef.current = batchQueueRef.current.map((q) => (q.id === id ? { ...q, status: "approved" } : q));
+    setBatchQueue(batchQueueRef.current);
   }
 
   function removeBatchItem(id) {
-    setBatchQueue((prev) => prev.filter((q) => q.id !== id));
+    batchQueueRef.current = batchQueueRef.current.filter((q) => q.id !== id);
+    setBatchQueue(batchQueueRef.current);
   }
+
+  function clearFrontImg(value) {
+    if (!value) frontCaptureRef.current += 1;
+    setFrontImg(value);
+  }
+
+  function clearBackImg(value) {
+    if (!value) backCaptureRef.current += 1;
+    setBackImg(value);
+  }
+
   return {
     actions: {
       copyListing,
@@ -653,6 +707,7 @@ export function useScanWorkflow() {
       processBatchQueue,
       saveBatchCards,
       retryBatchItem,
+      approveBatchItem,
       removeBatchItem,
       saveAndList,
       saveCard,
@@ -661,9 +716,9 @@ export function useScanWorkflow() {
       applyIdentificationCorrection,
       dismissDuplicateWarning,
       dismissIdentificationResult,
-      setBackImg,
+      setBackImg: clearBackImg,
       setCard,
-      setFrontImg,
+      setFrontImg: clearFrontImg,
       setGradingData,
       setListing,
       setSearchQ,
