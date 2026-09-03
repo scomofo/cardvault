@@ -1,11 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useToast } from "./Toast";
 import { PLATFORMS } from "../lib/constants";
 import { useFeeModels } from "../hooks/useFeeModels";
 import { condOf, fmtShort, uid } from "../lib/utils";
-import { decisionsAPI, automationAPI, salesAPI, ordersAPI } from "../lib/api";
+import { decisionsAPI, automationAPI, itemsAPI, salesAPI, ordersAPI, listingsAPI } from "../lib/api";
 import { buildManualSaleFulfillment } from "../lib/salesViewState";
-import { useData } from "../lib/DataContext";
 import { calculateGrade, gradeToTerm, generateConditionReport } from "../lib/grading";
 import PriceChart from "./PriceChart";
 import { aiGradePredict } from "../lib/ai";
@@ -13,10 +12,9 @@ import { IconBack, IconTrash, IconCheck, IconSearch, IconPlus, IconZap, IconShie
 import ProfitWarning from "./ProfitWarning";
 import SoldComps from "./SoldComps";
 
-export default function CardDetail({ detail, detailFrontImg, detailBackImg, catalog, setCatalog, sales, setSales, listings, setListings, onBack }) {
+export default function CardDetail({ detail, detailFrontImg, detailBackImg, catalog, setCatalog, sales, setSales, listings, setListings, setOrders, useServer, onBack }) {
   const toast = useToast();
   const { getFeeRate } = useFeeModels();
-  const { useServer, setOrders: setContextOrders } = useData() || {};
   void sales;
   const [gradePred, setGradePred] = useState(null);
   const [predicting, setPredicting] = useState(false);
@@ -35,6 +33,11 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
   const [autoGrading, setAutoGrading] = useState(null);
   const [autoDuplicates, setAutoDuplicates] = useState(null);
   const isListed = detail?.status === "listed" || (detail?.listedOn || []).length > 0;
+  // Sales/orders POST are idempotent upserts by id (server reconciles a
+  // retry against the same record). A retry after markSold's sale succeeds
+  // but its order fails must reuse the same ids, or it mints a duplicate
+  // sale instead of completing the missing order.
+  const saleAttemptRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -73,63 +76,82 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
     if (!salePrice) { toast.error("Enter sale price"); return; }
     const c = catalog.find((x) => x.id === id);
     if (!c) return;
+    // Sales/orders POST are idempotent upserts by id (server reconciles a
+    // retry against the same record). A retry after markSold's sale succeeds
+    // but its order fails must reuse the same ids, or it mints a duplicate
+    // sale instead of completing the missing order.
+    if (saleAttemptRef.current?.cardId !== id) {
+      saleAttemptRef.current = { cardId: id, saleId: uid(), orderId: uid() };
+    }
+    const { saleId, orderId } = saleAttemptRef.current;
     const activeListing = (listings || []).find((l) => l.cardId === id && l.status === "active");
+    let sale;
+    let order;
+    let updatedCard;
     if (activeListing) {
-      try {
-        const { sale, order } = buildManualSaleFulfillment({
-          idFactory: uid,
-          listing: activeListing,
-          card: c,
-          feeRate: getFeeRate(activeListing.platform),
-          salePrice,
-          trackingNumber: "",
-        });
-        if (useServer) {
-          await salesAPI.create(sale);
-          await ordersAPI.create(order);
-        }
-        setSales((p) => [sale, ...p]);
-        setContextOrders?.((p) => [order, ...p]);
-        setListings((p) => p.map((l) => (l.id === activeListing.id ? { ...l, status: "sold", soldPrice: sale.salePrice, soldDate: sale.date } : l)));
-        setCatalog((p) => p.map((x) => (x.id === id ? { ...x, status: "sold", soldPrice: sale.salePrice, soldPlatform: activeListing.platform } : x)));
-        toast.success(`Sold: ${c.name}. Order queued for shipping.`);
-      } catch (error) {
-        toast.error(`Sale save failed: ${error.message}`);
-        return;
-      }
+      // Fulfill against the active listing so the listing flips to sold and
+      // the sale inherits the listing's platform/fees. buildManualSaleFulfillment
+      // mints ids via idFactory, so feed it the stable retry ids in order
+      // (sale first, then order).
+      const stableIds = [saleId, orderId];
+      const stableIdFactory = () => stableIds.shift() ?? uid();
+      ({ sale, order } = buildManualSaleFulfillment({
+        idFactory: stableIdFactory,
+        listing: activeListing,
+        card: c,
+        feeRate: getFeeRate(activeListing.platform),
+        salePrice,
+        trackingNumber: "",
+      }));
+      updatedCard = { ...c, status: "sold", soldPrice: sale.salePrice, soldPlatform: activeListing.platform };
     } else {
-      const sale = {
-        id: uid(), cardId: id, cardName: c.name, set: c.set,
-        salePrice: parseFloat(salePrice), costBasis: parseFloat(c.costBasis) || 0,
-        platform: salePlatform, fees: parseFloat(saleFees) || 0,
-        shippingCost: parseFloat(saleShipping) || 0,
-        netProfit: parseFloat(salePrice) - (parseFloat(c.costBasis) || 0) - (parseFloat(saleFees) || 0) - (parseFloat(saleShipping) || 0),
+      const price = parseFloat(salePrice);
+      const fees = parseFloat(saleFees) || 0;
+      const shippingCost = parseFloat(saleShipping) || 0;
+      const costBasis = parseFloat(c.costBasis) || 0;
+      sale = {
+        id: saleId, cardId: id, cardName: c.name, set: c.set,
+        salePrice: price, costBasis,
+        platform: salePlatform, fees, shippingCost,
+        netProfit: price - costBasis - fees - shippingCost,
         date: new Date().toISOString(),
       };
-      const order = {
-        id: uid(), saleId: sale.id, listingId: null, itemId: id,
-        cardName: c.name, platform: salePlatform, salePrice: sale.salePrice,
-        fees: sale.fees, shippingCharge: sale.shippingCost,
-        paymentStatus: "paid", fulfillmentStatus: "pending", soldAt: sale.date,
+      updatedCard = { ...c, status: "sold", soldPrice: salePrice, soldPlatform: salePlatform };
+      // Mirrors SalesFlow.completeSale: a sale without an order can never show
+      // up under Orders for shipping/tracking, so create both together.
+      order = {
+        id: orderId, saleId: sale.id, listingId: null, itemId: id,
+        cardName: c.name, platform: salePlatform, salePrice: price,
+        fees, shippingCharge: shippingCost, paymentStatus: "paid",
+        fulfillmentStatus: "pending", soldAt: sale.date,
       };
+    }
+
+    if (useServer) {
       try {
-        if (useServer) {
-          await salesAPI.create(sale);
-          await ordersAPI.create(order);
-        }
-        setSales((p) => [sale, ...p]);
-        setContextOrders?.((p) => [order, ...p]);
-        setCatalog((p) => p.map((x) => (x.id === id ? { ...x, status: "sold", soldPrice: salePrice, soldPlatform: salePlatform } : x)));
-        toast.success("Marked as sold. Order queued for shipping.");
+        // Persist explicitly — listings POST 404s on a missing card_id, so
+        // the item must land first rather than racing the debounced engine.
+        await itemsAPI.create(updatedCard);
+        await salesAPI.create(sale);
+        await ordersAPI.create(order);
       } catch (error) {
-        toast.error(`Sale save failed: ${error.message}`);
+        toast.error(`Mark sold failed: ${error.message}. Try again — it'll pick up where this left off.`);
         return;
       }
     }
+
+    saleAttemptRef.current = null;
+    setSales((p) => [sale, ...p]);
+    setOrders((p) => [order, ...p]);
+    if (activeListing) {
+      setListings((p) => p.map((l) => (l.id === activeListing.id ? { ...l, status: "sold", soldPrice: sale.salePrice, soldDate: sale.date } : l)));
+    }
+    setCatalog((p) => p.map((x) => (x.id === id ? updatedCard : x)));
+    toast.success(activeListing ? `Sold: ${c.name}. Order queued for shipping.` : "Marked as sold. Order queued for shipping.");
     setSalePrice(""); setSaleFees(""); setSaleShipping("");
   };
 
-  const quickList = (id) => {
+  const quickList = async (id) => {
     if (!quickListPrice) { toast.error("Enter a price"); return; }
     const c = catalog.find((x) => x.id === id);
     if (!c) return;
@@ -141,8 +163,20 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
       shipping: 4.99, currentBid: null,
       status: "active", notes: "", createdAt: new Date().toISOString(),
     };
+    const updatedCard = { ...c, status: "listed", listedOn: [...(c.listedOn || []), quickListPlatform] };
+
+    if (useServer) {
+      // Persist explicitly, same ordering as SalesFlow.createListing —
+      // listings POST 404s on a missing card_id, so the item must land
+      // first rather than racing the debounced sync engine.
+      await itemsAPI
+        .create(updatedCard)
+        .then(() => listingsAPI.create(listing))
+        .catch(() => {});
+    }
+
     setListings((p) => [listing, ...p]);
-    setCatalog((p) => p.map((x) => x.id === id ? { ...x, status: "listed", listedOn: [...(x.listedOn || []), quickListPlatform] } : x));
+    setCatalog((p) => p.map((x) => x.id === id ? updatedCard : x));
     setDecisions((current) => current.filter((decision) => decision.decisionType !== "listing_readiness"));
     setShowQuickList(false);
     setQuickListPrice("");

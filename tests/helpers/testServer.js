@@ -66,6 +66,12 @@ export async function startTestServer(t, { dirPrefix, env = {}, envFileSource, u
   const dbPath = join(tempDir, "cardvault-test.db");
   const childEnv = {
     ...process.env,
+    // Integration tests stand up real HTTP servers on 127.0.0.1 to play
+    // the part of marketplace/shipping partners; the outbound-URL SSRF
+    // guard (src/server/outboundUrlGuard.js) would otherwise reject those
+    // as local addresses. A test that specifically exercises the guard's
+    // blocking behavior can override this back off via `env`.
+    CARDVAULT_ALLOW_LOCAL_OUTBOUND_URLS: "1",
     ...env,
     CARDVAULT_DB_PATH: dbPath,
   };

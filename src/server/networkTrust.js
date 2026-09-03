@@ -4,24 +4,36 @@ const LOOPBACK_ADDRESSES = new Set(["127.0.0.1", "::1"]);
 
 export function normalizeAddress(address) {
   if (!address) return "";
-  return address.startsWith("::ffff:") ? address.slice(7).toLowerCase() : address.toLowerCase();
+  // URL.hostname brackets an IPv6 literal ("[::1]"); every other caller here
+  // (req.ip, req.socket.remoteAddress) never does, so strip it up front —
+  // otherwise a bracketed loopback/LAN address never matches the bare form
+  // this file's Sets and comparisons use.
+  const unbracketed = address.startsWith("[") && address.endsWith("]") ? address.slice(1, -1) : address;
+  return unbracketed.startsWith("::ffff:") ? unbracketed.slice(7).toLowerCase() : unbracketed.toLowerCase();
 }
 
-function isPrivateIpv4(address) {
+// "Non-public" rather than strictly "private": also covers link-local
+// (169.254.0.0/16 — the address block cloud metadata endpoints like
+// 169.254.169.254 live on) and the unspecified address, both of which
+// matter for outboundUrlGuard.js rejecting SSRF targets, not just for
+// classifying trusted LAN callers.
+function isNonPublicIpv4(address) {
   if (!/^\d{1,3}(?:\.\d{1,3}){3}$/.test(address)) return false;
   const [a, b] = address.split(".").map(Number);
 
   return (
     a === 10 ||
     (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168)
+    (a === 192 && b === 168) ||
+    (a === 169 && b === 254) ||
+    address === "0.0.0.0"
   );
 }
 
 function isTrustedLanAddress(address) {
   if (!address) return false;
   if (LOOPBACK_ADDRESSES.has(address)) return true;
-  if (isPrivateIpv4(address)) return true;
+  if (isNonPublicIpv4(address)) return true;
   return address.startsWith("fc") || address.startsWith("fd") || address.startsWith("fe80:");
 }
 

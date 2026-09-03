@@ -14,10 +14,17 @@ export default class ErrorBoundary extends Component {
   render() {
     if (!this.state.hasError) return this.props.children;
 
+    // fullScreen (default) is for a crash that takes out the whole app shell
+    // (e.g. inside DataProvider). A per-view boundary passes fullScreen={false}
+    // so the header/nav stay usable — the user can tap to a different tab
+    // instead of losing the entire app to one broken view.
+    const fullScreen = this.props.fullScreen !== false;
+
     return (
       <div style={{
-        minHeight: "100vh", background: "#181a20", display: "flex",
-        alignItems: "center", justifyContent: "center", padding: 24,
+        minHeight: fullScreen ? "100vh" : "auto", background: fullScreen ? "#181a20" : "transparent",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: fullScreen ? 24 : "48px 24px",
       }}>
         <div style={{
           background: "#1e2235", borderRadius: 16, padding: 32,

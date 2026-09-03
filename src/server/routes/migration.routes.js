@@ -15,7 +15,7 @@ export function registerMigrationRoutes(app) {
       // The whole import is one atomic write: a mid-batch failure (a bad
       // row past validation, a settings write error) must not leave some
       // collections imported and others not.
-      const imported = runInImmediateTransaction(() => {
+      const { imported, errors } = runInImmediateTransaction(() => {
         const imported = {
           items: 0,
           sales: 0,
@@ -26,6 +26,10 @@ export function registerMigrationRoutes(app) {
           gradings: 0,
           purchases: 0,
         };
+        // Per-row failures (a bad FK, a duplicate id) are recorded rather
+        // than silently swallowed, so a restore that skips rows tells the
+        // caller which ones and why instead of just reporting a lower count.
+        const errors = [];
 
         const items = Array.isArray(data.items)
           ? data.items
@@ -113,7 +117,9 @@ export function registerMigrationRoutes(app) {
               values,
             );
             imported.items++;
-          } catch {}
+          } catch (error) {
+            errors.push({ table: "items", id: item.id, error: error.message });
+          }
         }
 
         const simpleTables = [
@@ -225,7 +231,9 @@ export function registerMigrationRoutes(app) {
                 table.values(row),
               );
               imported[table.key]++;
-            } catch {}
+            } catch (error) {
+              errors.push({ table: table.key, id: row.id, error: error.message });
+            }
           }
         }
 
@@ -276,7 +284,9 @@ export function registerMigrationRoutes(app) {
                 ],
               );
               imported.listings++;
-            } catch {}
+            } catch (error) {
+              errors.push({ table: "listings", id: listing.id, error: error.message });
+            }
           }
         }
 
@@ -317,7 +327,9 @@ export function registerMigrationRoutes(app) {
                 );
               }
               imported.orders++;
-            } catch {}
+            } catch (error) {
+              errors.push({ table: "orders", id: order.id, error: error.message });
+            }
           }
         }
 
@@ -337,9 +349,9 @@ export function registerMigrationRoutes(app) {
           }
         }
 
-        return imported;
+        return { imported, errors };
       });
-      res.json({ success: true, imported });
+      res.json({ success: true, imported, errors });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

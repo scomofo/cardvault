@@ -9,8 +9,10 @@ function getStoredProxyToken() {
   }
 }
 
+const DEFAULT_TIMEOUT_MS = 15_000;
+
 async function request(path, options = {}) {
-  const { method = "GET", body } = options;
+  const { method = "GET", body, timeoutMs = DEFAULT_TIMEOUT_MS } = options;
   const opts = {
     method,
     headers: { "Content-Type": "application/json" },
@@ -19,10 +21,27 @@ async function request(path, options = {}) {
   if (proxyToken) opts.headers.Authorization = `Bearer ${proxyToken}`;
   if (body) opts.body = JSON.stringify(body);
 
-  const res = await fetch(apiPath(path), opts);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  opts.signal = controller.signal;
+
+  let res;
+  try {
+    res = await fetch(apiPath(path), opts);
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw new Error("Request timed out — check your connection and try again", { cause: error });
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || `API error ${res.status}`);
+    const apiError = new Error(err.error || `API error ${res.status}`);
+    apiError.status = res.status;
+    throw apiError;
   }
   return res.json();
 }
@@ -44,7 +63,7 @@ export const itemsAPI = {
   create: (data) => request("/items", { method: "POST", body: data }),
   update: (id, data) => request(`/items/${id}`, { method: "PUT", body: data }),
   delete: (id) => request(`/items/${id}`, { method: "DELETE" }),
-  bulkCreate: (items) => request("/items/bulk", { method: "POST", body: { items } }),
+  bulkCreate: (items) => request("/items/bulk", { method: "POST", body: { items }, timeoutMs: 60_000 }),
 };
 
 // Sales
@@ -220,7 +239,7 @@ export const purchasesAPI = {
   create: (data) => request("/purchases", { method: "POST", body: data }),
   update: (id, data) => request(`/purchases/${id}`, { method: "PUT", body: data }),
   delete: (id) => request(`/purchases/${id}`, { method: "DELETE" }),
-  importEbayCsv: (data) => request("/purchases/import/ebay-csv", { method: "POST", body: data }),
+  importEbayCsv: (data) => request("/purchases/import/ebay-csv", { method: "POST", body: data, timeoutMs: 60_000 }),
 };
 
 // Settings
@@ -231,7 +250,7 @@ export const settingsAPI = {
 
 // Migration - send localStorage data to server
 export const migrateAPI = {
-  send: (data) => request("/migrate", { method: "POST", body: data }),
+  send: (data) => request("/migrate", { method: "POST", body: data, timeoutMs: 60_000 }),
 };
 
 // Reference data (SCCD)

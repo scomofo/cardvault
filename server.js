@@ -102,10 +102,18 @@ app.use("/api/cv/analyze", express.json({ limit: "5mb" }));
 app.use(express.json({ limit: "2mb" }));
 
 // When PROXY_TOKEN is configured (API-only deployments), require bearer auth
-// for every /api route. Without a token this is a no-op. The built-in UI is
-// served as static files (not under /api), and README documents leaving
-// PROXY_TOKEN blank when using the built-in UI.
+// for every /api route — authCheck is a no-op without a token. State-changing
+// API requests (everything but GET/HEAD/OPTIONS) additionally require the bar
+// already used for settings/connection writes: loopback, or a trusted-LAN
+// source with a matching Origin/Referer. Note CORS alone does nothing against
+// a bare curl/script on the LAN — Origin/Referer are spoofable headers, so
+// PROXY_TOKEN is the only unspoofable option; HOST=0.0.0.0 without one trusts
+// the network, not the request.
 app.use("/api", authCheck);
+app.use("/api", (req, res, next) => {
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
+  return requireProtectedConfigWrite(req, res, next);
+});
 
 // Rate limiting on AI endpoint
 const aiLimiter = rateLimit({

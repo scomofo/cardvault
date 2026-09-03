@@ -1,5 +1,22 @@
 import { normalizePricingPayload } from "./pricingMapper.js";
 
+const LOOKUP_TIMEOUT_MS = 10_000;
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = LOOKUP_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw new Error("SportsCardsPro lookup timed out", { cause: error });
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 function buildSimulatedSnapshot(item) {
   const seedText = [
     item.name,
@@ -59,7 +76,7 @@ export async function fetchSportsCardsProPrice(itemOrLookup) {
     return buildSimulatedSnapshot(itemOrLookup);
   }
 
-  const response = await fetch(`${apiBase.replace(/\/$/, "")}/pricing/lookup`, {
+  const response = await fetchWithTimeout(`${apiBase.replace(/\/$/, "")}/pricing/lookup`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
