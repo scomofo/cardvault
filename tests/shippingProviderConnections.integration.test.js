@@ -397,7 +397,7 @@ test("shipping provider connection routes reject unsupported label endpoint prot
   });
 
   assert.equal(createResult.response.status, 400);
-  assert.match(createResult.payload.error, /labelPurchaseUrl must use http or https/i);
+  assert.match(createResult.payload.error, /labelPurchaseUrl URL must use http or https/i);
   assert.doesNotMatch(JSON.stringify(createResult.payload), /secret-provider-key|apiKey|api_key/);
 });
 

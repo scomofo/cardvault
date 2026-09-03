@@ -2,6 +2,7 @@ import { all, get, run } from "../database.js";
 import { requireProtectedConfigWrite } from "../auth.js";
 import { testConfiguredProviderService } from "../integrations/shipping/configuredProviderAdapter.js";
 import { requireJsonBody } from "../validation/common.js";
+import { validateOutboundUrlSyntax } from "../outboundUrlGuard.js";
 import { uid } from "./shared.js";
 
 const SENSITIVE_METADATA_KEYS = /api[_-]?key|token|secret|password|authorization|auth[_-]?header|bearer/i;
@@ -48,15 +49,10 @@ function validateLabelPurchaseUrl(metadata = {}) {
   const url = metadataLabelPurchaseUrl(metadata);
   if (!url) return;
 
-  let endpoint;
   try {
-    endpoint = new URL(url);
-  } catch {
-    throw badRequest("labelPurchaseUrl must be a valid URL");
-  }
-
-  if (!["http:", "https:"].includes(endpoint.protocol)) {
-    throw badRequest("labelPurchaseUrl must use http or https");
+    validateOutboundUrlSyntax(url, "labelPurchaseUrl");
+  } catch (error) {
+    throw badRequest(error.message);
   }
 }
 
