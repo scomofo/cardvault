@@ -101,6 +101,12 @@ app.use("/api/ai", express.json({ limit: "25mb" }));
 app.use("/api/cv/analyze", express.json({ limit: "5mb" }));
 app.use(express.json({ limit: "2mb" }));
 
+// When PROXY_TOKEN is configured (API-only deployments), require bearer auth
+// for every /api route. Without a token this is a no-op. The built-in UI is
+// served as static files (not under /api), and README documents leaving
+// PROXY_TOKEN blank when using the built-in UI.
+app.use("/api", authCheck);
+
 // Rate limiting on AI endpoint
 const aiLimiter = rateLimit({
   windowMs: 60_000,

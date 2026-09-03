@@ -145,7 +145,8 @@ export default function ScanView({ onNavigate, pendingImage, onPendingImageConsu
           processing={batchProcessing}
           processedCount={batchProcessedCount}
           onSaveAll={actions.saveBatchCards}
-          onRetry={(id) => { actions.retryBatchItem(id); actions.processBatchQueue(); }}
+          onRetry={(id) => actions.processBatchQueue(id)}
+          onApprove={actions.approveBatchItem}
           onRemove={actions.removeBatchItem}
           onCancel={() => { actions.setBatchMode(null); }}
         />

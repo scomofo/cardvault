@@ -7,7 +7,7 @@ import { uid, fmtShort } from "../lib/utils";
 import { actionQueueAPI, marketplacesAPI, ordersAPI, listingsAPI, salesAPI, automationAPI, purchasesAPI, itemsAPI } from "../lib/api";
 import { importEbayPurchasesLocal, parseEbayPurchaseImport } from "../lib/ebayPurchaseImport";
 import { buildManualSaleFulfillment, loadServerSalesState, summarizeMarketplaceCrosspostResults, summarizeMarketplaceSyncResults } from "../lib/salesViewState";
-import { applyChannelToListing, summarizePublishOutcome } from "../lib/scanPublish";
+import { applyChannelToListing, isStubChannel, summarizePublishOutcome } from "../lib/scanPublish";
 import { requestNotificationPermission, canNotify, sendNotification, scheduleAuctionNotification, cancelNotificationTimer } from "../lib/notifications";
 import { IconPlus, IconBell, IconCheck, IconX, IconUpload, IconRefresh, Spinner } from "./Icons";
 import EbayExport from "./EbayExport";
@@ -201,9 +201,31 @@ export default function SalesFlow({ onNavigate, focus, onFocusConsumed }) {
     }
   };
 
-  const repriceListing = (listingId) => {
+  const isLiveMarketplaceListing = (listing) => {
+    if (!listing) return false;
+    const externalId = listing.externalListingId || listing.external_listing_id;
+    const publishStatus = String(listing.publishStatus || listing.publish_status || "").toLowerCase();
+    if (!externalId && !["active", "revised"].includes(publishStatus)) return false;
+    return !isStubChannel(listing, { marketplace: listing.platform, listingId: listing.id });
+  };
+
+  const repriceListing = async (listingId) => {
     const newPrice = parseFloat(repriceVal);
     if (!newPrice || isNaN(newPrice)) { toast.error("Enter a valid price"); return; }
+    const listing = listings.find((l) => l.id === listingId);
+    if (useServer && isLiveMarketplaceListing(listing)) {
+      try {
+        const channel = await marketplacesAPI.revise({
+          listingId,
+          marketplace: listing.platform,
+          overrides: { startPrice: newPrice },
+        });
+        setListings((p) => p.map((l) => (l.id === listingId ? applyChannelToListing(l, channel) : l)));
+      } catch (error) {
+        toast.error(`Marketplace reprice failed: ${error.message}`);
+        return;
+      }
+    }
     setListings((p) => p.map((l) => {
       if (l.id !== listingId) return l;
       const history = l.priceChanges || [];
@@ -214,15 +236,27 @@ export default function SalesFlow({ onNavigate, focus, onFocusConsumed }) {
         priceChanges: [...history, { from: l.startPrice, to: newPrice, date: new Date().toISOString() }],
       };
     }));
+    if (useServer && isLiveMarketplaceListing(listing)) {
+      await refreshServerSalesState().catch(() => {});
+    }
     setRepricingId(null);
     setRepriceVal("");
     toast.success(`Repriced to ${fmtShort(newPrice)}`);
   };
 
-  const endListing = (listingId) => {
+  const endListing = async (listingId) => {
     if (!window.confirm("End this listing?")) return;
-    setListings((p) => p.map((l) => l.id === listingId ? { ...l, status: "ended", endedDate: new Date().toISOString() } : l));
     const listing = listings.find((l) => l.id === listingId);
+    if (useServer && isLiveMarketplaceListing(listing)) {
+      try {
+        const channel = await marketplacesAPI.end({ listingId, marketplace: listing.platform });
+        setListings((p) => p.map((l) => (l.id === listingId ? applyChannelToListing(l, channel) : l)));
+      } catch (error) {
+        toast.error(`Marketplace end failed: ${error.message}`);
+        return;
+      }
+    }
+    setListings((p) => p.map((l) => l.id === listingId ? { ...l, status: "ended", endedDate: new Date().toISOString() } : l));
     if (listing) {
       setCatalog((p) => p.map((c) => {
         if (c.id !== listing.cardId) return c;
@@ -230,6 +264,9 @@ export default function SalesFlow({ onNavigate, focus, onFocusConsumed }) {
         return { ...c, listedOn: lo, status: lo.length > 0 ? "listed" : "inventory" };
       }));
       cancelNotificationTimer(listingId);
+    }
+    if (useServer && isLiveMarketplaceListing(listing)) {
+      await refreshServerSalesState().catch(() => {});
     }
     toast.info("Listing ended");
   };

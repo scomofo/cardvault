@@ -3,7 +3,9 @@ import { useToast } from "./Toast";
 import { PLATFORMS } from "../lib/constants";
 import { useFeeModels } from "../hooks/useFeeModels";
 import { condOf, fmtShort, uid } from "../lib/utils";
-import { decisionsAPI, automationAPI } from "../lib/api";
+import { decisionsAPI, automationAPI, salesAPI, ordersAPI } from "../lib/api";
+import { buildManualSaleFulfillment } from "../lib/salesViewState";
+import { useData } from "../lib/DataContext";
 import { calculateGrade, gradeToTerm, generateConditionReport } from "../lib/grading";
 import PriceChart from "./PriceChart";
 import { aiGradePredict } from "../lib/ai";
@@ -14,6 +16,8 @@ import SoldComps from "./SoldComps";
 export default function CardDetail({ detail, detailFrontImg, detailBackImg, catalog, setCatalog, sales, setSales, listings, setListings, onBack }) {
   const toast = useToast();
   const { getFeeRate } = useFeeModels();
+  const { useServer, setOrders: setContextOrders } = useData() || {};
+  void sales;
   const [gradePred, setGradePred] = useState(null);
   const [predicting, setPredicting] = useState(false);
   const [salePrice, setSalePrice] = useState("");
@@ -65,21 +69,63 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
     }));
   };
 
-  const markSold = (id) => {
+  const markSold = async (id) => {
     if (!salePrice) { toast.error("Enter sale price"); return; }
     const c = catalog.find((x) => x.id === id);
     if (!c) return;
-    const sale = {
-      id: uid(), cardId: id, cardName: c.name, set: c.set,
-      salePrice: parseFloat(salePrice), costBasis: parseFloat(c.costBasis) || 0,
-      platform: salePlatform, fees: parseFloat(saleFees) || 0,
-      shippingCost: parseFloat(saleShipping) || 0,
-      netProfit: parseFloat(salePrice) - (parseFloat(c.costBasis) || 0) - (parseFloat(saleFees) || 0) - (parseFloat(saleShipping) || 0),
-      date: new Date().toISOString(),
-    };
-    setSales((p) => [sale, ...p]);
-    setCatalog((p) => p.map((x) => (x.id === id ? { ...x, status: "sold", soldPrice: salePrice, soldPlatform: salePlatform } : x)));
-    toast.success("Marked as sold");
+    const activeListing = (listings || []).find((l) => l.cardId === id && l.status === "active");
+    if (activeListing) {
+      try {
+        const { sale, order } = buildManualSaleFulfillment({
+          idFactory: uid,
+          listing: activeListing,
+          card: c,
+          feeRate: getFeeRate(activeListing.platform),
+          salePrice,
+          trackingNumber: "",
+        });
+        if (useServer) {
+          await salesAPI.create(sale);
+          await ordersAPI.create(order);
+        }
+        setSales((p) => [sale, ...p]);
+        setContextOrders?.((p) => [order, ...p]);
+        setListings((p) => p.map((l) => (l.id === activeListing.id ? { ...l, status: "sold", soldPrice: sale.salePrice, soldDate: sale.date } : l)));
+        setCatalog((p) => p.map((x) => (x.id === id ? { ...x, status: "sold", soldPrice: sale.salePrice, soldPlatform: activeListing.platform } : x)));
+        toast.success(`Sold: ${c.name}. Order queued for shipping.`);
+      } catch (error) {
+        toast.error(`Sale save failed: ${error.message}`);
+        return;
+      }
+    } else {
+      const sale = {
+        id: uid(), cardId: id, cardName: c.name, set: c.set,
+        salePrice: parseFloat(salePrice), costBasis: parseFloat(c.costBasis) || 0,
+        platform: salePlatform, fees: parseFloat(saleFees) || 0,
+        shippingCost: parseFloat(saleShipping) || 0,
+        netProfit: parseFloat(salePrice) - (parseFloat(c.costBasis) || 0) - (parseFloat(saleFees) || 0) - (parseFloat(saleShipping) || 0),
+        date: new Date().toISOString(),
+      };
+      const order = {
+        id: uid(), saleId: sale.id, listingId: null, itemId: id,
+        cardName: c.name, platform: salePlatform, salePrice: sale.salePrice,
+        fees: sale.fees, shippingCharge: sale.shippingCost,
+        paymentStatus: "paid", fulfillmentStatus: "pending", soldAt: sale.date,
+      };
+      try {
+        if (useServer) {
+          await salesAPI.create(sale);
+          await ordersAPI.create(order);
+        }
+        setSales((p) => [sale, ...p]);
+        setContextOrders?.((p) => [order, ...p]);
+        setCatalog((p) => p.map((x) => (x.id === id ? { ...x, status: "sold", soldPrice: salePrice, soldPlatform: salePlatform } : x)));
+        toast.success("Marked as sold. Order queued for shipping.");
+      } catch (error) {
+        toast.error(`Sale save failed: ${error.message}`);
+        return;
+      }
+    }
     setSalePrice(""); setSaleFees(""); setSaleShipping("");
   };
 

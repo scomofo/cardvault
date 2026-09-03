@@ -4,7 +4,7 @@ import { IconCheck, IconX, IconZap, Spinner } from "./Icons";
 /**
  * Batch processing view: shows progress, results, and review queue.
  */
-export default function BatchProcessView({ queue, processing, processedCount, onSaveAll, onRetry, onRemove, onCancel }) {
+export default function BatchProcessView({ queue, processing, processedCount, onSaveAll, onRetry, onApprove, onRemove, onCancel }) {
   const done = queue.filter((c) => c.status === "done");
   const review = queue.filter((c) => c.status === "review");
   const failed = queue.filter((c) => c.status === "failed");
@@ -42,7 +42,8 @@ export default function BatchProcessView({ queue, processing, processedCount, on
                 <div className="text-xxs text-dim">{item.result?.set || ""} {item.result?.confidence ? Math.round(item.result.confidence * 100) + "%" : "low confidence"}</div>
               </div>
               <span className="badge" style={{ background: "var(--acc-bg)", color: "var(--acc)" }}>Review</span>
-              <button className="btn btn-ghost btn-sm" onClick={() => onRetry(item.id)}><IconZap size={12} /></button>
+              <button className="btn btn-ghost btn-sm" disabled={processing} onClick={() => onApprove?.(item.id)}><IconCheck size={12} /></button>
+              <button className="btn btn-ghost btn-sm" disabled={processing} onClick={() => onRetry(item.id)}><IconZap size={12} /></button>
               <button className="btn btn-ghost btn-sm" style={{ color: "var(--red)" }} onClick={() => onRemove(item.id)}><IconX size={12} /></button>
             </div>
           ))}
@@ -56,7 +57,7 @@ export default function BatchProcessView({ queue, processing, processedCount, on
             <div key={item.id} className="flex items-center gap-8 mt-8">
               <img src={item.front} alt="" style={{ height: 48, width: 34, borderRadius: 4, objectFit: "cover", border: "1px solid var(--red-brd)" }} />
               <div className="flex-1 text-xs text-dim truncate">{item.error || "Identification failed"}</div>
-              <button className="btn btn-ghost btn-sm" onClick={() => onRetry(item.id)}><IconZap size={12} /> Retry</button>
+              <button className="btn btn-ghost btn-sm" disabled={processing} onClick={() => onRetry(item.id)}><IconZap size={12} /> Retry</button>
               <button className="btn btn-ghost btn-sm" style={{ color: "var(--red)" }} onClick={() => onRemove(item.id)}><IconX size={12} /></button>
             </div>
           ))}

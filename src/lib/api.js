@@ -1,11 +1,22 @@
 import { API_BASE, apiPath } from "./apiBase";
 
+function getStoredProxyToken() {
+  try {
+    if (typeof localStorage === "undefined") return "";
+    return localStorage.getItem("cv_proxy_token") || "";
+  } catch {
+    return "";
+  }
+}
+
 async function request(path, options = {}) {
   const { method = "GET", body } = options;
   const opts = {
     method,
     headers: { "Content-Type": "application/json" },
   };
+  const proxyToken = getStoredProxyToken();
+  if (proxyToken) opts.headers.Authorization = `Bearer ${proxyToken}`;
   if (body) opts.body = JSON.stringify(body);
 
   const res = await fetch(apiPath(path), opts);
