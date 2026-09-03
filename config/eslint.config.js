@@ -1,5 +1,6 @@
 import js from "@eslint/js";
 import globals from "globals";
+import reactHooks from "eslint-plugin-react-hooks";
 
 export default [
   {
@@ -31,6 +32,19 @@ export default [
     rules: {
       "no-empty": ["error", { allowEmptyCatch: true }],
       "no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
+    },
+  },
+  {
+    // Only the two classic hook-correctness rules (missing/incorrect deps,
+    // hooks called conditionally) — this plugin's v7 "recommended" bundle
+    // adds many stricter React-Compiler-readiness rules (purity,
+    // immutability, set-state-in-render, ...) that are a separate,
+    // deliberate adoption decision, not part of this fix.
+    files: ["src/**/*.{js,jsx}"],
+    plugins: { "react-hooks": reactHooks },
+    rules: {
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
     },
   },
 ];

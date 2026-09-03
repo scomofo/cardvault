@@ -10,7 +10,7 @@ import CardDetail from "./CardDetail";
 
 export default function CatalogView({ focus, onFocusConsumed }) {
   const toast = useToast();
-  const { catalog, setCatalog, sales, setSales, listings, setListings, userName, shipFrom } = useData();
+  const { catalog, setCatalog, sales, setSales, listings, setListings, setOrders, userName, shipFrom, useServer } = useData();
   const [view, setView] = useState("list");
   const [detailId, setDetailId] = useState(null);
   const [detailFrontImg, setDetailFrontImg] = useState(null);
@@ -102,6 +102,8 @@ export default function CatalogView({ focus, onFocusConsumed }) {
         setSales={setSales}
         listings={listings}
         setListings={setListings}
+        setOrders={setOrders}
+        useServer={useServer}
         onBack={handleDetailBack}
       />
     );

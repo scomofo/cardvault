@@ -3,7 +3,7 @@ import { useToast } from "./Toast";
 import { PLATFORMS } from "../lib/constants";
 import { useFeeModels } from "../hooks/useFeeModels";
 import { condOf, fmtShort, uid } from "../lib/utils";
-import { decisionsAPI, automationAPI } from "../lib/api";
+import { decisionsAPI, automationAPI, itemsAPI, salesAPI, ordersAPI, listingsAPI } from "../lib/api";
 import { calculateGrade, gradeToTerm, generateConditionReport } from "../lib/grading";
 import PriceChart from "./PriceChart";
 import { aiGradePredict } from "../lib/ai";
@@ -11,7 +11,7 @@ import { IconBack, IconTrash, IconCheck, IconSearch, IconPlus, IconZap, IconShie
 import ProfitWarning from "./ProfitWarning";
 import SoldComps from "./SoldComps";
 
-export default function CardDetail({ detail, detailFrontImg, detailBackImg, catalog, setCatalog, sales, setSales, listings, setListings, onBack }) {
+export default function CardDetail({ detail, detailFrontImg, detailBackImg, catalog, setCatalog, sales, setSales, listings, setListings, setOrders, useServer, onBack }) {
   const toast = useToast();
   const { getFeeRate } = useFeeModels();
   const [gradePred, setGradePred] = useState(null);
@@ -65,25 +65,50 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
     }));
   };
 
-  const markSold = (id) => {
+  const markSold = async (id) => {
     if (!salePrice) { toast.error("Enter sale price"); return; }
     const c = catalog.find((x) => x.id === id);
     if (!c) return;
+    const price = parseFloat(salePrice);
+    const fees = parseFloat(saleFees) || 0;
+    const shippingCost = parseFloat(saleShipping) || 0;
+    const costBasis = parseFloat(c.costBasis) || 0;
     const sale = {
       id: uid(), cardId: id, cardName: c.name, set: c.set,
-      salePrice: parseFloat(salePrice), costBasis: parseFloat(c.costBasis) || 0,
-      platform: salePlatform, fees: parseFloat(saleFees) || 0,
-      shippingCost: parseFloat(saleShipping) || 0,
-      netProfit: parseFloat(salePrice) - (parseFloat(c.costBasis) || 0) - (parseFloat(saleFees) || 0) - (parseFloat(saleShipping) || 0),
+      salePrice: price, costBasis,
+      platform: salePlatform, fees, shippingCost,
+      netProfit: price - costBasis - fees - shippingCost,
       date: new Date().toISOString(),
     };
+    const updatedCard = { ...c, status: "sold", soldPrice: salePrice, soldPlatform: salePlatform };
+    // Mirrors SalesFlow.completeSale: a sale without an order can never show
+    // up under Orders for shipping/tracking, so create both together.
+    const order = {
+      id: uid(), saleId: sale.id, listingId: null, itemId: id,
+      cardName: c.name, platform: salePlatform, salePrice: price,
+      fees, shippingCharge: shippingCost, paymentStatus: "paid",
+      fulfillmentStatus: "pending", soldAt: sale.date,
+    };
+
+    if (useServer) {
+      try {
+        await itemsAPI.create(updatedCard);
+        await salesAPI.create(sale);
+        await ordersAPI.create(order);
+      } catch (error) {
+        toast.error(`Mark sold failed: ${error.message}`);
+        return;
+      }
+    }
+
     setSales((p) => [sale, ...p]);
-    setCatalog((p) => p.map((x) => (x.id === id ? { ...x, status: "sold", soldPrice: salePrice, soldPlatform: salePlatform } : x)));
+    setOrders((p) => [order, ...p]);
+    setCatalog((p) => p.map((x) => (x.id === id ? updatedCard : x)));
     toast.success("Marked as sold");
     setSalePrice(""); setSaleFees(""); setSaleShipping("");
   };
 
-  const quickList = (id) => {
+  const quickList = async (id) => {
     if (!quickListPrice) { toast.error("Enter a price"); return; }
     const c = catalog.find((x) => x.id === id);
     if (!c) return;
@@ -95,8 +120,20 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
       shipping: 4.99, currentBid: null,
       status: "active", notes: "", createdAt: new Date().toISOString(),
     };
+    const updatedCard = { ...c, status: "listed", listedOn: [...(c.listedOn || []), quickListPlatform] };
+
+    if (useServer) {
+      // Persist explicitly, same ordering as SalesFlow.createListing —
+      // listings POST 404s on a missing card_id, so the item must land
+      // first rather than racing the debounced sync engine.
+      await itemsAPI
+        .create(updatedCard)
+        .then(() => listingsAPI.create(listing))
+        .catch(() => {});
+    }
+
     setListings((p) => [listing, ...p]);
-    setCatalog((p) => p.map((x) => x.id === id ? { ...x, status: "listed", listedOn: [...(x.listedOn || []), quickListPlatform] } : x));
+    setCatalog((p) => p.map((x) => x.id === id ? updatedCard : x));
     setDecisions((current) => current.filter((decision) => decision.decisionType !== "listing_readiness"));
     setShowQuickList(false);
     setQuickListPrice("");

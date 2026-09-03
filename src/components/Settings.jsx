@@ -3,7 +3,10 @@ import { useToast } from "./Toast";
 import { useData } from "../lib/DataContext";
 import { apiPath } from "../lib/apiBase";
 import { fmtShort } from "../lib/utils";
-import { automationAPI, marketplacesAPI, feeModelsAPI } from "../lib/api";
+import {
+  automationAPI, marketplacesAPI, feeModelsAPI,
+  itemsAPI, salesAPI, ordersAPI, listingsAPI, purchasesAPI, tradesAPI, watchlistAPI, gradingsAPI, settingsAPI,
+} from "../lib/api";
 import { PLATFORMS, PLATFORM_FEES } from "../lib/constants";
 import { clearFeeModelCache } from "../hooks/useFeeModels";
 import { createBackupPayload, normalizeBackupState } from "../lib/backupState";
@@ -379,7 +382,7 @@ export default function Settings() {
   const {
     catalog, setCatalog, sales, setSales, orders, setOrders, listings, setListings, purchases, setPurchases, trades, setTrades,
     watchlist, setWatchlist, gradings, setGradings,
-    userName, setUserName, shipFrom, setShipFrom,
+    userName, setUserName, shipFrom, setShipFrom, useServer,
   } = useData();
   const toast = useToast();
   const restoreRef = useRef(null);
@@ -412,6 +415,31 @@ export default function Settings() {
 
   const clearAll = async () => {
     if (!window.confirm("Delete ALL data? This cannot be undone.")) return;
+
+    if (useServer) {
+      // Delete server-side first and wait for it: the sync engine's 500ms
+      // debounce has no flush-on-unmount, so clearing local state and
+      // trusting it to catch up could leave server data intact if the user
+      // navigates away right after this — while the toast already says
+      // everything is gone.
+      const results = await Promise.allSettled([
+        ...catalog.map((c) => itemsAPI.delete(c.id)),
+        ...sales.map((s) => salesAPI.delete(s.id)),
+        ...orders.map((o) => ordersAPI.delete(o.id)),
+        ...listings.map((l) => listingsAPI.delete(l.id)),
+        ...purchases.map((p) => purchasesAPI.delete(p.id)),
+        ...trades.map((t) => tradesAPI.delete(t.id)),
+        ...watchlist.map((w) => watchlistAPI.delete(w.id)),
+        ...gradings.map((g) => gradingsAPI.delete(g.id)),
+        settingsAPI.update({ userName: "", shipFrom: "" }),
+      ]);
+      const failed = results.filter((r) => r.status === "rejected").length;
+      if (failed > 0) {
+        toast.error(`${failed} item${failed === 1 ? "" : "s"} failed to delete on the server — try again before assuming your data is gone`);
+        return;
+      }
+    }
+
     setCatalog([]);
     setSales([]);
     setOrders([]);

@@ -101,6 +101,18 @@ app.use("/api/ai", express.json({ limit: "25mb" }));
 app.use("/api/cv/analyze", express.json({ limit: "5mb" }));
 app.use(express.json({ limit: "2mb" }));
 
+// CORS only stops browser-issued cross-origin requests — it does nothing
+// against a bare curl/script on the LAN. Every state-changing API request
+// (everything but GET/HEAD/OPTIONS) must come from this app's own trusted
+// origin (or carry PROXY_TOKEN), the same bar already required for settings
+// and connection writes, so HOST=0.0.0.0 (the documented way to scan from a
+// phone) doesn't leave the whole inventory and marketplace publishing open
+// to anyone on the network.
+app.use("/api", (req, res, next) => {
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
+  return requireProtectedConfigWrite(req, res, next);
+});
+
 // Rate limiting on AI endpoint
 const aiLimiter = rateLimit({
   windowMs: 60_000,

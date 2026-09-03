@@ -4,6 +4,7 @@ import {
   parseCanadaPostCreateShipmentResponse,
   parseCanadaPostManifestLinks,
 } from "./canadaPostNativeAdapter.js";
+import { assertPublicOutboundUrl } from "../../outboundUrlGuard.js";
 
 const DEFAULT_LABEL_PURCHASE_TIMEOUT_MS = 10000;
 const PROVIDER_ERROR_TEXT_LIMIT = 200;
@@ -185,13 +186,9 @@ async function purchaseLabelViaHttp({ connection, metadata, rate, service, shipm
 
   let endpoint;
   try {
-    endpoint = new URL(url);
-  } catch {
-    return failedPurchase("Invalid provider label purchase URL");
-  }
-
-  if (!["http:", "https:"].includes(endpoint.protocol)) {
-    return failedPurchase("Provider label purchase URL must use http or https");
+    endpoint = await assertPublicOutboundUrl(url, "Provider label purchase");
+  } catch (error) {
+    return failedPurchase(error.message);
   }
 
   const headers = { "Content-Type": "application/json" };

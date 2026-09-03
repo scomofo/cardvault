@@ -372,5 +372,15 @@ export function createIndexes(db) {
     CREATE INDEX IF NOT EXISTS idx_confirmed_scan_examples_card_id ON confirmed_scan_examples(final_catalog_card_id);
     CREATE INDEX IF NOT EXISTS idx_canada_post_manifest_runs_created_at ON canada_post_manifest_runs(created_at);
     CREATE INDEX IF NOT EXISTS idx_canada_post_manifest_artifacts_run_id ON canada_post_manifest_artifacts(manifest_run_id);
+    CREATE INDEX IF NOT EXISTS idx_listing_channel_events_channel_id ON listing_channel_events(listing_channel_id, event_type, created_at);
+    CREATE INDEX IF NOT EXISTS idx_orders_sale_id ON orders(sale_id);
+    CREATE INDEX IF NOT EXISTS idx_orders_listing_id ON orders(listing_id);
+    CREATE INDEX IF NOT EXISTS idx_listing_channels_connection_id ON listing_channels(connection_id);
+    CREATE INDEX IF NOT EXISTS idx_price_comps_item_id ON price_comps(item_id);
+    CREATE INDEX IF NOT EXISTS idx_purchase_items_purchase_id ON purchase_items(purchase_id);
+    CREATE INDEX IF NOT EXISTS idx_purchase_items_item_id ON purchase_items(item_id);
+    CREATE INDEX IF NOT EXISTS idx_cv_scans_item_id ON cv_scans(item_id);
+    CREATE INDEX IF NOT EXISTS idx_user_items_purchase_id ON user_items(purchase_id);
+    CREATE INDEX IF NOT EXISTS idx_user_items_parallel_id ON user_items(parallel_id);
   `);
 }

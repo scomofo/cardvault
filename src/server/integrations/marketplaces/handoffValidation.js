@@ -1,3 +1,5 @@
+import { assertPublicOutboundUrl } from "../../outboundUrlGuard.js";
+
 const DEFAULT_HANDOFF_STATUS_TIMEOUT_MS = 10000;
 const DEFAULT_HANDOFF_SUBMISSION_TIMEOUT_MS = 10000;
 const HANDOFF_ERROR_TEXT_LIMIT = 200;
@@ -141,25 +143,14 @@ async function readHandoffPayload(response) {
   }
 }
 
-function handoffEndpoint(template, values, label) {
-  let endpoint;
-  try {
-    endpoint = new URL(renderTemplate(template, values));
-  } catch {
-    throw new Error(`${label} URL is invalid`);
-  }
-
-  if (!["http:", "https:"].includes(endpoint.protocol)) {
-    throw new Error(`${label} URL must use http or https`);
-  }
-
-  return endpoint;
+async function handoffEndpoint(template, values, label) {
+  return assertPublicOutboundUrl(renderTemplate(template, values), label);
 }
 
-function endpointHost(template, values) {
+async function endpointHost(template, values) {
   if (!template) return null;
   try {
-    return handoffEndpoint(template, values, "handoff validation").hostname;
+    return (await handoffEndpoint(template, values, "handoff validation")).hostname;
   } catch {
     return null;
   }
@@ -170,7 +161,7 @@ async function testHandoffStatusEndpoint({ marketplace, connection, metadata, te
 
   let endpoint;
   try {
-    endpoint = handoffEndpoint(template, values, `${marketplace} handoff status`);
+    endpoint = await handoffEndpoint(template, values, `${marketplace} handoff status`);
   } catch (error) {
     return { attempted: true, ok: false, error: error.message };
   }
@@ -250,7 +241,7 @@ async function testHandoffSubmissionEndpoint({ adapter, connection, metadata, te
 
   let endpoint;
   try {
-    endpoint = handoffEndpoint(template, values, `${adapter.marketplace} handoff submission`);
+    endpoint = await handoffEndpoint(template, values, `${adapter.marketplace} handoff submission`);
   } catch (error) {
     return { attempted: true, ok: false, error: error.message };
   }
@@ -322,9 +313,9 @@ export async function testHandoffConnection(adapter, options = {}) {
     marketplace: adapter.marketplace,
     diagnostics: {
       statusEndpointConfigured: Boolean(statusTemplate),
-      statusEndpointHost: endpointHost(statusTemplate, values),
+      statusEndpointHost: await endpointHost(statusTemplate, values),
       submissionEndpointConfigured: Boolean(submissionTemplate),
-      submissionEndpointHost: endpointHost(submissionTemplate, values),
+      submissionEndpointHost: await endpointHost(submissionTemplate, values),
     },
     endpointValidation,
   };
