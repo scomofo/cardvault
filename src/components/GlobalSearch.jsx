@@ -11,6 +11,9 @@ export default function GlobalSearch({ onNavigate }) {
   const { catalog, sales, orders, listings, purchases, watchlist, trades } = useData();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  // The input stays instantly responsive to every keystroke; only the
+  // (potentially large) scan across every collection is debounced.
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const inputRef = useRef(null);
   const panelRef = useRef(null);
   const openerRef = useRef(null);
@@ -30,6 +33,11 @@ export default function GlobalSearch({ onNavigate }) {
     }
     setOpen(true);
   }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query), 150);
+    return () => clearTimeout(timer);
+  }, [query]);
 
   // Keyboard shortcut: Ctrl+K or / to open
   useEffect(() => {
@@ -90,19 +98,19 @@ export default function GlobalSearch({ onNavigate }) {
   }, [open]);
 
   const results = useMemo(() => {
-    if (!query.trim()) return [];
+    if (!debouncedQuery.trim()) return [];
 
     const all = [];
 
     // Cards
     catalog.forEach((c) => {
-      const s = matchScore(c, query);
+      const s = matchScore(c, debouncedQuery);
       if (s > 0) all.push({ type: "card", item: c, score: s });
     });
 
     // Sales
     sales.forEach((s) => {
-      const sc = matchScore({ name: s.cardName, set: s.cardSet || s.set, platform: s.platform }, query);
+      const sc = matchScore({ name: s.cardName, set: s.cardSet || s.set, platform: s.platform }, debouncedQuery);
       if (sc > 0) all.push({ type: "sale", item: s, score: sc });
     });
 
@@ -114,25 +122,25 @@ export default function GlobalSearch({ onNavigate }) {
         platform: o.platform,
         seller: o.buyerHandle || o.buyer_handle,
         number: o.externalOrderId || o.external_order_id || o.id,
-      }, query);
+      }, debouncedQuery);
       if (sc > 0) all.push({ type: "order", item: o, score: sc });
     });
 
     // Listings
     listings.forEach((l) => {
-      const sc = matchScore({ name: l.cardName, set: l.cardSet || l.set, number: l.cardNumber, platform: l.platform }, query);
+      const sc = matchScore({ name: l.cardName, set: l.cardSet || l.set, number: l.cardNumber, platform: l.platform }, debouncedQuery);
       if (sc > 0) all.push({ type: "listing", item: l, score: sc });
     });
 
     // Purchases
     purchases.forEach((p) => {
-      const sc = matchScore(p, query);
+      const sc = matchScore(p, debouncedQuery);
       if (sc > 0) all.push({ type: "purchase", item: p, score: sc });
     });
 
     // Watchlist
     watchlist.forEach((w) => {
-      const sc = matchScore(w, query);
+      const sc = matchScore(w, debouncedQuery);
       if (sc > 0) all.push({ type: "watch", item: w, score: sc });
     });
 
@@ -144,13 +152,13 @@ export default function GlobalSearch({ onNavigate }) {
         gave: t.gave,
         received: t.received,
         notes: t.notes,
-      }, query);
+      }, debouncedQuery);
       if (sc > 0) all.push({ type: "trade", item: t, score: sc });
     });
 
     all.sort((a, b) => b.score - a.score);
     return all.slice(0, MAX_RESULTS);
-  }, [query, catalog, sales, orders, listings, purchases, watchlist, trades]);
+  }, [debouncedQuery, catalog, sales, orders, listings, purchases, watchlist, trades]);
 
   const handleSelect = useCallback((result) => {
     closeSearch();
