@@ -1,6 +1,7 @@
 import {
   isAllowedDevOrigin,
   isLoopbackAddress,
+  isTrustedHostHeader,
   isTrustedLanAddressString,
   normalizeAddress,
   requestHasTrustedOrigin,
@@ -36,6 +37,31 @@ export function authCheck(req, res, next) {
   const header = req.headers.authorization;
   if (header !== `Bearer ${token}`) {
     return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  next();
+}
+
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+// Without PROXY_TOKEN the only thing standing between a web page and this
+// API is the browser's same-origin policy — and DNS rebinding defeats it:
+// attacker.example resolves to 127.0.0.1, so the page's fetch() is
+// same-origin and carries Host: attacker.example. Rejecting any Host not in
+// the trusted dev-host set closes that, and rejecting a state-changing
+// request whose Origin is not an allowed app origin closes the cross-site
+// POST case that `cors` (which only withholds headers) does not. With a
+// bearer token configured the token is the boundary, so this is a no-op.
+export function enforceTrustedHostAndOrigin(req, res, next) {
+  if (getProxyToken()) return next();
+
+  if (!isTrustedHostHeader(req.headers.host)) {
+    return res.status(403).json({ error: "Untrusted Host header" });
+  }
+
+  const origin = req.headers.origin;
+  if (origin && !SAFE_METHODS.has(req.method) && !isAllowedDevOrigin(origin)) {
+    return res.status(403).json({ error: "Untrusted request origin" });
   }
 
   next();

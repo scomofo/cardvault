@@ -53,25 +53,27 @@ export function validateOutboundUrlSyntax(rawUrl, label) {
 /**
  * Full check before an actual outbound fetch: the syntax/host-literal check
  * above, plus a DNS lookup so a hostname that currently resolves to a
- * loopback/private/link-local address is also rejected. This is a
- * best-effort, request-time check (not a connection-time guarantee — DNS
- * can still change between this call and the fetch itself), but it closes
- * the common cases without needing to proxy every request through a fixed
- * resolver.
+ * loopback/private/link-local address is also rejected, and one that does
+ * not resolve at all is rejected rather than handed to fetch. This is a
+ * request-time check (not a connection-time guarantee — DNS can still
+ * change between this call and the fetch itself), but it closes the common
+ * cases without needing to proxy every request through a fixed resolver.
  */
 export async function assertPublicOutboundUrl(rawUrl, label) {
   const endpoint = validateOutboundUrlSyntax(rawUrl, label);
   if (localAddressCheckDisabled()) return endpoint;
 
+  let records;
   try {
-    const records = await lookup(endpoint.hostname, { all: true, verbatim: true });
-    if (records.some((record) => isTrustedLanAddressString(record.address))) {
-      throw new Error(`${label} URL must not target a local or private address`);
-    }
+    records = await lookup(endpoint.hostname, { all: true, verbatim: true });
   } catch (error) {
-    if (error instanceof Error && error.message.includes("must not target")) throw error;
-    // Lookup failures (offline dev environment, transient DNS issue) are
-    // surfaced by the fetch itself; don't block the request on those here.
+    // Fail closed: a hostname this process cannot resolve is not one it
+    // should hand a partner token to. (Undici would fail the fetch anyway;
+    // this just makes the reason explicit and keeps the guard total.)
+    throw new Error(`${label} URL could not be resolved`, { cause: error });
+  }
+  if (records.some((record) => isTrustedLanAddressString(record.address))) {
+    throw new Error(`${label} URL must not target a local or private address`);
   }
 
   return endpoint;
@@ -79,6 +81,20 @@ export async function assertPublicOutboundUrl(rawUrl, label) {
 
 const MAX_REDIRECTS = 5;
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+const METHOD_REWRITING_REDIRECTS = new Set([301, 302, 303]);
+// The only request headers that survive a redirect to a *different* origin.
+// Everything else — Authorization, a partner's configured API-key header
+// (whatever it is called), cookies — is a credential for the origin the
+// caller validated, not for wherever that origin chose to send us.
+const CROSS_ORIGIN_SAFE_HEADERS = new Set(["accept", "content-type", "user-agent"]);
+
+function stripCredentialHeaders(headers) {
+  const kept = {};
+  for (const [name, value] of new Headers(headers || {})) {
+    if (CROSS_ORIGIN_SAFE_HEADERS.has(name)) kept[name] = value;
+  }
+  return kept;
+}
 
 /**
  * fetch() that revalidates every redirect hop through assertPublicOutboundUrl
@@ -86,6 +102,8 @@ const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
  * check could still 307/308 the request into a private/link-local address
  * with the same method, body, and auth headers still attached, since a
  * plain `fetch(validatedUrl, ...)` follows redirects with no further checks.
+ * A redirect to another origin also drops the request's credential headers
+ * (see CROSS_ORIGIN_SAFE_HEADERS), the way browsers do.
  * `endpoint` must already be validated (e.g. via assertPublicOutboundUrl).
  */
 export async function fetchPublic(endpoint, options, label) {
@@ -102,8 +120,12 @@ export async function fetchPublic(endpoint, options, label) {
       throw new Error(`${label} exceeded ${MAX_REDIRECTS} redirects`);
     }
 
-    target = await assertPublicOutboundUrl(new URL(location, target).href, label);
-    if (response.status === 303 && init.method && init.method !== "GET") {
+    const next = await assertPublicOutboundUrl(new URL(location, target).href, label);
+    if (next.origin !== target.origin) {
+      init = { ...init, headers: stripCredentialHeaders(init.headers) };
+    }
+    target = next;
+    if (METHOD_REWRITING_REDIRECTS.has(response.status) && init.method && !["GET", "HEAD"].includes(init.method)) {
       init = { ...init, method: "GET", body: undefined };
     }
   }

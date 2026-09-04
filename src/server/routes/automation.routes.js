@@ -412,7 +412,7 @@ export function registerAutomationRoutes(app) {
     }
   });
 
-  app.post("/api/automation/shipping/:orderId", requireJsonBody, async (req, res) => {
+  app.post("/api/automation/shipping/:orderId", requireProtectedConfigWrite, requireJsonBody, async (req, res) => {
     try {
       if (!req.params.orderId) return res.status(400).json({ error: "orderId required" });
       res.json(await automateShipment(req.params.orderId, req.body));

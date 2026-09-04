@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isLoopbackRequest, isTrustedLanRequest, requireProtectedConfigWrite } from "../src/server/auth.js";
+import { enforceTrustedHostAndOrigin, isLoopbackRequest, isTrustedLanRequest, requireProtectedConfigWrite } from "../src/server/auth.js";
 
 function createResponseRecorder() {
   return {
@@ -136,4 +136,82 @@ test("requireProtectedConfigWrite allows remote requests with the correct bearer
 
   if (originalToken == null) delete process.env.PROXY_TOKEN;
   else process.env.PROXY_TOKEN = originalToken;
+});
+
+function withoutProxyToken(t) {
+  const originalToken = process.env.PROXY_TOKEN;
+  delete process.env.PROXY_TOKEN;
+  t.after(() => {
+    if (originalToken == null) delete process.env.PROXY_TOKEN;
+    else process.env.PROXY_TOKEN = originalToken;
+  });
+}
+
+function runHostOriginCheck(req) {
+  const res = createResponseRecorder();
+  let nextCalled = false;
+  enforceTrustedHostAndOrigin({ ip: "127.0.0.1", socket: { remoteAddress: "127.0.0.1" }, ...req }, res, () => {
+    nextCalled = true;
+  });
+  return { res, nextCalled };
+}
+
+test("enforceTrustedHostAndOrigin rejects a Host header outside the trusted dev hosts (DNS rebinding)", (t) => {
+  withoutProxyToken(t);
+
+  const rejected = runHostOriginCheck({ method: "GET", headers: { host: "attacker.example.com" } });
+  assert.equal(rejected.nextCalled, false);
+  assert.equal(rejected.res.statusCode, 403);
+  assert.match(rejected.res.payload.error, /host/i);
+
+  const missing = runHostOriginCheck({ method: "GET", headers: {} });
+  assert.equal(missing.nextCalled, false);
+  assert.equal(missing.res.statusCode, 403);
+
+  for (const host of ["127.0.0.1:3001", "localhost:3000", "[::1]:3001"]) {
+    const allowed = runHostOriginCheck({ method: "GET", headers: { host } });
+    assert.equal(allowed.nextCalled, true, `expected Host ${host} to be trusted`);
+  }
+});
+
+test("enforceTrustedHostAndOrigin rejects state-changing requests from a foreign Origin but not safe ones", (t) => {
+  withoutProxyToken(t);
+
+  const crossSitePost = runHostOriginCheck({
+    method: "POST",
+    headers: { host: "127.0.0.1:3001", origin: "https://attacker.example.com" },
+  });
+  assert.equal(crossSitePost.nextCalled, false);
+  assert.equal(crossSitePost.res.statusCode, 403);
+  assert.match(crossSitePost.res.payload.error, /origin/i);
+
+  const crossSiteGet = runHostOriginCheck({
+    method: "GET",
+    headers: { host: "127.0.0.1:3001", origin: "https://attacker.example.com" },
+  });
+  assert.equal(crossSiteGet.nextCalled, true, "CORS already withholds the response for a foreign-origin GET");
+
+  const appPost = runHostOriginCheck({
+    method: "POST",
+    headers: { host: "127.0.0.1:3001", origin: "http://localhost:3000" },
+  });
+  assert.equal(appPost.nextCalled, true);
+
+  const noOriginPost = runHostOriginCheck({ method: "POST", headers: { host: "127.0.0.1:3001" } });
+  assert.equal(noOriginPost.nextCalled, true, "non-browser clients send no Origin");
+});
+
+test("enforceTrustedHostAndOrigin is a no-op when PROXY_TOKEN is the boundary", (t) => {
+  const originalToken = process.env.PROXY_TOKEN;
+  process.env.PROXY_TOKEN = "test-token";
+  t.after(() => {
+    if (originalToken == null) delete process.env.PROXY_TOKEN;
+    else process.env.PROXY_TOKEN = originalToken;
+  });
+
+  const result = runHostOriginCheck({
+    method: "POST",
+    headers: { host: "api.example.com", origin: "https://dashboard.example.com" },
+  });
+  assert.equal(result.nextCalled, true);
 });

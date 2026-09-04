@@ -145,7 +145,7 @@ export function registerMarketplaceRoutes(app) {
     }
   });
 
-  app.post("/api/marketplaces/publish", requireJsonBody, async (req, res) => {
+  app.post("/api/marketplaces/publish", requireProtectedConfigWrite, requireJsonBody, async (req, res) => {
     try {
       const { listingId, marketplace, connectionId } = req.body;
       if (!listingId || !marketplace) {
@@ -160,7 +160,7 @@ export function registerMarketplaceRoutes(app) {
     }
   });
 
-  app.post("/api/marketplaces/revise", requireJsonBody, async (req, res) => {
+  app.post("/api/marketplaces/revise", requireProtectedConfigWrite, requireJsonBody, async (req, res) => {
     try {
       const { listingId, marketplace, overrides } = req.body;
       if (!listingId || !marketplace) {
@@ -175,7 +175,7 @@ export function registerMarketplaceRoutes(app) {
     }
   });
 
-  app.post("/api/marketplaces/end", requireJsonBody, async (req, res) => {
+  app.post("/api/marketplaces/end", requireProtectedConfigWrite, requireJsonBody, async (req, res) => {
     try {
       const { listingId, marketplace } = req.body;
       if (!listingId || !marketplace) {
@@ -187,7 +187,7 @@ export function registerMarketplaceRoutes(app) {
     }
   });
 
-  app.post("/api/marketplaces/handoff/status", requireJsonBody, (req, res) => {
+  app.post("/api/marketplaces/handoff/status", requireProtectedConfigWrite, requireJsonBody, (req, res) => {
     try {
       const { listingId, marketplace, status, submissionReference, note } = req.body;
       res.json(updateMarketplaceHandoffStatus({ listingId, marketplace, status, submissionReference, note }));
@@ -196,7 +196,7 @@ export function registerMarketplaceRoutes(app) {
     }
   });
 
-  app.post("/api/marketplaces/handoff/submit", requireJsonBody, async (req, res) => {
+  app.post("/api/marketplaces/handoff/submit", requireProtectedConfigWrite, requireJsonBody, async (req, res) => {
     try {
       const { marketplace, listingIds } = req.body;
       if (!marketplace) return res.status(400).json({ error: "marketplace required" });
@@ -209,7 +209,7 @@ export function registerMarketplaceRoutes(app) {
     }
   });
 
-  app.post("/api/marketplaces/crosspost", requireJsonBody, async (req, res) => {
+  app.post("/api/marketplaces/crosspost", requireProtectedConfigWrite, requireJsonBody, async (req, res) => {
     try {
       const { listingId, marketplaces } = req.body;
       if (!listingId) return res.status(400).json({ error: "listingId required" });
@@ -219,7 +219,7 @@ export function registerMarketplaceRoutes(app) {
     }
   });
 
-  app.post("/api/marketplaces/sync", requireJsonBody, async (req, res) => {
+  app.post("/api/marketplaces/sync", requireProtectedConfigWrite, requireJsonBody, async (req, res) => {
     try {
       const { marketplace, listingId } = req.body;
       if (!marketplace) return res.status(400).json({ error: "marketplace required" });

@@ -8,7 +8,7 @@ import { dirname, resolve as pathResolve } from "node:path";
 import { initDB, get as dbGet, run as dbRun } from "./src/server/database.js";
 import { seedReferenceData } from "./src/server/seed.js";
 import { registerRoutes } from "./src/server/routes/index.js";
-import { authCheck, requireProtectedConfigWrite } from "./src/server/auth.js";
+import { authCheck, enforceTrustedHostAndOrigin, requireProtectedConfigWrite } from "./src/server/auth.js";
 import { getTrustedDevHosts, isAllowedDevOrigin } from "./src/server/networkTrust.js";
 import { getAnthropicApiKey, normalizeAnthropicApiKey } from "./src/server/runtimeConfig.js";
 
@@ -106,6 +106,9 @@ app.use(express.json({ limit: "2mb" }));
 // served as static files (not under /api), and README documents leaving
 // PROXY_TOKEN blank when using the built-in UI.
 app.use("/api", authCheck);
+// Reject DNS-rebinding (foreign Host) and cross-site state-changing requests
+// (foreign Origin) when no bearer token is configured. See auth.js.
+app.use("/api", enforceTrustedHostAndOrigin);
 
 // Rate limiting on AI endpoint
 const aiLimiter = rateLimit({
