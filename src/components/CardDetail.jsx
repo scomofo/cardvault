@@ -3,7 +3,6 @@ import { useToast } from "./Toast";
 import { PLATFORMS } from "../lib/constants";
 import { useFeeModels } from "../hooks/useFeeModels";
 import { condOf, fmtShort, uid } from "../lib/utils";
-import { decisionsAPI, automationAPI, salesAPI, ordersAPI } from "../lib/api";
 import { buildManualSaleFulfillment } from "../lib/salesViewState";
 import { useData } from "../lib/DataContext";
 import { decisionsAPI, automationAPI, itemsAPI, salesAPI, ordersAPI, listingsAPI } from "../lib/api";
@@ -14,7 +13,7 @@ import { IconBack, IconTrash, IconCheck, IconSearch, IconPlus, IconZap, IconShie
 import ProfitWarning from "./ProfitWarning";
 import SoldComps from "./SoldComps";
 
-export default function CardDetail({ detail, detailFrontImg, detailBackImg, catalog, setCatalog, sales, setSales, listings, setListings, setOrders, useServer, onBack }) {
+export default function CardDetail({ detail, detailFrontImg, detailBackImg, catalog, setCatalog, sales, setSales, listings, setListings, onBack }) {
   const toast = useToast();
   const { getFeeRate } = useFeeModels();
   const { useServer, setOrders: setContextOrders } = useData() || {};
