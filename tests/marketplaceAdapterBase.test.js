@@ -56,6 +56,7 @@ test("base adapter shipping profile and export mapping", () => {
 });
 
 test("handoff status and submission HTTP lifecycle", async (t) => {
+  // Fetch is stubbed below. Use a documentation IP so URL validation never needs live DNS.
   const originalFetch = globalThis.fetch;
   const calls = [];
 
@@ -117,10 +118,10 @@ test("handoff status and submission HTTP lifecycle", async (t) => {
       });
 
       const result = await adapter.syncHandoffStatus(listing, {
-        connection: connection({ handoffStatusUrl: "https://example.com/status/{listingId}?ref={submissionReference}" }),
+        connection: connection({ handoffStatusUrl: "https://203.0.113.10/status/{listingId}?ref={submissionReference}" }),
       });
 
-      assert.equal(calls[0].url, "https://example.com/status/L1?ref=R-0");
+      assert.equal(calls[0].url, "https://203.0.113.10/status/L1?ref=R-0");
       assert.equal(calls[0].options.method, "GET");
       assert.equal(calls[0].options.headers.Authorization, "Bearer tok-9");
       assert.equal(result.status, "handoff_accepted");
@@ -136,7 +137,7 @@ test("handoff status and submission HTTP lifecycle", async (t) => {
       stubResponse("{}", { status: 200 });
       const result = await adapter.syncHandoffStatus({ ...listing, overrides: "not-json" }, {
         connection: connection({
-          handoffStatusUrl: "https://example.com/status",
+          handoffStatusUrl: "https://203.0.113.10/status",
           apiKeyHeader: "X-Api-Key",
           apiKeyPrefix: "",
         }),
@@ -148,13 +149,13 @@ test("handoff status and submission HTTP lifecycle", async (t) => {
     await t.test("syncHandoffStatus surfaces remote errors and truncates long text", async () => {
       stubResponse(JSON.stringify({ error: "status denied" }), { status: 403 });
       await assert.rejects(
-        () => adapter.syncHandoffStatus(listing, { connection: connection({ handoffStatusUrl: "https://example.com/status" }) }),
+        () => adapter.syncHandoffStatus(listing, { connection: connection({ handoffStatusUrl: "https://203.0.113.10/status" }) }),
         /status denied/,
       );
 
       stubResponse("x".repeat(250), { status: 500 });
       await assert.rejects(
-        () => adapter.syncHandoffStatus(listing, { connection: connection({ handoffStatusUrl: "https://example.com/status" }) }),
+        () => adapter.syncHandoffStatus(listing, { connection: connection({ handoffStatusUrl: "https://203.0.113.10/status" }) }),
         (error) => {
           assert.match(error.message, /^x+\.\.\.$/);
           assert.equal(error.message.length, 203);
@@ -167,7 +168,7 @@ test("handoff status and submission HTTP lifecycle", async (t) => {
       stubAbortingFetch();
       await assert.rejects(
         () => adapter.syncHandoffStatus(listing, {
-          connection: connection({ handoffStatusUrl: "https://example.com/status", statusTimeoutMs: 20 }),
+          connection: connection({ handoffStatusUrl: "https://203.0.113.10/status", statusTimeoutMs: 20 }),
         }),
         /testmarket handoff status sync timed out/,
       );
@@ -185,7 +186,7 @@ test("handoff status and submission HTTP lifecycle", async (t) => {
       stubResponse(JSON.stringify({ status: "submitted", id: "S-1" }), { status: 200 });
 
       const result = await adapter.submitHandoff(listing, {
-        connection: connection({ handoffSubmissionUrl: "https://example.com/submit" }),
+        connection: connection({ handoffSubmissionUrl: "https://203.0.113.10/submit" }),
       });
 
       assert.equal(calls[0].options.method, "POST");
@@ -203,14 +204,14 @@ test("handoff status and submission HTTP lifecycle", async (t) => {
     await t.test("submitHandoff surfaces remote errors and timeouts", async () => {
       stubResponse(JSON.stringify({ message: "queue full" }), { status: 429 });
       await assert.rejects(
-        () => adapter.submitHandoff(listing, { connection: connection({ handoffSubmissionUrl: "https://example.com/submit" }) }),
+        () => adapter.submitHandoff(listing, { connection: connection({ handoffSubmissionUrl: "https://203.0.113.10/submit" }) }),
         /queue full/,
       );
 
       stubAbortingFetch();
       await assert.rejects(
         () => adapter.submitHandoff(listing, {
-          connection: connection({ handoffSubmissionUrl: "https://example.com/submit", submissionTimeoutMs: 20 }),
+          connection: connection({ handoffSubmissionUrl: "https://203.0.113.10/submit", submissionTimeoutMs: 20 }),
         }),
         /testmarket handoff submission timed out/,
       );

@@ -4,6 +4,7 @@ import { PLATFORMS } from "../lib/constants";
 import { useFeeModels } from "../hooks/useFeeModels";
 import { condOf, fmtShort, uid } from "../lib/utils";
 import { buildManualSaleFulfillment } from "../lib/salesViewState";
+import { toggleCardListing } from "../lib/cardDetailState";
 import { useData } from "../lib/DataContext";
 import { decisionsAPI, automationAPI, itemsAPI, salesAPI, ordersAPI, listingsAPI } from "../lib/api";
 import { calculateGrade, gradeToTerm, generateConditionReport } from "../lib/grading";
@@ -12,6 +13,22 @@ import { aiGradePredict } from "../lib/ai";
 import { IconBack, IconTrash, IconCheck, IconSearch, IconPlus, IconZap, IconShield, IconCopy, Spinner, Skeleton } from "./Icons";
 import ProfitWarning from "./ProfitWarning";
 import SoldComps from "./SoldComps";
+
+function DetailPhoto({ src, side, name }) {
+  const [failedSrc, setFailedSrc] = useState(null);
+  if (src && src !== failedSrc) {
+    return <img src={src} alt={`${side} of ${name}`} className="img-preview"
+      style={{ height: 200, maxWidth: "100%", objectFit: "contain", boxShadow: "var(--shadow-lg)" }}
+      onError={() => setFailedSrc(src)} />;
+  }
+  return (
+    <div className="flex items-center justify-center gap-8 text-dim text-sm"
+      style={{ width: 145, height: 200, flexDirection: "column", border: "1px dashed var(--brd2)", borderRadius: "var(--radius)" }}>
+      <IconCopy size={24} aria-hidden="true" />
+      <span>{src ? `${side} photo unavailable` : `No ${side.toLowerCase()} photo`}</span>
+    </div>
+  );
+}
 
 export default function CardDetail({ detail, detailFrontImg, detailBackImg, catalog, setCatalog, sales, setSales, listings, setListings, onBack }) {
   const toast = useToast();
@@ -66,12 +83,7 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
     };
   }, [detail?.id, detail?.status, (detail?.listedOn || []).join("|")]);
   const toggleListed = (id, platform) => {
-    setCatalog((p) => p.map((c) => {
-      if (c.id !== id) return c;
-      const lo = c.listedOn || [];
-      const newLo = lo.includes(platform) ? lo.filter((x) => x !== platform) : [...lo, platform];
-      return { ...c, listedOn: newLo, status: newLo.length > 0 ? "listed" : "inventory" };
-    }));
+    setCatalog((p) => p.map((c) => c.id === id ? toggleCardListing(c, platform) : c));
   };
 
   const markSold = async (id) => {
@@ -220,12 +232,11 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
           <IconBack size={14} /> Back
         </button>
 
-        {detailFrontImg && (
-          <div className="flex gap-10 justify-center mb-10">
-            <img src={detailFrontImg} alt={`Front of ${detail.name}`} className="img-preview" style={{ height: 200, boxShadow: "var(--shadow-lg)" }} />
-            {detailBackImg && <img src={detailBackImg} alt={`Back of ${detail.name}`} className="img-preview" style={{ height: 200, boxShadow: "var(--shadow-lg)" }} />}
-          </div>
-        )}
+        <div className="flex flex-wrap gap-10 justify-center mb-10">
+          <DetailPhoto key={`${detail.id}-front`} src={detailFrontImg} side="Front" name={detail.name} />
+          {(detail.backImgId || detailBackImg) &&
+            <DetailPhoto key={`${detail.id}-back`} src={detailBackImg} side="Back" name={detail.name} />}
+        </div>
 
         <h2 className="gold text-center" style={{ fontSize: 24, fontWeight: 900, margin: "8px 0" }}>{detail.name}</h2>
         <div className="text-center text-sm text-dim mb-12">{[detail.set, detail.year, detail.number && `#${detail.number}`].filter(Boolean).join(" \u00b7 ")}</div>
@@ -312,6 +323,7 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
           <div className="chip-row mt-6">
             {PLATFORMS.map((p) => (
               <button key={p.v} onClick={() => toggleListed(detail.id, p.v)}
+                disabled={detail.status === "sold"} aria-pressed={(detail.listedOn || []).includes(p.v)}
                 className={`chip ${(detail.listedOn || []).includes(p.v) ? "active" : ""}`}>
                 {p.l}{(detail.listedOn || []).includes(p.v) ? " \u2713" : ""}
               </button>

@@ -17,6 +17,15 @@ export function catalogStatus(card) {
   return "inventory";
 }
 
+export function catalogReturnFocusId(cards, origin) {
+  if (!origin || cards.length === 0) return null;
+  if (cards.some((card) => card.id === origin.id)) return origin.id;
+  // A sold/deleted card may no longer match the current filter. Continue
+  // at its previous position, or the preceding card if it was last.
+  const index = Number.isInteger(origin.index) ? origin.index : 0;
+  return cards[Math.min(Math.max(index, 0), cards.length - 1)].id;
+}
+
 export function summarizeCatalog(catalog) {
   const summary = { owned: 0, listed: 0, sold: 0, priced: 0, value: 0, gain: 0, comparable: 0 };
   for (const card of catalog) {

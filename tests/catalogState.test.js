@@ -1,6 +1,25 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cardEstimate, catalogStatus, filterCatalog, summarizeCatalog } from "../src/lib/catalogState.js";
+import { cardEstimate, catalogStatus, catalogReturnFocusId, filterCatalog, summarizeCatalog } from "../src/lib/catalogState.js";
+
+test("detail return keeps the same card focused even after reordering", () => {
+  assert.equal(catalogReturnFocusId([{ id: "b" }, { id: "a" }], { id: "a", index: 0 }), "a");
+});
+
+test("detail return selects the next card when the sold card leaves the Owned filter", () => {
+  const cards = [{ id: "a" }, { id: "b" }, { id: "c" }];
+  const owned = filterCatalog(cards.map((card) => card.id === "b" ? { ...card, status: "sold" } : card), { status: "owned" });
+  assert.equal(catalogReturnFocusId(owned, { id: "b", index: 1 }), "c");
+});
+
+test("detail return selects the previous card when the last card is deleted", () => {
+  assert.equal(catalogReturnFocusId([{ id: "a" }], { id: "b", index: 1 }), "a");
+});
+
+test("empty results and empty collections return no card so the view can focus its controls", () => {
+  assert.equal(catalogReturnFocusId([], { id: "last", index: 0 }), null);
+  assert.equal(catalogReturnFocusId([{ id: "first" }], null), null);
+});
 
 test("portfolio totals exclude sold cards and compare only owned cards with value and cost", () => {
   const summary = summarizeCatalog([
