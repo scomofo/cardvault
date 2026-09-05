@@ -1,83 +1,73 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useToast } from "./Toast";
 import { useData } from "../lib/DataContext";
-import { PLATFORMS } from "../lib/constants";
-import { condOf, fmtShort, uid, download } from "../lib/utils";
-import { loadImage, deleteImage } from "../lib/storage";
+import { condOf, fmtShort, download } from "../lib/utils";
+import { loadImage, deleteImage, loadString, saveString } from "../lib/storage";
+import { cardEstimate, catalogStatus, filterCatalog, summarizeCatalog } from "../lib/catalogState";
 import { genCSV, genEbayCSV, genInsurancePDF } from "../lib/exports";
-import { IconSearch, IconDownload, IconChevron } from "./Icons";
+import { IconSearch, IconDownload, IconChevron, IconCamera, IconCopy, IconGrid, IconList, IconX } from "./Icons";
 import CardDetail from "./CardDetail";
 
-export default function CatalogView({ focus, onFocusConsumed }) {
+export default function CatalogView({ onNavigate, focus, onFocusConsumed }) {
   const toast = useToast();
-  const { catalog, setCatalog, sales, setSales, listings, setListings, setOrders, userName, shipFrom, useServer } = useData();
-  const [view, setView] = useState("list");
+  const { catalog, setCatalog, sales, setSales, listings, setListings, userName, shipFrom } = useData();
+  const [layout, setLayout] = useState(() => loadString("catalog_layout") === "grid" ? "grid" : "list");
   const [detailId, setDetailId] = useState(null);
   const [detailFrontImg, setDetailFrontImg] = useState(null);
   const [detailBackImg, setDetailBackImg] = useState(null);
-  const [binderF, setBinderF] = useState("All");
+  const [binderF, setBinderF] = useState("");
+  const [statusF, setStatusF] = useState("all");
   const [sortBy, setSortBy] = useState("date_desc");
   const [catSearch, setCatSearch] = useState("");
   const [thumbs, setThumbs] = useState({});
   const thumbAttempted = useRef(new Set());
+  const cardButtons = useRef(new Map());
+  const returnFocusId = useRef(null);
+  const searchInput = useRef(null);
 
   const detail = useMemo(() => detailId ? catalog.find((c) => c.id === detailId) || null : null, [detailId, catalog]);
 
-  // Record-level deep links (Next Best Action, action queue, global search):
-  // open the focused card's detail directly.
+  // Action queue and global-search deep links open the card directly.
   useEffect(() => {
     if (!focus?.id) return;
-    if (catalog.some((c) => c.id === focus.id)) {
-      setDetailId(focus.id);
-      setView("detail");
-    }
+    if (catalog.some((c) => c.id === focus.id)) setDetailId(focus.id);
     onFocusConsumed?.();
-  }, [focus]);
+  }, [focus, catalog, onFocusConsumed]);
 
-  const binders = useMemo(() => {
-    const s = new Set(["All"]);
-    catalog.forEach((c) => { if (c.binder) s.add(c.binder); });
-    return [...s];
-  }, [catalog]);
-
-  const filtered = useMemo(() => {
-    let a = binderF === "All" ? [...catalog] : catalog.filter((c) => c.binder === binderF);
-    if (catSearch.trim()) {
-      const q = catSearch.toLowerCase();
-      a = a.filter((c) => (c.name + c.set + c.number + c.rarity).toLowerCase().includes(q));
+  useEffect(() => {
+    if (!detailId && returnFocusId.current) {
+      cardButtons.current.get(returnFocusId.current)?.focus();
+      returnFocusId.current = null;
     }
-    const sf = {
-      date_desc: (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
-      date_asc: (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
-      value_desc: (a, b) => (parseFloat(b.priceEstimate?.mid) || 0) - (parseFloat(a.priceEstimate?.mid) || 0),
-      value_asc: (a, b) => (parseFloat(a.priceEstimate?.mid) || 0) - (parseFloat(b.priceEstimate?.mid) || 0),
-      name_asc: (a, b) => (a.name || "").localeCompare(b.name || ""),
-    };
-    a.sort(sf[sortBy] || sf.date_desc);
-    return a;
-  }, [catalog, binderF, sortBy, catSearch]);
+  }, [detailId]);
 
-  const totalVal = useMemo(() => catalog.filter((c) => c.status !== "sold").reduce((s, c) => s + (parseFloat(c.priceEstimate?.mid) || 0), 0), [catalog]);
-  const totalCost = useMemo(() => catalog.reduce((s, c) => s + (parseFloat(c.costBasis) || 0), 0), [catalog]);
+  const binders = useMemo(() => [...new Set(catalog.map((c) => c.binder).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true })), [catalog]);
+  const filtered = useMemo(() => filterCatalog(catalog, {
+    binder: binderF, status: statusF, search: catSearch, sort: sortBy,
+  }), [catalog, binderF, statusF, sortBy, catSearch]);
+  const summary = useMemo(() => summarizeCatalog(catalog), [catalog]);
+  const hasFilters = Boolean(binderF || statusF !== "all" || catSearch.trim());
 
   useEffect(() => {
     filtered.forEach((c) => {
-      if (c.frontImgId && !thumbs[c.frontImgId] && !thumbAttempted.current.has(c.frontImgId)) {
-        thumbAttempted.current.add(c.frontImgId);
-        loadImage(c.frontImgId).then((img) => { if (img) setThumbs((p) => ({ ...p, [c.frontImgId]: img })); });
-      }
+      if (!c.frontImgId || thumbAttempted.current.has(c.frontImgId)) return;
+      thumbAttempted.current.add(c.frontImgId);
+      loadImage(c.frontImgId)
+        .then((img) => { if (img) setThumbs((p) => ({ ...p, [c.frontImgId]: img })); })
+        .catch(() => {}); // A missing local photo must not interrupt browsing.
     });
   }, [filtered]);
 
+  const frontImgId = detail?.frontImgId;
+  const backImgId = detail?.backImgId;
   useEffect(() => {
-    if (!detail) return;
     setDetailFrontImg(null); setDetailBackImg(null);
     let cancelled = false;
-    if (detail.frontImgId) loadImage(detail.frontImgId).then((img) => { if (!cancelled) setDetailFrontImg(img); });
-    if (detail.backImgId) loadImage(detail.backImgId).then((img) => { if (!cancelled) setDetailBackImg(img); });
+    if (frontImgId) loadImage(frontImgId).then((img) => { if (!cancelled) setDetailFrontImg(img); }).catch(() => {});
+    if (backImgId) loadImage(backImgId).then((img) => { if (!cancelled) setDetailBackImg(img); }).catch(() => {});
     return () => { cancelled = true; };
-  }, [detail?.id]);
-
+  }, [detailId, frontImgId, backImgId]);
 
   const handleDetailBack = async (deleteId) => {
     if (deleteId) {
@@ -86,11 +76,18 @@ export default function CatalogView({ focus, onFocusConsumed }) {
       if (d?.backImgId) await deleteImage(d.backImgId).catch(() => {});
       setCatalog((p) => p.filter((c) => c.id !== deleteId));
       toast.info("Card deleted");
+    } else {
+      returnFocusId.current = detailId;
     }
-    setDetailId(null); setView("list");
+    setDetailId(null);
   };
 
-  if (view === "detail" && detail) {
+  const resetFilters = () => {
+    setBinderF(""); setStatusF("all"); setCatSearch("");
+    searchInput.current?.focus();
+  };
+
+  if (detail) {
     return (
       <CardDetail
         detail={detail}
@@ -102,107 +99,173 @@ export default function CatalogView({ focus, onFocusConsumed }) {
         setSales={setSales}
         listings={listings}
         setListings={setListings}
-        setOrders={setOrders}
-        useServer={useServer}
         onBack={handleDetailBack}
       />
     );
   }
 
-  // === LIST VIEW ===
   return (
-    <div className="fade">
-      <h1 className="page-title">Collection</h1>
+    <div className="catalog-view fade">
+      <div className="catalog-heading">
+        <h1 className="page-title">Collection</h1>
+        {catalog.length > 0 && onNavigate && (
+          <button className="btn btn-primary btn-sm" onClick={() => onNavigate("scan")}>
+            <IconCamera size={16} aria-hidden="true" /> Scan card
+          </button>
+        )}
+      </div>
 
-      {catalog.length === 0 && (
-        <div className="card empty-state mb-12">
-          <div className="empty-icon">{"\ud83c\udca0"}</div>
-          <div className="empty-title">No cards yet</div>
-          <div className="empty-desc">Scan your first card to get started</div>
+      {catalog.length === 0 ? (
+        <div className="card catalog-empty">
+          <IconCopy size={36} aria-hidden="true" />
+          <h2>Your collection starts here</h2>
+          <p>Scan a card or upload a photo to add your first card.</p>
+          {onNavigate && <button className="btn btn-primary" onClick={() => onNavigate("scan")}>
+            <IconCamera size={16} aria-hidden="true" /> Scan your first card
+          </button>}
         </div>
-      )}
+      ) : (
+        <>
+          <section className="card-hero catalog-summary" aria-label="Collection overview">
+            <div className="catalog-metric catalog-value">
+              <span className="catalog-label">Estimated value · CAD</span>
+              <strong>{summary.priced ? fmtShort(summary.value) : "—"}</strong>
+              <span>{summary.priced} of {summary.owned} owned cards priced</span>
+            </div>
+            <div className="catalog-metric">
+              <span className="catalog-label">Cards owned</span>
+              <strong>{summary.owned}</strong>
+              <span>{summary.listed} listed · {summary.sold} sold</span>
+            </div>
+            <div className="catalog-metric">
+              <span className="catalog-label">Est. gain / loss</span>
+              <strong className={summary.comparable ? summary.gain >= 0 ? "text-grn" : "text-red" : ""}>
+                {summary.comparable ? `${summary.gain >= 0 ? "+" : "−"}${fmtShort(Math.abs(summary.gain))}` : "—"}
+              </strong>
+              <span>{summary.comparable} owned with value + cost</span>
+            </div>
+          </section>
 
-      {catalog.length > 0 && (
-        <div className="card-hero mb-12">
-          <div className="flex items-center gap-10">
+          <div className="catalog-controls">
+            <div className="catalog-search">
+              <IconSearch size={18} aria-hidden="true" />
+              <input ref={searchInput} className="inp" type="search" aria-label="Search collection"
+                placeholder="Name, set, year, team or #…" value={catSearch}
+                onChange={(e) => setCatSearch(e.target.value)} />
+              {catSearch && <button className="btn btn-ghost btn-icon" aria-label="Clear search"
+                onClick={() => { setCatSearch(""); searchInput.current?.focus(); }}>
+                <IconX size={16} aria-hidden="true" />
+              </button>}
+            </div>
+            <div className="catalog-status chip-scroll" role="group" aria-label="Filter by card status">
+              {[["all", "All cards", catalog.length], ["owned", "Owned", summary.owned], ["listed", "Listed", summary.listed], ["sold", "Sold", summary.sold]].map(([value, label, count]) => (
+                <button key={value} className={`chip ${statusF === value ? "active" : ""}`}
+                  aria-pressed={statusF === value} onClick={() => setStatusF(value)}>
+                  {label} <span>{count}</span>
+                </button>
+              ))}
+            </div>
+            <div className="catalog-toolbar">
+              <label className="fld">
+                <span className="catalog-label">Binder</span>
+                <select className="inp" value={binderF} onChange={(e) => setBinderF(e.target.value)}>
+                  <option value="">All binders</option>
+                  {binders.map((b) => <option key={b} value={b}>{b}</option>)}
+                </select>
+              </label>
+              <label className="fld">
+                <span className="catalog-label">Sort by</span>
+                <select className="inp" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+                  <option value="date_desc">Newest first</option>
+                  <option value="date_asc">Oldest first</option>
+                  <option value="value_desc">Highest value</option>
+                  <option value="value_asc">Lowest value</option>
+                  <option value="name_asc">Name A–Z</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div className="catalog-results-heading">
+            <p role="status" aria-live="polite" aria-atomic="true">
+              {filtered.length} {filtered.length === 1 ? "card" : "cards"}{hasFilters ? ` of ${catalog.length}` : ""}
+            </p>
+            {hasFilters && <button className="btn btn-ghost btn-sm" onClick={resetFilters}>Clear filters</button>}
+            <div className="catalog-layout" role="group" aria-label="Collection layout">
+              {[["list", IconList], ["grid", IconGrid]].map(([value, Icon]) => (
+                <button key={value} className={`btn btn-icon ${layout === value ? "selected" : ""}`}
+                  aria-label={`${value === "list" ? "List" : "Grid"} view`} aria-pressed={layout === value}
+                  onClick={() => { setLayout(value); saveString("catalog_layout", value); }}>
+                  <Icon size={18} aria-hidden="true" />
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {filtered.length === 0 ? (
+            <div className="card catalog-empty">
+              <IconSearch size={30} aria-hidden="true" />
+              <h2>No cards match your filters</h2>
+              <p>Try another search, binder, or card status.</p>
+              <button className="btn btn-outline" onClick={resetFilters}>Show all cards</button>
+            </div>
+          ) : (
+            <ul className={`catalog-entries catalog-entries-${layout}`} aria-label="Collection cards">
+              {filtered.map((c) => {
+                const co = condOf(c.condition);
+                const value = cardEstimate(c);
+                const status = catalogStatus(c);
+                const thumb = c.frontImgId ? thumbs[c.frontImgId] : null;
+                return (
+                  <li key={c.id}>
+                    <button className="catalog-entry" ref={(node) => {
+                      if (node) cardButtons.current.set(c.id, node);
+                      else cardButtons.current.delete(c.id);
+                    }} onClick={() => setDetailId(c.id)}>
+                      <span className={`catalog-photo ${thumb ? "" : "catalog-photo-empty"}`} aria-hidden="true">
+                        {thumb ? <img src={thumb} alt="" loading="lazy" decoding="async"
+                          onError={() => setThumbs((p) => ({ ...p, [c.frontImgId]: null }))} />
+                          : <><IconCopy size={24} /><span>No photo</span></>}
+                      </span>
+                      <span className="catalog-card-info">
+                        <strong className="catalog-card-name">{c.name || "Untitled card"}</strong>
+                        <span className="catalog-card-meta">{[c.year, c.set, c.number != null && c.number !== "" && `#${c.number}`].filter(Boolean).join(" · ") || "No card details yet"}</span>
+                        <span className="catalog-card-tags">
+                          <span className="badge" style={{ background: `${co.c}15`, color: co.c }}>{co.s}</span>
+                          <span className={`badge ${status === "sold" ? "badge-grn" : status === "listed" ? "badge-acc" : "badge-dim"}`}>
+                            {status === "sold" ? "Sold" : status === "listed" ? "Listed" : "In collection"}
+                          </span>
+                          {c.binder && <span className="catalog-binder">{c.binder}</span>}
+                        </span>
+                      </span>
+                      <span className="catalog-card-price">
+                        <span>{value === null ? "Awaiting pricing" : "Est. value"}</span>
+                        <strong>{value === null ? "—" : fmtShort(value)}</strong>
+                      </span>
+                      <IconChevron className="catalog-chevron" size={16} aria-hidden="true" />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          <section className="card catalog-export" aria-label="Export collection">
             <div>
-              <div className="lbl" style={{ margin: 0 }}>Portfolio Value</div>
-              <div className="gold" style={{ fontSize: 30, fontWeight: 900 }}>{fmtShort(totalVal)}</div>
+              <h2>Export collection</h2>
+              <p>Includes all {catalog.length} {catalog.length === 1 ? "card" : "cards"}, regardless of filters.</p>
             </div>
-            <span className="badge badge-dim">{catalog.filter((c) => c.status !== "sold").length} cards</span>
-            {totalCost > 0 && (
-              <div style={{ marginLeft: "auto", textAlign: "right" }}>
-                <div className="lbl" style={{ margin: 0 }}>P/L</div>
-                <span className="fw-700" style={{ fontSize: 18, color: totalVal - totalCost >= 0 ? "var(--grn)" : "var(--red)" }}>
-                  {totalVal - totalCost >= 0 ? "+" : ""}{fmtShort(totalVal - totalCost)}
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      <div className="chip-scroll mb-10">
-        {binders.map((b) => (
-          <button key={b} onClick={() => setBinderF(b)} className={`chip ${binderF === b ? "active" : ""}`}>{b}</button>
-        ))}
-      </div>
-
-      <div className="flex gap-8 mb-12">
-        <div className="flex-1" style={{ position: "relative" }}>
-          <IconSearch size={15} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--dim)", pointerEvents: "none" }} />
-          <input className="inp" style={{ paddingLeft: 36 }} placeholder="Search..." value={catSearch} onChange={(e) => setCatSearch(e.target.value)} />
-        </div>
-        <select className="inp" style={{ width: "auto", minWidth: 100 }} value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
-          <option value="date_desc">Newest</option>
-          <option value="value_desc">High $</option>
-          <option value="name_asc">A-Z</option>
-        </select>
-      </div>
-
-      {filtered.map((c, i) => {
-        const co = condOf(c.condition);
-        const mv = parseFloat(c.priceEstimate?.mid) || 0;
-        const thumb = c.frontImgId ? thumbs[c.frontImgId] : null;
-        return (
-          <div key={c.id} className="card-interactive flex items-center gap-10 mb-6 fade" role="button" tabIndex={0}
-            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setDetailId(c.id); setView("detail"); } }}
-            style={{ animationDelay: `${Math.min(i * .03, .3)}s` }}
-            onClick={() => { setDetailId(c.id); setView("detail"); }}>
-            {thumb
-              ? <img src={thumb} alt={c.name} style={{ width: 46, height: 64, borderRadius: 8, objectFit: "cover", border: "1px solid var(--brd)" }} />
-              : <div style={{ width: 46, height: 64, borderRadius: 8, background: "var(--s3)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>{"\ud83c\udca0"}</div>
-            }
-            <div className="flex-1" style={{ minWidth: 0 }}>
-              <div className="flex items-center gap-6">
-                <strong className="text-sm truncate">{c.name || "?"}</strong>
-                {c.status === "sold" && <span className="badge badge-grn">SOLD</span>}
-                {c.listedOn?.length > 0 && c.status !== "sold" && <span className="badge badge-acc">LISTED</span>}
-              </div>
-              <div className="text-xxs text-dim mt-4">{[c.set, c.number && `#${c.number}`].filter(Boolean).join(" \u00b7 ")}</div>
-              <div className="flex gap-6 items-center mt-4">
-                <span className="badge" style={{ background: co.c + "15", color: co.c, padding: "2px 8px" }}>{co.s}</span>
-                {mv > 0 && <span className="gold fw-800" style={{ fontSize: 15 }}>{fmtShort(mv)}</span>}
-              </div>
+            <div className="catalog-export-actions">
+              <button className="btn btn-ghost btn-sm" onClick={() => download(genCSV(catalog), "cardvault.csv")}><IconDownload size={14} aria-hidden="true" /> CSV</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => download(genEbayCSV(catalog, shipFrom), "ebay-file-exchange.csv")}><IconDownload size={14} aria-hidden="true" /> eBay</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => {
+                const w = window.open("", "_blank");
+                if (w) { w.document.write(genInsurancePDF(catalog, userName)); w.document.close(); setTimeout(() => w.print(), 500); }
+                else toast.error("Popup blocked");
+              }}><IconDownload size={14} aria-hidden="true" /> Insurance</button>
             </div>
-            <IconChevron size={16} style={{ color: "var(--dim)", opacity: .4, flexShrink: 0 }} />
-          </div>
-        );
-      })}
-
-      {catalog.length > 0 && (
-        <div className="card mt-16">
-          <div className="lbl">Export</div>
-          <div className="form-grid-3 mt-6">
-            <button className="btn btn-ghost btn-sm" onClick={() => download(genCSV(catalog), "cardvault.csv")}><IconDownload size={12} /> CSV</button>
-            <button className="btn btn-ghost btn-sm" onClick={() => download(genEbayCSV(catalog, shipFrom), "ebay-file-exchange.csv")}><IconDownload size={12} /> eBay</button>
-            <button className="btn btn-ghost btn-sm" onClick={() => {
-              const w = window.open("", "_blank");
-              if (w) { w.document.write(genInsurancePDF(catalog, userName)); w.document.close(); setTimeout(() => w.print(), 500); }
-              else toast.error("Popup blocked");
-            }}><IconDownload size={12} /> Insurance</button>
-          </div>
-        </div>
+          </section>
+        </>
       )}
     </div>
   );
