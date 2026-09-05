@@ -61,6 +61,11 @@ npm start                      # Server :3001  +  Frontend :3000
 `PROXY_TOKEN` is optional and intended for API-only deployments whose clients send
 `Authorization: Bearer <token>`. Leave it blank when using CardVault's built-in UI.
 
+Without a token, the API only answers requests whose `Host` header is `localhost`, a
+loopback or LAN address of the machine, or `DEV_HOSTNAME`, and it rejects state-changing
+requests from any other `Origin`. This blocks DNS-rebinding and cross-site pages from
+driving the API; if you reach the API through another hostname, set `DEV_HOSTNAME` to it.
+
 ### Mac AirBook Card Studio (native `.app`)
 
 CardVault ships as a native macOS app via Electron. Run it as a single double-clickable `CardVault.app` instead of opening a browser tab.
