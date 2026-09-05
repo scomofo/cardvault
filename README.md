@@ -125,7 +125,7 @@ mkcert -key-file certs/cardvault-key.pem -cert-file certs/cardvault-cert.pem loc
 ### All Features
 
 - **Scan** — 4-step workflow: photograph, AI identify, edit details, create listing
-- **Collection** — Search, filter by binder, sort by value/date/name, thumbnails
+- **Collection** — Search across card details, filter by binder and status, sort by value/date/name, and browse in list or photo-grid view
 - **Sales Flow** — Create listings, track auctions with countdown timers, log purchases
 - **Batch** — Drag-and-drop multi-photo scanning with bulk ID and pricing
 - **Sets** — Completion tracking with progress bars per set
@@ -134,6 +134,11 @@ mkcert -key-file certs/cardvault-key.pem -cert-file certs/cardvault-cert.pem loc
 - **Trades** — Log trades, calculate net balance per partner
 - **Export** — CSV, eBay File Exchange bulk upload, printable insurance reports
 - **Backup** — Full JSON backup/restore of all app data
+
+Collection value covers cards still owned. Estimated gain/loss compares only owned
+cards with both a price estimate and a recorded cost; the overview shows how many
+cards are included. Unpriced cards stay at the end when sorting by value. Collection
+exports always include all cards, even when search or filters are active.
 
 ### Canadian Focus
 

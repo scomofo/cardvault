@@ -1,5 +1,5 @@
 function normalize(str) {
-  return (str || "").toLowerCase().trim();
+  return String(str ?? "").toLowerCase().trim();
 }
 
 export function matchScore(item, query) {
@@ -7,10 +7,16 @@ export function matchScore(item, query) {
   if (!q) return 0;
 
   const terms = q.split(/\s+/);
+  const number = normalize(item.number ?? item.cardNumber);
   const fields = [
     normalize(item.name),
+    normalize(item.playerName),
+    normalize(item.team),
+    normalize(item.sport),
+    normalize(item.manufacturer),
     normalize(item.set || item.cardSet || item.card_set),
-    normalize(item.number || item.cardNumber),
+    number,
+    number && `#${number}`,
     normalize(item.rarity),
     normalize(item.parallel),
     normalize(item.binder),

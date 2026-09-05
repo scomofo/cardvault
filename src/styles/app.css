@@ -158,6 +158,16 @@ input, select, textarea, button {
 .vault-open { animation: cardReveal .5s var(--ease-out) both; }
 .stamp { animation: stampIn .35s var(--ease-out) both; }
 
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* ===== LAYOUT ===== */
 .app-shell {
   min-height: 100vh;

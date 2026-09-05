@@ -16,6 +16,7 @@ import SalesFlow from "./components/SalesFlow";
 import DealerModeView from "./components/DealerModeView";
 import Settings from "./components/Settings";
 import "./styles/app.css";
+import "./styles/catalog.css";
 
 const NAV = [
   { v: "dashboard", l: "Dash", Icon: IconBarChart },
@@ -199,7 +200,7 @@ function AppContent() {
             />
           )}
           {view === "cards" && (
-            <CatalogView focus={pendingFocus} onFocusConsumed={() => setPendingFocus(null)} />
+            <CatalogView onNavigate={handleNavigate} focus={pendingFocus} onFocusConsumed={() => setPendingFocus(null)} />
           )}
           {view === "sales" && (
             <SalesFlow
