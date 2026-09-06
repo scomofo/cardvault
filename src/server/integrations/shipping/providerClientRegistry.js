@@ -425,10 +425,7 @@ async function purchaseLabelViaCanadaPost(input) {
   const status = String(firstDefined(purchase.labelStatus, purchase.label_status, purchase.status, "")).toLowerCase();
   if (status === "failed" || firstDefined(purchase.labelUrl, purchase.label_url)) return purchase;
 
-  return {
-    ...purchase,
-    labelUrl: CANADA_POST_LABEL_URL_TEMPLATE,
-  };
+  return { ...purchase, labelStatus: "purchase_unknown", error: "Canada Post returned no label artifact; verify the purchase before retrying" };
 }
 
 const builtinClients = new Map([

@@ -118,7 +118,7 @@ export function getActionQueue() {
     FROM listing_channels
     JOIN listings ON listings.id = listing_channels.listing_id
     WHERE listing_channels.marketplace = 'ebay'
-      AND listing_channels.status IN ('active', 'revised')
+      AND listing_channels.status IN ('draft', 'active', 'revised')
       AND listing_channels.external_listing_id = listing_channels.marketplace || '-' || substr(listing_channels.listing_id, 1, 12)
   `)) {
     queue.push({

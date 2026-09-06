@@ -23,6 +23,7 @@ export async function tradingApiCall(callName, xmlBody) {
   ${xmlBody}
 </${callName}Request>`;
   const res = await fetch(url, {
+    signal: AbortSignal.timeout(20_000),
     method: "POST",
     headers: {
       "Content-Type": "text/xml",
@@ -60,6 +61,7 @@ export async function inventoryApiCall(method, path, body) {
   const creds = getEbayCredentials();
   const base = creds.sandbox ? SANDBOX_INVENTORY : PROD_INVENTORY;
   const opts = {
+    signal: AbortSignal.timeout(20_000),
     method,
     headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", Accept: "application/json" },
   };
@@ -82,6 +84,7 @@ export async function fulfillmentApiCall(method, path) {
   const creds = getEbayCredentials();
   const base = creds.sandbox ? SANDBOX_FULFILLMENT : PROD_FULFILLMENT;
   const res = await fetch(base + path, {
+    signal: AbortSignal.timeout(20_000),
     method,
     headers: { Authorization: "Bearer " + token, Accept: "application/json" },
   });
@@ -121,6 +124,7 @@ export async function uploadSiteHostedPictures(imageBuffer, mime = "image/jpeg")
   form.append("XML Payload", xml);
   form.append("image", new Blob([imageBuffer], { type: mime }), "card-image");
   const res = await fetch(url, {
+    signal: AbortSignal.timeout(20_000),
     method: "POST",
     headers: {
       "X-EBAY-API-CALL-NAME": "UploadSiteHostedPictures",

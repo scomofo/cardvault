@@ -31,7 +31,8 @@ export function getPublishTarget(platform, { useServer = false, ebayConnected = 
 // A matching id means the adapter fell back to the stub and nothing reached the marketplace.
 export function isStubChannel(channel, { marketplace, listingId }) {
   const externalId = channel?.externalListingId || channel?.external_listing_id;
-  return externalId === `${marketplace}-${String(listingId).slice(0, 12)}`;
+  return Boolean(channel?.stub || channel?.payload?.stub)
+    || externalId === `${marketplace}-${String(listingId).slice(0, 12)}`;
 }
 
 // Translate a raw listing_channels row (snake_case) into a { type, message }
@@ -41,6 +42,10 @@ export function summarizePublishOutcome(channel, { marketplace, label, listingId
     return { type: "error", message: `No publish result returned from ${label}` };
   }
   const status = String(channel.status).toLowerCase();
+  if (isStubChannel(channel, { marketplace, listingId })) return { type: "warning", message: `Listing saved, but ${label} isn't connected — nothing was pushed live. Connect ${label} in Settings, then publish from Sales.` };
+  if (["publish_unknown", "needs_review", "publishing", "failed", "handoff_exception"].includes(status)) {
+    return { type: "warning", message: `${label}: ${status.replace(/_/g, " ")} — review the marketplace before retrying.` };
+  }
   if (status.startsWith("handoff")) {
     return {
       type: "success",
@@ -55,22 +60,37 @@ export function summarizePublishOutcome(channel, { marketplace, label, listingId
       };
     }
     const externalId = channel.externalListingId || channel.external_listing_id;
-    return {
-      type: "success",
-      message: `Published to ${label}${externalId ? ` (#${externalId})` : ""}`,
-    };
+    if (!externalId) return { type: "warning", message: `${label} did not return a listing ID — publication is unconfirmed. Review before retrying.` };
+    return { type: "success", message: `Published to ${label} (#${externalId})` };
   }
   return { type: "info", message: `${label} publish status: ${channel.status}` };
 }
 
-// Same optimistic channel-field spread SalesFlow applies after publish.
+export function listingLifecycle(listing) {
+  const status = String(listing.publishStatus || listing.publish_status || "").toLowerCase();
+  const externalId = listing.externalListingId || listing.external_listing_id;
+  const stub = isStubChannel(listing, { marketplace: listing.platform || listing.marketplace, listingId: listing.id || listing.listing_id });
+  if (["sold", "ended"].includes(listing.status)) return listing.status;
+  if (["publish_unknown", "needs_review", "failed", "handoff_exception"].includes(status)) return "needs_review";
+  if (status === "publishing") return "publishing";
+  if (status.startsWith("handoff")) return "handoff";
+  if (externalId && !stub && ["active", "revised"].includes(status)) return "live";
+  return "draft";
+}
+
+// A local draft only becomes active after a real, non-stub ID is returned.
 export function applyChannelToListing(listing, channel) {
-  return {
+  const updated = {
     ...listing,
     publishStatus: channel.status,
-    externalListingId: channel.externalListingId || channel.external_listing_id,
+    publishError: channel.publishError || channel.publish_error || null,
+    externalListingId: channel.externalListingId || channel.external_listing_id || null,
     lastSyncAt: channel.lastSyncAt || channel.last_sync_at,
   };
+  const lifecycle = listingLifecycle(updated);
+  if (["sold", "ended"].includes(channel.status)) updated.status = channel.status;
+  else if (!["sold", "ended"].includes(listing.status)) updated.status = ["live", "handoff"].includes(lifecycle) ? "active" : "draft";
+  return updated;
 }
 
 // Publish a freshly scanned card: the item must exist server-side before the

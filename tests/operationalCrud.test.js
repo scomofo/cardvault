@@ -174,7 +174,7 @@ test("sales, orders, and purchases support full CRUD for sync flows", async (t) 
   assert.equal(itemsAfterSaleDeleteResponse.status, 200);
   const itemsAfterSaleDelete = await itemsAfterSaleDeleteResponse.json();
   const reopenedItem = itemsAfterSaleDelete.find((item) => item.id === "crud-item");
-  assert.equal(reopenedItem.status, "listed");
+  assert.equal(reopenedItem.status, "inventory");
   assert.equal(reopenedItem.listingStatus, "draft");
   assert.equal(reopenedItem.saleStatus, "available");
   assert.equal(reopenedItem.soldAt, null);

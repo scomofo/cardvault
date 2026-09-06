@@ -52,7 +52,7 @@ test("marketplace ecosystem routes publish crosspost sync and export listings", 
   assert.equal(publishResponse.status, 200);
   const publishPayload = await publishResponse.json();
   assert.equal(publishPayload.marketplace, "ebay");
-  assert.equal(publishPayload.status, "active");
+  assert.equal(publishPayload.status, "draft", "disconnected eBay must not claim live publication");
 
   const crosspostResponse = await fetch(`${baseUrl}/api/marketplaces/crosspost`, {
     method: "POST",

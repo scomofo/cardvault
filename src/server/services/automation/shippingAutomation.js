@@ -55,13 +55,16 @@ export async function automateShipment(orderId, options = {}) {
       if (existing) return { order, existing };
       throw new Error("Order is already dispatched");
     }
+    const startedAt = existing?.created_at ? Date.parse(existing.created_at.replace(" ", "T") + (existing.created_at.endsWith("Z") ? "" : "Z")) : NaN;
+    if (existing?.label_status === "purchasing" && (!Number.isFinite(startedAt) || Date.now() - startedAt < 120_000)) return { order, existing };
     const retryable = existing && (existing.label_status === "pending"
-      || (options.retry === true && existing.label_status === "failed"));
+      || (options.retry === true && options.confirmNoExistingLabel === true
+        && ["failed", "purchase_unknown", "purchasing"].includes(existing.label_status)));
     if (existing && !retryable) return { order, existing };
 
     const shipmentId = existing?.id || uid();
     if (existing) {
-      run(`UPDATE shipments SET label_status = 'purchasing', status = 'pending' WHERE id = ?`, [shipmentId]);
+      run(`UPDATE shipments SET label_status = 'purchasing', status = 'pending', created_at = datetime('now') WHERE id = ?`, [shipmentId]);
     } else {
       run(
         `INSERT INTO shipments (id, order_id, item_id, package_type, weight_oz, label_status, status)
@@ -122,7 +125,7 @@ export async function automateShipment(orderId, options = {}) {
         run(
           `INSERT INTO listing_channel_events (id, listing_channel_id, event_type, status, payload)
            VALUES (?,?,?,?,?)`,
-          [uid(), channel.id, event, state.status, JSON.stringify({
+          [uid(), channel.id, event, state.status === "exception" ? "failed" : state.status, JSON.stringify({
             trackingNumber: state.tracking_number, service: service.service,
             labelUrl: state.label_url, labelStatus: state.label_status,
             estimatedShippingCost: service.cost ?? null,

@@ -5,8 +5,11 @@ import { readFile } from "node:fs/promises";
 test("server-backed batch saves apply created cards to the current catalog", async () => {
   const batchView = await readFile(new URL("../src/components/BatchView.jsx", import.meta.url), "utf8");
 
-  assert.match(batchView, /const\s+result\s*=\s*await\s+itemsAPI\.bulkCreate\(items\)/);
-  assert.match(batchView, /setCatalog\(\(p\)\s*=>\s*\[\.\.\.\(result\.created\s*\|\|\s*items\)/s);
+  assert.match(batchView, /await itemsAPI\.create\(entry\)/);
+  assert.match(batchView, /const id = item\.id/);
+  assert.match(batchView, /setCatalog\(\(previous\) => \[entry, \.\.\.previous\.filter/);
+  assert.match(batchView, /await persistIntake\(remaining\)/);
+  assert.doesNotMatch(batchView, /setQueue\(\[\]\)/);
 });
 
 test("dealer mode listing generation uses the selected export platform", async () => {
