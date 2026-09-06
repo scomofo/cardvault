@@ -41,3 +41,8 @@
 .batch-sell :focus-visible { outline: 2px solid var(--acc2); outline-offset: 3px; }
 @media (max-width: 650px) { .batch-form-grid { grid-template-columns: 1fr 1fr; } .batch-row-total { width: 100%; text-align: left; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; } .batch-save-bar .btn-primary { width: 100%; } }
 @media (max-width: 400px) { .batch-form-grid { grid-template-columns: 1fr; } }
+
+.batch-publication { margin-top: 20px; }
+.batch-publication > summary { cursor: pointer; padding-block: 8px; }
+.batch-publication fieldset { border: 0; min-width: 0; padding: 0; }
+.batch-draft-selector { display: grid; gap: 10px; max-height: 320px; overflow: auto; margin-block: 12px; }

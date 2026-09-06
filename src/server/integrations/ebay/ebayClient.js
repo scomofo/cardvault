@@ -13,7 +13,7 @@ const PROD_FULFILLMENT = "https://api.ebay.com/sell/fulfillment/v1";
  * @param {string} xmlBody
  * @returns {Promise<string>}
  */
-export async function tradingApiCall(callName, xmlBody) {
+export async function tradingApiCall(callName, xmlBody, options = {}) {
   const token = await getAccessToken();
   const creds = getEbayCredentials();
   const url = creds.sandbox ? SANDBOX_TRADING : PROD_TRADING;
@@ -22,6 +22,7 @@ export async function tradingApiCall(callName, xmlBody) {
   <RequesterCredentials><eBayAuthToken>${token}</eBayAuthToken></RequesterCredentials>
   ${xmlBody}
 </${callName}Request>`;
+  options.beforeSend?.();
   const res = await fetch(url, {
     signal: AbortSignal.timeout(20_000),
     method: "POST",
@@ -29,7 +30,7 @@ export async function tradingApiCall(callName, xmlBody) {
       "Content-Type": "text/xml",
       "X-EBAY-API-CALL-NAME": callName,
       "X-EBAY-API-SITEID": "2", // eBay.ca — must match <Country>CA</Country><Currency>CAD</Currency>
-      "X-EBAY-API-COMPATIBILITY-LEVEL": "1155",
+      "X-EBAY-API-COMPATIBILITY-LEVEL": options.compatibilityLevel || "1155",
       "X-EBAY-API-IAF-TOKEN": token,
     },
     body: xml,
@@ -44,8 +45,11 @@ export async function tradingApiCall(callName, xmlBody) {
   const ack = text.match(/<Ack>(\w+)<\/Ack>/)?.[1];
   if (ack === "Failure") {
     const errMsg = text.match(/<ShortMessage>([^<]+)<\/ShortMessage>/)?.[1] || "Unknown error";
-    throw new Error("eBay " + callName + " failed: " + errMsg);
+    const error = new Error("eBay " + callName + " failed: " + errMsg);
+    error.code = "EBAY_REJECTED";
+    throw error;
   }
+  if (!["Success", "Warning"].includes(ack)) throw new Error("eBay returned an unrecognized acknowledgement; outcome needs review");
   return text;
 }
 
@@ -152,7 +156,7 @@ export async function uploadSiteHostedPictures(imageBuffer, mime = "image/jpeg")
 // failure rather than letting the caller record a listing with a null id.
 function requireItemId(callName, text) {
   const itemId = text.match(/<ItemID>(\d+)<\/ItemID>/)?.[1];
-  if (!itemId) throw new Error("eBay " + callName + " succeeded with no ItemID in the response");
+  if (!itemId || /^0+$/.test(itemId)) throw new Error("eBay " + callName + " succeeded with no ItemID in the response");
   return itemId;
 }
 
@@ -163,8 +167,8 @@ export async function addItem(itemXml) {
 }
 
 /** @returns {Promise<string>} eBay ItemID */
-export async function addFixedPriceItem(itemXml) {
-  const res = await tradingApiCall("AddFixedPriceItem", itemXml);
+export async function addFixedPriceItem(itemXml, options = {}) {
+  const res = await tradingApiCall("AddFixedPriceItem", itemXml, options);
   return requireItemId("AddFixedPriceItem", res);
 }
 

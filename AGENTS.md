@@ -56,3 +56,18 @@ Always run `npm test` and `npm run lint` after changes; run `npm run build` befo
 - Validate input at system boundaries; never hardcode or commit secrets/.env.
 - State assumptions; if multiple interpretations exist, surface them before coding.
 - Define verifiable success criteria (a test that fails before and passes after) and loop until green.
+
+## Reviewed publication increment
+
+- `services/batchPublish/` owns additive SQLite publication batches and rows,
+  immutable checked XML/fingerprints, 15-minute proofs and explicit approvals.
+  `routes/batchPublish.routes.js` protects action endpoints; never accept an XML
+  definition from a JSON client. The adapter accepts the internal
+  `REVIEWED_DEFINITION` Symbol and invokes its guard after token acquisition.
+- Every processed row is claimed durably; only approved rows may process. Keep
+  uncertain results out of retries. Real Failure Ack is `EBAY_REJECTED`, while
+  interrupted transport remains `publish_unknown`. Missing/zero item IDs do not
+  prove publication. No startup worker processes approvals automatically.
+- Preflight requires front/back images, exact-policy CAD shipping, raw sports
+  singles, unchanged content and active account authorization. Policy changes,
+  photo replacement or edits invalidate approval. See `docs/Batch-Publish.md`.
