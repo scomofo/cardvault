@@ -1,0 +1,23 @@
+name: Release source review
+on:
+  push:
+    branches: [feat/reviewed-batch-publish]
+    paths: [.github/workflows/release-source-review.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: |
+          git archive --format=tar.gz 2fdbb9192e28bd63a9690b3c356694770bc0e01b > /tmp/safety-source.tgz
+          git archive --format=tar.gz 036fc8a64a222a16ec41557d882608f4ada186af > /tmp/batch-source.tgz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-sources
+          path: /tmp/*-source.tgz
+          retention-days: 1
