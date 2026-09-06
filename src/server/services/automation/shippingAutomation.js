@@ -1,6 +1,7 @@
 import { get, run, runInImmediateTransaction } from "../../database.js";
 import { pickShippingProviderService } from "../../integrations/shipping/shippingProviderRegistry.js";
 import { shipmentStateFromService, shipmentFulfillmentStatus } from "../../integrations/shipping/shipmentState.js";
+import { SHIPPING_CLAIM_TTL_MS } from "../../integrations/shipping/purchaseTiming.js";
 import { uid } from "../../routes/shared.js";
 
 function firstDefined(...values) {
@@ -38,7 +39,17 @@ function syncOrderAndSaleShippingState(order, shipment) {
 }
 
 /** Prepare shipping or buy a label. Dispatch requires a separate confirmation. */
+const inFlightOrders = new Set();
 export async function automateShipment(orderId, options = {}) {
+  if (inFlightOrders.has(orderId)) {
+    return get(`SELECT * FROM shipments WHERE order_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1`, [orderId]);
+  }
+  inFlightOrders.add(orderId);
+  try { return await prepareShipment(orderId, options); }
+  finally { inFlightOrders.delete(orderId); }
+}
+
+async function prepareShipment(orderId, options = {}) {
   const weightOz = Number(options.weightOz ?? 3);
   if (!Number.isFinite(weightOz) || weightOz <= 0) throw new Error("Package weight must be positive");
   const packageType = options.packageType || "card_mailer";
@@ -56,7 +67,7 @@ export async function automateShipment(orderId, options = {}) {
       throw new Error("Order is already dispatched");
     }
     const startedAt = existing?.created_at ? Date.parse(existing.created_at.replace(" ", "T") + (existing.created_at.endsWith("Z") ? "" : "Z")) : NaN;
-    if (existing?.label_status === "purchasing" && (!Number.isFinite(startedAt) || Date.now() - startedAt < 120_000)) return { order, existing };
+    if (existing?.label_status === "purchasing" && (!Number.isFinite(startedAt) || Date.now() - startedAt < SHIPPING_CLAIM_TTL_MS)) return { order, existing };
     const retryable = existing && (existing.label_status === "pending"
       || (options.retry === true && options.confirmNoExistingLabel === true
         && ["failed", "purchase_unknown", "purchasing"].includes(existing.label_status)));

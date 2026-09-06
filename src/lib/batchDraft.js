@@ -15,7 +15,7 @@ export function conditionLabel(value) {
 }
 export function newDraftEntry({ id, card = {}, source = "photo", defaults = SELLING_DEFAULTS }) {
   return {
-    id, itemId: card.id || id, listingId: `draft_${card.id || id}`, source,
+    id, itemId: card.id || id, listingId: `draft_${id}`, source,
     card: { ...card, name: text(card.name), set: text(card.set || card.cardSet || card.card_set), year: text(card.year),
       number: text(card.number || card.cardNumber || card.card_number), parallel: text(card.parallel),
       condition: normalizeDraftCondition(card.condition), type: card.type || "sports" },

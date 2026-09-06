@@ -98,7 +98,7 @@ export function useBatchDraft() {
       for (const id of ids) {
         const card = current.current.data.catalog.find((item) => item.id === id);
         if (!card || inventoryBlockedReason(card, current.current.data.listings, entries)) continue;
-        entries.push({ ...newDraftEntry({ id, card, source: "inventory", defaults: session.defaults }), selected: true });
+        entries.push({ ...newDraftEntry({ id: crypto.randomUUID(), card, source: "inventory", defaults: session.defaults }), selected: true });
       }
       return { ...session, entries };
     }),

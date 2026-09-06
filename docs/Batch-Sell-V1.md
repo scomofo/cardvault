@@ -79,3 +79,10 @@ that failed/review/lot entries remain and that existing inventory isn't duplicat
 
 Marketplace preflight validation, reviewed bulk publication with per-item outcomes,
 a task-first dashboard and actual lot listing creation are not included here.
+
+## Review follow-up
+
+New inventory selections get a per-attempt draft ID, retaining ended history and
+reusing only the current attempt on retries. Controlled edits appear immediately
+while saving is displayed; older writes cannot roll back newer typing. Storage
+failures stop subsequent writes and restore the last committed queue until reload.

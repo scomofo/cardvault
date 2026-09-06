@@ -61,12 +61,14 @@ test("overlapping shipping requests purchase once and ambiguous responses cannot
   t.after(() => db.close());
   db.prepare("INSERT INTO shipping_provider_connections (id, provider, auth_status, metadata) VALUES (?,?,?,?)").run("test-carrier", "Canada Post", "configured", JSON.stringify({
     providerClient: "generic_http",
+    labelPurchaseTimeoutMs: 180000,
     labelPurchaseUrl: `http://127.0.0.1:${carrier.address().port}/labels`,
     rates: [{ countries: ["CA"], service: "Test mail", cost: 6, tracking: true }],
   }));
   await orderFixture(baseUrl, "race-order");
   const first = post(baseUrl, "/automation/shipping/race-order");
   await received;
+  db.prepare("UPDATE shipments SET created_at = datetime('now', '-3 minutes') WHERE order_id = ?").run("race-order");
   const overlapping = await post(baseUrl, "/automation/shipping/race-order", { retry: true, confirmNoExistingLabel: true });
   assert.equal(overlapping.status, 200);
   assert.equal((await overlapping.json()).label_status, "purchasing");
