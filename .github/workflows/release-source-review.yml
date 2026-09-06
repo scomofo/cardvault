@@ -55,7 +55,8 @@ jobs:
           if ! git merge --no-commit --no-ff reviewed-safety; then
             conflicts=$(git diff --name-only --diff-filter=U)
             test "$conflicts" = src/components/BatchView.jsx
-            git rm src/components/BatchView.jsx
+            git checkout --ours -- src/components/BatchView.jsx
+            git add src/components/BatchView.jsx
           fi
           test -z "$(git diff --name-only --diff-filter=U)"
           python3 "$RUNNER_TEMP/apply-batch-review.py"
