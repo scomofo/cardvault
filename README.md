@@ -189,3 +189,12 @@ for state contracts, test coverage, and remaining work. The
 [draft review notes](docs/Selling-Draft-Review.md) cover the latest review flow and
 current eBay publishing limitations. See [checked eBay publication](docs/eBay-Checked-Drafts.md)
 for setup, supported policies and the sandbox acceptance checklist.
+
+### Reviewed batch publication
+
+Open **Sell → Check and publish saved drafts** to load eBay Canada business
+policies, check up to 25 raw sports-card fixed-price drafts, review the exact
+definitions and explicitly approve publication. Checking uploads photos and
+validates but does not list anything. Results and unfinished approvals persist on
+the server; uncertain outcomes never automatically retry. Begin with sandbox and
+see `docs/Batch-Publish.md` for shipping constraints, recovery and test limitations.
