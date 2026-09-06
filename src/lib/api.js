@@ -88,6 +88,7 @@ export const imagesAPI = {
 };
 
 export const listingsAPI = {
+  createDraft: (data) => request("/listings/draft", { method: "POST", body: data }),
   list: (params) => request(`/listings${toQuery(params)}`),
   create: (data) => request("/listings", { method: "POST", body: data }),
   update: (id, data) =>
