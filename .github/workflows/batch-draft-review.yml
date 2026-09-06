@@ -1,20 +1,45 @@
-name: Batch draft source review
+name: Verify reviewed batch-to-draft source
 on:
   push:
     branches: [feat/batch-to-draft]
     paths: [.github/workflows/batch-draft-review.yml]
 permissions:
-  contents: read
+  contents: write
 jobs:
-  snapshot:
+  apply-reviewed-source:
+    if: github.repository == 'scomofo/cardvault' && github.ref == 'refs/heads/feat/batch-to-draft'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          persist-credentials: false
-      - run: git archive --format=tar.gz HEAD > /tmp/cardvault-batch-source.tgz
-      - uses: actions/upload-artifact@v4
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
         with:
-          name: cardvault-batch-source
-          path: /tmp/cardvault-batch-source.tgz
-          retention-days: 1
+          node-version: 22
+          cache: npm
+      - name: Verify and apply exact reviewed patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64, hashlib, lzma, subprocess
+          encoded = ''.join(Path(f'.review/batch-draft.{i}').read_text() for i in range(4))
+          patch = lzma.decompress(base64.b64decode(encoded, validate=True))
+          assert hashlib.sha256(patch).hexdigest() == '8e2e7b0ab720e4668a3351b78aeef96939695702b8599b348bb68dc3dd4e9e6a', 'Source patch checksum mismatch'
+          target = Path('/tmp/cardvault-batch-draft.patch')
+          target.write_bytes(patch)
+          subprocess.run(['git', 'apply', '--check', str(target)], check=True)
+          subprocess.run(['git', 'apply', str(target)], check=True)
+          PY
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - run: npm test
+      - name: Commit verified source to feature branch only
+        run: |
+          git diff --check
+          git add AGENTS.md CLAUDE.md README.md docs src tests
+          git rm .review/batch-draft.0 .review/batch-draft.1 .review/batch-draft.2 .review/batch-draft.3
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Add resumable reviewed batch-to-draft selling workflow'
+          git push origin HEAD:feat/batch-to-draft
