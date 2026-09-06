@@ -1,0 +1,20 @@
+name: Batch draft source review
+on:
+  push:
+    branches: [feat/batch-to-draft]
+    paths: [.github/workflows/batch-draft-review.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: git archive --format=tar.gz HEAD > /tmp/cardvault-batch-source.tgz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cardvault-batch-source
+          path: /tmp/cardvault-batch-source.tgz
+          retention-days: 1
