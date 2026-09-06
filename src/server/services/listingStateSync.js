@@ -42,7 +42,7 @@ export function deriveOpenItemState(cardId) {
   const hasPublishedListing = statuses.some((status) => ["active", "revised"].includes(status));
   return {
     status: hasPublishedListing ? "listed" : "inventory",
-    listingStatus: hasPublishedListing ? "listed" : statuses.includes("draft") ? "draft" : "not_listed",
+    listingStatus: hasPublishedListing ? "listed" : statuses.some((status) => ["draft", "ready"].includes(status)) ? "draft" : "not_listed",
     saleStatus: "available",
     soldAt: null,
   };

@@ -11,7 +11,7 @@ import { saveImage, saveData, loadData, loadBatchSession, saveBatchSession } fro
 import { useFeeModels } from "../hooks/useFeeModels";
 import { estimateSellingProceeds } from "../lib/sellingEstimate";
 import { computeDHash } from "../lib/phash";
-import { saveApprovedBatch } from "../lib/batchSave";
+import { saveApprovedBatch, persistBatchRemoval } from "../lib/batchSave";
 import { IconPlus, IconZap, IconX, Spinner } from "./Icons";
 
 let pendingSessionWrite = Promise.resolve();
@@ -74,6 +74,24 @@ export default function BatchView() {
   const updateItem = (id, patch) => {
     if (savingRef.current) return;
     setQueue((p) => p.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+  };
+
+  const removeItem = async (id) => {
+    if (!restored || processing || savingRef.current || !window.confirm("Remove this unsaved scan?")) return;
+    savingRef.current = true;
+    setProcessing(true);
+    try {
+      await persistBatchRemoval({ queue: queueRef.current, id, persist: persistIntake,
+        apply: (remaining) => {
+          queueRef.current = remaining;
+          if (mountedRef.current) setQueue(remaining);
+        },
+      });
+    } catch (error) { toast.error(`Scan was not removed: ${error.message}. Please retry.`); }
+    finally {
+      savingRef.current = false;
+      if (mountedRef.current) setProcessing(false);
+    }
   };
 
   const handleDrop = useCallback(async (e) => {
@@ -330,7 +348,7 @@ export default function BatchView() {
                 </span>
               )}
               <div className="flex-1" />
-              <button className="btn btn-ghost btn-sm" style={{ color: "var(--red)" }} disabled={processing} aria-label="Remove scan" onClick={() => { if (window.confirm("Remove this unsaved scan?")) setQueue((p) => p.filter((x) => x.id !== item.id)); }}><IconX size={12} /></button>
+              <button className="btn btn-ghost btn-sm" style={{ color: "var(--red)" }} disabled={processing} aria-label="Remove scan" onClick={() => removeItem(item.id)}><IconX size={12} /></button>
             </div>
           </div>
         );

@@ -102,3 +102,9 @@ A single end-to-end Batch Sell screen, bulk approve/publish, a simpler task-firs
 home screen, complete cost-basis/profit modeling, verified sold-data sourcing,
 automatic unknown-publication reconciliation, and wider marketplace expansion
 are not part of this reliability pass.
+
+## Release review follow-up
+
+Carrier requests are capped at 60 seconds, below the 120-second claim lifetime.
+An in-process purchase remains locked until it settles. Ready listings retain
+the draft inventory marker, and a failed legacy batch removal stays visible.

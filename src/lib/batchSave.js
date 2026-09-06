@@ -32,3 +32,11 @@ export function normalizeBatchResult(response) {
     pricingEvidence: "ai_estimate_unverified",
   };
 }
+
+// A failed removal must remain visible and retryable.
+export async function persistBatchRemoval({ queue, id, persist, apply }) {
+  const remaining = queue.filter((entry) => entry.id !== id);
+  await persist(remaining);
+  apply(remaining);
+  return remaining;
+}
