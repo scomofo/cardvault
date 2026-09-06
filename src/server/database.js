@@ -5,6 +5,8 @@ import { createTables } from "./schema.js";
 import { createReferenceTables } from "./referenceSchema.js";
 import { runMigrations, createIndexes } from "./migrations.js";
 
+import { createPublishBatchTables } from "./services/batchPublish/schema.js";
+
 let db = null;
 
 function getDbPath() {
@@ -26,6 +28,7 @@ export function initDB() {
 
   createReferenceTables(db);
   createTables(db);
+  createPublishBatchTables(db);
   runMigrations(db);
   createIndexes(db);
   return db;
