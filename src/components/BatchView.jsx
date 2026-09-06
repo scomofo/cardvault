@@ -1,34 +1,45 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import Camera from "./Camera";
 import { useToast } from "./Toast";
 import { useData } from "../lib/DataContext";
-import { itemsAPI, presetsAPI } from "../lib/api";
+import { itemsAPI, imagesAPI, presetsAPI } from "../lib/api";
 import { CONDITIONS, TYPES } from "../lib/constants";
 import { classifyListingViability } from "../lib/listingViability";
 import { uid, fmtShort } from "../lib/utils";
 import { aiRecognize, aiPrice } from "../lib/ai";
-import { saveImage } from "../lib/storage";
+import { saveImage, saveData, loadData, loadBatchSession, saveBatchSession } from "../lib/storage";
+import { useFeeModels } from "../hooks/useFeeModels";
+import { estimateSellingProceeds } from "../lib/sellingEstimate";
+import { computeDHash } from "../lib/phash";
+import { saveApprovedBatch, persistBatchRemoval } from "../lib/batchSave";
 import { IconPlus, IconZap, IconX, Spinner } from "./Icons";
 
-const BATCH_FEE_RATE = 0.1312; // eBay default for net estimate
-const BATCH_SHIP = 4.99;
+let pendingSessionWrite = Promise.resolve();
+function persistIntake(queue) {
+  const operation = pendingSessionWrite.catch(() => {}).then(() => saveBatchSession("tools", queue));
+  pendingSessionWrite = operation;
+  return operation;
+}
 const VIABILITY_LABELS = {
   bulk_lot: { color: "var(--orange)", label: "bulk lot" },
   not_worth_listing: { color: "var(--red)", label: "not worth listing" },
   review: { color: "var(--orange)", label: "review" },
 };
 
-function calcNet(midPrice) {
-  const p = parseFloat(midPrice) || 0;
-  if (!p) return null;
-  return Math.round((p - p * BATCH_FEE_RATE - BATCH_SHIP) * 100) / 100;
-}
-
 export default function BatchView() {
   const toast = useToast();
-  const { setCatalog, useServer } = useData();
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
+  const { catalog, setCatalog, useServer } = useData();
+  const { getFeeRate } = useFeeModels(useServer);
+  const [shippingCost, setShippingCost] = useState("4.99");
+  const [restored, setRestored] = useState(false);
+  const savingRef = useRef(false);
+  const mountedRef = useRef(true);
+  const queueRef = useRef([]);
+  const calcNet = (price) => estimateSellingProceeds({ price, feeRate: getFeeRate("ebay"), shippingCost });
   const [queue, setQueue] = useState([]);
-  const [cond, setCond] = useState("near_mint");
+  const [cond, setCond] = useState("");
   const [type, setType] = useState("sports");
   const [binder, setBinder] = useState("");
   const [minPrice, setMinPrice] = useState("");
@@ -38,24 +49,68 @@ export default function BatchView() {
   const [presets, setPresets] = useState([]);
 
   useEffect(() => {
+    let cancelled = false;
+    mountedRef.current = true;
+    pendingSessionWrite.catch(() => {}).then(() => loadBatchSession("tools")).then((saved) => {
+      if (cancelled) return;
+      if (!Array.isArray(saved)) throw new Error("Invalid saved batch");
+      setQueue(saved);
+      setRestored(true);
+    }).catch((error) => { if (!cancelled) toastRef.current.error(`Cannot restore batch: ${error.message}. Reload before adding cards.`); });
+    return () => { cancelled = true; mountedRef.current = false; };
+  }, []);
+
+  useEffect(() => {
+    queueRef.current = queue;
+    if (!restored) return;
+    persistIntake(queue).catch((error) => toastRef.current.error(`Batch is not saved: ${error.message}. Keep this screen open.`));
+  }, [queue, restored]);
+
+  useEffect(() => {
     if (!useServer) return;
     presetsAPI.list().then(setPresets).catch(() => {});
   }, [useServer]);
 
-  const updateItem = (id, patch) => setQueue((p) => p.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+  const updateItem = (id, patch) => {
+    if (savingRef.current) return;
+    setQueue((p) => p.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+  };
+
+  const removeItem = async (id) => {
+    if (!restored || processing || savingRef.current || !window.confirm("Remove this unsaved scan?")) return;
+    savingRef.current = true;
+    setProcessing(true);
+    try {
+      await persistBatchRemoval({ queue: queueRef.current, id, persist: persistIntake,
+        apply: (remaining) => {
+          queueRef.current = remaining;
+          if (mountedRef.current) setQueue(remaining);
+        },
+      });
+    } catch (error) { toast.error(`Scan was not removed: ${error.message}. Please retry.`); }
+    finally {
+      savingRef.current = false;
+      if (mountedRef.current) setProcessing(false);
+    }
+  };
 
   const handleDrop = useCallback(async (e) => {
     e.preventDefault(); setDragging(false);
     const files = [...(e.dataTransfer?.files || [])].filter((f) => f.type.startsWith("image/"));
-    if (!files.length) return;
+    if (!files.length || !restored || processing || savingRef.current) return;
     const newItems = [];
     for (const file of files) {
       const dataUrl = await new Promise((resolve) => {
-        const r = new FileReader(); r.onload = (ev) => resolve(ev.target.result); r.readAsDataURL(file);
+        const r = new FileReader(); r.onload = (ev) => resolve(ev.target.result); r.onerror = () => resolve(null); r.readAsDataURL(file);
       });
+      if (!dataUrl) { toast.error(`Could not read ${file.name}; it was not added.`); continue; }
       newItems.push({ id: uid(), frontImg: dataUrl, backImg: null, name: "", set: "", year: "", number: "", condition: cond, type, costBasis: "", priceEstimate: null, priceHistory: null });
     }
-    setQueue((p) => [...p, ...newItems]);
+    const nextQueue = [...queueRef.current, ...newItems];
+    try { await persistIntake(nextQueue); }
+    catch (error) { toast.error(`Photos were not saved: ${error.message}. Drop them again after freeing storage.`); return; }
+    queueRef.current = nextQueue;
+    setQueue(nextQueue);
     toast.info(`Added ${newItems.length} photo${newItems.length > 1 ? "s" : ""}`);
     setProcessing(true);
     let identified = 0;
@@ -66,12 +121,13 @@ export default function BatchView() {
     }
     setProgress(null); setProcessing(false);
     if (identified > 0) toast.success(`Identified ${identified}/${newItems.length} cards`);
-  }, [cond, type, toast]);
+  }, [cond, type, toast, restored, processing]);
 
   const handleDragOver = useCallback((e) => { e.preventDefault(); setDragging(true); }, []);
   const handleDragLeave = useCallback(() => setDragging(false), []);
 
   const idAll = async () => {
+    if (processing || savingRef.current || !restored) return;
     const items = queue.filter((i) => i.frontImg && !i.name);
     if (!items.length) return;
     setProcessing(true); let identified = 0;
@@ -84,13 +140,14 @@ export default function BatchView() {
   };
 
   const priceAll = async () => {
+    if (processing || savingRef.current || !restored) return;
     const items = queue.filter((i) => i.name && !i.priceEstimate);
     if (!items.length) return;
     setProcessing(true); let priced = 0;
     for (let i = 0; i < items.length; i++) {
       setProgress({ current: i + 1, total: items.length, action: "Pricing" });
       const d = await aiPrice(items[i].name + " " + (items[i].set || ""));
-      if (d) { updateItem(items[i].id, { priceEstimate: d.priceEstimate, priceHistory: d.priceHistory }); priced++; }
+      if (d) { updateItem(items[i].id, { priceEstimate: { ...d.priceEstimate, evidence: "ai_estimate_unverified", results: d.results || [] }, priceHistory: d.priceHistory }); priced++; }
     }
     setProgress(null); toast.success(`Priced ${priced} cards`); setProcessing(false);
   };
@@ -111,49 +168,57 @@ export default function BatchView() {
   };
 
   const saveAll = async () => {
-    const named = queue.filter((i) => i.name);
+    if (savingRef.current || processing || !restored) return;
+    if (!CONDITIONS.some((entry) => entry.v === cond)) { toast.error("Choose the condition you inspected for this batch"); return; }
+    const named = queueRef.current.filter((item) => item.name?.trim()).map((item) => ({ ...item, status: "approved" }));
     if (!named.length) return;
-
-    const floor = parseFloat(minPrice) || 0;
-    const belowFloor = floor > 0 ? named.filter((i) => {
-      const mid = parseFloat(i.priceEstimate?.mid) || 0;
-      return mid > 0 && mid < floor;
-    }) : [];
-    if (belowFloor.length > 0 && !window.confirm(`${belowFloor.length} card(s) are priced below your floor of ${fmtShort(floor)}. Save anyway?`)) {
-      return;
-    }
-
-    const items = [];
-    for (const item of named) {
-      const id = uid();
-      let frontImgId = null, backImgId = null;
-      if (item.frontImg) { frontImgId = `img_${id}_front`; await saveImage(frontImgId, item.frontImg); }
-      if (item.backImg) { backImgId = `img_${id}_back`; await saveImage(backImgId, item.backImg); }
-      items.push({
-        id, name: item.name, cardSet: item.set, year: item.year, cardNumber: item.number,
-        condition: item.condition || cond, type: item.type || type, binder,
-        costBasis: parseFloat(item.costBasis) || 0,
-        priceEstimate: item.priceEstimate, priceHistory: item.priceHistory,
-        marketPrice: parseFloat(item.priceEstimate?.mid) || 0,
-        frontImgId, backImgId, status: "inventory", listedOn: [],
+    const floor = Number(minPrice) || 0;
+    const belowFloor = named.filter((item) => Number(item.priceEstimate?.mid) > 0 && Number(item.priceEstimate.mid) < floor);
+    if (belowFloor.length && !window.confirm(`${belowFloor.length} cards are below ${fmtShort(floor)}. Save as inventory anyway?`)) return;
+    savingRef.current = true;
+    setProcessing(true);
+    const entries = new Map();
+    try {
+      const summary = await saveApprovedBatch({
+        queue: named,
+        persist: async (item) => {
+          if (!mountedRef.current) throw new Error("Resume this batch to finish saving");
+          const id = item.id;
+          const frontImgId = item.frontImg ? `img_${id}_front` : null;
+          const backImgId = item.backImg ? `img_${id}_back` : null;
+          for (const [imageId, image] of [[frontImgId, item.frontImg], [backImgId, item.backImg]]) {
+            if (!imageId) continue;
+            await saveImage(imageId, image);
+            if (useServer) await imagesAPI.upload(imageId, image);
+          }
+          let entry = {
+            id, name: item.name, set: item.set, cardSet: item.set, year: item.year,
+            number: item.number, cardNumber: item.number, parallel: item.parallel || "", rarity: item.rarity || "",
+            condition: cond, type: item.type || type, binder,
+            costBasis: Number(item.costBasis) || 0,
+            priceEstimate: { ...item.priceEstimate, evidence: "ai_estimate_unverified", costBasisKnown: item.costBasis !== "" && item.costBasis != null },
+            priceHistory: item.priceHistory, marketPrice: Number(item.priceEstimate?.mid) || 0,
+            frontImgId, backImgId, frontImgPhash: item.frontImg ? await computeDHash(item.frontImg) : null,
+            status: "inventory", listedOn: [], createdAt: item.createdAt || new Date().toISOString(),
+          };
+          if (useServer) entry = { ...entry, ...await itemsAPI.create(entry) };
+          const previous = loadData("catalog", catalog);
+          if (!saveData("catalog", [entry, ...previous.filter((card) => card.id !== id)])) throw new Error("Local storage full; scan retained for retry");
+          entries.set(id, entry);
+        },
+        onSaved: async (item) => {
+          if (!mountedRef.current) throw new Error("Saved card; resume to finish clearing this scan");
+          const remaining = queueRef.current.filter((scan) => scan.id !== item.id);
+          await persistIntake(remaining);
+          queueRef.current = remaining;
+          setQueue(remaining);
+          const entry = entries.get(item.id);
+          setCatalog((previous) => [entry, ...previous.filter((card) => card.id !== entry.id)]);
+        },
+        onError: (item, error) => { if (mountedRef.current) toast.error(`${item.name}: ${error.message}`); },
       });
-    }
-
-    if (useServer) {
-      try {
-        const result = await itemsAPI.bulkCreate(items);
-        setCatalog((p) => [...(result.created || items), ...p]);
-        toast.success(`Saved ${items.length} cards to server`);
-      } catch (err) {
-        toast.error(`Server save failed: ${err.message} — saved locally`);
-        setCatalog((p) => [...items.map((i) => ({ ...i, createdAt: new Date().toISOString() })), ...p]);
-      }
-    } else {
-      setCatalog((p) => [...items.map((i) => ({ ...i, createdAt: new Date().toISOString() })), ...p]);
-      toast.success(`Saved ${items.length} cards`);
-    }
-
-    setQueue([]);
+      if (mountedRef.current) toast.info(`${summary.savedIds.length} saved; ${queueRef.current.length} scans remain. Nothing was published.`);
+    } finally { savingRef.current = false; if (mountedRef.current) setProcessing(false); }
   };
 
   const floor = parseFloat(minPrice) || 0;
@@ -174,8 +239,13 @@ export default function BatchView() {
 
       <div className="card mb-12">
         <div className="lbl">Batch defaults</div>
+        <label className="text-xs">Estimated postage per card (CAD)
+          <input aria-label="Estimated postage" className="inp mt-4 mb-8" type="number" min="0" step="0.01" value={shippingCost} onChange={(event) => setShippingCost(event.target.value)} />
+        </label>
+        <div className="text-xxs text-dim mb-8">Uses your configured eBay fee rate. Proceeds exclude acquisition cost, packaging and other unmodelled charges; they are not profit. AI prices require verification.</div>
         <div className="flex gap-8 flex-wrap">
-          <select className="inp flex-1" value={cond} onChange={(e) => setCond(e.target.value)}>
+          <select aria-label="Inspected batch condition" disabled={processing} className="inp flex-1" value={cond} onChange={(e) => setCond(e.target.value)}>
+            <option value="">Choose inspected condition</option>
             {CONDITIONS.map((c) => <option key={c.v} value={c.v}>{c.l}</option>)}
           </select>
           <select className="inp flex-1" value={type} onChange={(e) => setType(e.target.value)}>
@@ -223,7 +293,7 @@ export default function BatchView() {
         <div className="glass flex justify-between items-center mb-10" style={{ padding: "12px 16px", borderRadius: "var(--radius)" }}>
           <div>
             <span className="text-sm text-dim">
-              Est. net: <strong className="gold">{fmtShort(totalNet)}</strong>
+              Est. proceeds (priced cards only): <strong className="gold">{fmtShort(totalNet)}</strong>
             </span>
             {progress && (
               <div className="flex items-center gap-6 mt-4">
@@ -235,7 +305,7 @@ export default function BatchView() {
           <div className="flex gap-6">
             <button className="btn btn-primary btn-sm" onClick={idAll} disabled={processing}><IconZap size={12} /> ID All</button>
             <button className="btn btn-primary btn-sm" onClick={priceAll} disabled={processing}>Price All</button>
-            <button className="btn btn-outline btn-sm" onClick={saveAll}>Save All</button>
+            <button className="btn btn-outline btn-sm" disabled={processing || !restored || !cond} onClick={saveAll}>Save named cards</button>
           </div>
         </div>
       )}
@@ -264,7 +334,7 @@ export default function BatchView() {
               )}
               {net !== null && (
                 <span className="text-xs fw-600" style={{ color: net >= 0 ? "var(--grn)" : "var(--red)" }}>
-                  net {fmtShort(Math.max(net, 0))}
+                  proceeds {fmtShort(net)}
                 </span>
               )}
               {belowFloor && (
@@ -278,13 +348,13 @@ export default function BatchView() {
                 </span>
               )}
               <div className="flex-1" />
-              <button className="btn btn-ghost btn-sm" style={{ color: "var(--red)" }} onClick={() => setQueue((p) => p.filter((x) => x.id !== item.id))}><IconX size={12} /></button>
+              <button className="btn btn-ghost btn-sm" style={{ color: "var(--red)" }} disabled={processing} aria-label="Remove scan" onClick={() => removeItem(item.id)}><IconX size={12} /></button>
             </div>
           </div>
         );
       })}
 
-      <button className="btn btn-primary btn-full btn-lg" onClick={() => setQueue((p) => [...p, {
+      <button className="btn btn-primary btn-full btn-lg" disabled={processing || !restored} onClick={() => setQueue((p) => [...p, {
         id: uid(), frontImg: null, backImg: null, name: "", set: "", year: "", number: "",
         condition: cond, type, costBasis: "", priceEstimate: null, priceHistory: null,
       }])}><IconPlus size={14} /> Add Manual Card</button>

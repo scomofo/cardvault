@@ -114,7 +114,7 @@ test("scan flow publishes: item, listing, publish, and re-POST keeps channel sta
   assert.equal(publishResponse.status, 200);
   const channel = await publishResponse.json();
   assert.equal(channel.marketplace, "ebay");
-  assert.equal(channel.status, "active");
+  assert.equal(channel.status, "draft");
   assert.match(channel.external_listing_id, /^ebay-/);
 
   // The sync engine will re-POST the base record after publish; the upsert
@@ -133,7 +133,7 @@ test("scan flow publishes: item, listing, publish, and re-POST keeps channel sta
   const listings = await listingsResponse.json();
   const listing = listings.find((row) => row.id === "scan-pub-listing");
   assert.ok(listing);
-  assert.equal(listing.publishStatus, "active");
+  assert.equal(listing.publishStatus, "draft");
   assert.match(listing.externalListingId, /^ebay-/);
 
   const channelsResponse = await fetch(
@@ -142,7 +142,7 @@ test("scan flow publishes: item, listing, publish, and re-POST keeps channel sta
   assert.equal(channelsResponse.status, 200);
   const channelsPayload = await channelsResponse.json();
   assert.equal(channelsPayload.channels.length, 1);
-  assert.equal(channelsPayload.channels[0].status, "active");
+  assert.equal(channelsPayload.channels[0].status, "draft");
 
   // The stub publish (eBay not connected) must surface in the action queue.
   const queueResponse = await fetch(`${baseUrl}/api/action-queue`);

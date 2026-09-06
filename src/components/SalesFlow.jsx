@@ -7,11 +7,13 @@ import { uid, fmtShort } from "../lib/utils";
 import { actionQueueAPI, marketplacesAPI, ordersAPI, listingsAPI, salesAPI, automationAPI, purchasesAPI, itemsAPI } from "../lib/api";
 import { importEbayPurchasesLocal, parseEbayPurchaseImport } from "../lib/ebayPurchaseImport";
 import { buildManualSaleFulfillment, loadServerSalesState, summarizeMarketplaceCrosspostResults, summarizeMarketplaceSyncResults } from "../lib/salesViewState";
-import { applyChannelToListing, isStubChannel, summarizePublishOutcome } from "../lib/scanPublish";
+import { applyChannelToListing, isStubChannel, summarizePublishOutcome, listingLifecycle } from "../lib/scanPublish";
 import { requestNotificationPermission, canNotify, sendNotification, scheduleAuctionNotification, cancelNotificationTimer } from "../lib/notifications";
-import { IconPlus, IconBell, IconCheck, IconX, IconUpload, IconRefresh, Spinner } from "./Icons";
+import { IconPlus, IconBell, IconUpload, IconRefresh, Spinner } from "./Icons";
 import EbayExport from "./EbayExport";
 import ActiveListingCard from "./ActiveListingCard";
+import OrderShippingActions from "./OrderShippingActions";
+import { summarizeShippingOutcome } from "../lib/shippingOutcome";
 
 const TABS = ["active", "completed", "orders", "purchases"];
 
@@ -19,7 +21,7 @@ export { PLATFORM_FEES };
 
 export default function SalesFlow({ onNavigate, focus, onFocusConsumed }) {
   const toast = useToast();
-  const { catalog, setCatalog, sales, setSales, orders, setOrders, listings, setListings, purchases, setPurchases, shipFrom, useServer } = useData();
+  const { catalog, setCatalog, sales, setSales, orders, setOrders, listings, setListings, purchases, setPurchases, useServer } = useData();
   const { getFeeRate } = useFeeModels(useServer);
   const [tab, setTab] = useState("active");
   const [highlightId, setHighlightId] = useState(null);
@@ -57,13 +59,13 @@ export default function SalesFlow({ onNavigate, focus, onFocusConsumed }) {
     name: "", set: "", platform: "ebay", price: "", shipping: "", seller: "", date: "", notes: "",
   });
 
-  const activeListings = useMemo(() => listings.filter((l) => l.status === "active"), [listings]);
+  const activeListings = useMemo(() => listings.filter((l) => ["active", "draft", "ready"].includes(l.status)), [listings]);
   const completedListings = useMemo(() => listings.filter((l) => l.status === "sold" || l.status === "ended"), [listings]);
   const urgentCount = useMemo(() => {
     const soon = Date.now() + 60 * 60 * 1000;
     return activeListings.filter((l) => l.format === "auction" && l.auctionEndDate && new Date(l.auctionEndDate).getTime() <= soon).length;
   }, [activeListings]);
-  const unlistedCards = useMemo(() => catalog.filter((c) => c.status === "inventory" && c.name), [catalog]);
+  const unlistedCards = useMemo(() => catalog.filter((c) => c.status === "inventory" && c.name && !listings.some((l) => l.cardId === c.id && !["sold", "ended"].includes(l.status))), [catalog, listings]);
 
   // Record-level deep links (Next Best Action, action queue, global search):
   // switch to the tab holding the record, then highlight and scroll to it.
@@ -73,8 +75,15 @@ export default function SalesFlow({ onNavigate, focus, onFocusConsumed }) {
     if (!focus?.id) return;
     if (focus.type === "inventory_item") {
       if (focus.intent === "list") {
-        setShowCreate(true);
-        setNewListing((previous) => ({ ...previous, cardId: focus.id }));
+        const existing = listings.find((listing) => listing.cardId === focus.id && !["sold", "ended"].includes(listing.status));
+        if (existing) {
+          setTab("active");
+          setHighlightId(existing.id);
+          setShowCreate(false);
+        } else {
+          setShowCreate(true);
+          setNewListing((previous) => ({ ...previous, cardId: focus.id }));
+        }
       } else {
         const listing = listings.find((l) => l.cardId === focus.id && l.status === "active");
         if (listing) {
@@ -94,7 +103,7 @@ export default function SalesFlow({ onNavigate, focus, onFocusConsumed }) {
       focus.type === "order" ? "orders"
         : focus.type === "purchase" ? "purchases"
         : focus.type === "listing" || focus.type === "sale"
-          ? (listings.find((l) => l.id === focus.id && l.status === "active") ? "active" : "completed")
+          ? (listings.find((l) => l.id === focus.id && ["active", "draft", "ready"].includes(l.status)) ? "active" : "completed")
           : null;
     if (targetTab) {
       setTab(targetTab);
@@ -126,7 +135,7 @@ export default function SalesFlow({ onNavigate, focus, onFocusConsumed }) {
       toast.error(unlistedCards.length === 0 ? "Add a card before creating a listing" : "Select a card");
       return;
     }
-    if (!newListing.startPrice) { toast.error("Enter a price"); return; }
+    if (!Number.isFinite(Number(newListing.startPrice)) || Number(newListing.startPrice) <= 0) { toast.error("Enter a positive price"); return; }
     const listing = {
       id: uid(), cardId: card.id, cardName: card.name, set: card.set, number: card.number,
       cardSet: card.set, cardNumber: card.number,
@@ -136,10 +145,10 @@ export default function SalesFlow({ onNavigate, focus, onFocusConsumed }) {
       auctionEndDate: newListing.format === "auction" ? newListing.auctionEndDate : null,
       shipping: parseFloat(newListing.shipping) || 0,
       currentBid: newListing.format === "auction" ? parseFloat(newListing.startPrice) : null,
-      status: "active", notes: newListing.notes, createdAt: new Date().toISOString(),
+      status: "draft", publishStatus: "draft", notes: newListing.notes, createdAt: new Date().toISOString(),
     };
     setListings((p) => [listing, ...p]);
-    setCatalog((p) => p.map((c) => c.id === card.id ? { ...c, status: "listed", listedOn: [...(c.listedOn || []), newListing.platform] } : c));
+    // This is a local draft. Publishing is the separate marketplace action.
     if (listing.format === "auction" && listing.auctionEndDate) scheduleAuctionNotification(listing);
     setShowCreate(false);
     setNewListing({ cardId: "", platform: "ebay", format: "fixed", startPrice: "", buyNowPrice: "", auctionEndDate: "", shipping: "4.99", notes: "" });
@@ -148,11 +157,11 @@ export default function SalesFlow({ onNavigate, focus, onFocusConsumed }) {
       // first (listings POST 404s on a missing card_id). Creates are
       // idempotent upserts; on failure the sync engine retries anyway.
       await itemsAPI
-        .create({ ...card, status: "listed", listedOn: [...(card.listedOn || []), newListing.platform] })
+        .create(card)
         .then(() => listingsAPI.create(listing))
-        .catch(() => {});
+        .catch((error) => toast.error(`Draft saved locally; server save needs retry: ${error.message}`));
     }
-    toast.success(`Listed: ${card.name}`);
+    toast.info(`Draft saved: ${card.name}. Not published yet.`);
   };
 
   const completeSale = async (listingId, salePrice, trackingNumber) => {
@@ -202,7 +211,7 @@ export default function SalesFlow({ onNavigate, focus, onFocusConsumed }) {
   };
 
   const isLiveMarketplaceListing = (listing) => {
-    if (!listing) return false;
+    if (!listing || listingLifecycle(listing) !== "live") return false;
     const externalId = listing.externalListingId || listing.external_listing_id;
     const publishStatus = String(listing.publishStatus || listing.publish_status || "").toLowerCase();
     if (!externalId && !["active", "revised"].includes(publishStatus)) return false;
@@ -407,10 +416,15 @@ export default function SalesFlow({ onNavigate, focus, onFocusConsumed }) {
     setCatalog(nextState.catalog);
   };
 
-  const publishListing = async (listingId, marketplace = "ebay") => {
+  const publishListing = async (listingId, marketplace = "ebay", options = {}) => {
+    if (busyListingId) return;
     try {
       setBusyListingId(listingId);
-      const channel = await marketplacesAPI.publish({ listingId, marketplace });
+      const draft = listings.find((entry) => entry.id === listingId);
+      const card = catalog.find((entry) => entry.id === draft?.cardId);
+      if (card) await itemsAPI.create(card);
+      if (draft) await listingsAPI.create(draft);
+      const channel = await marketplacesAPI.publish({ listingId, marketplace, ...options });
       setListings((prev) =>
         prev.map((listing) =>
           listing.id === listingId ? applyChannelToListing(listing, channel) : listing,
@@ -497,17 +511,30 @@ export default function SalesFlow({ onNavigate, focus, onFocusConsumed }) {
     }
   }
 
-  const automateShipping = async (orderId) => {
+  const automateShipping = async (orderId, reviewRetry = false) => {
+    const message = reviewRetry
+      ? "Have you checked the provider and confirmed there is NO existing label or charge for this order? Retrying can buy postage."
+      : "This may purchase postage from your configured shipping provider. Continue?";
+    if (!window.confirm(message)) return;
     try {
       setShippingBusy(orderId);
-      const result = await automationAPI.automateShipment(orderId, {});
+      const result = await automationAPI.automateShipment(orderId, reviewRetry ? { retry: true, confirmNoExistingLabel: true } : {});
       await refreshServerSalesState();
-      toast.success("Shipping automated: " + (result.trackingNumber || "label created"));
-    } catch (e) {
-      toast.error("Shipping failed: " + e.message);
-    } finally {
-      setShippingBusy(null);
-    }
+      const summary = summarizeShippingOutcome(result);
+      (toast[summary.type] || toast.info)(summary.message);
+    } catch (error) { toast.error(error.message); }
+    finally { setShippingBusy(null); }
+  };
+
+  const confirmDispatch = async (orderId) => {
+    if (!window.confirm("Confirm that this order has been handed to the carrier. A purchased label alone does not mean it is shipped.")) return;
+    try {
+      setShippingBusy(orderId);
+      await ordersAPI.dispatch(orderId, { confirmed: true });
+      await refreshServerSalesState();
+      toast.success("Dispatch recorded. No tracking number was invented.");
+    } catch (error) { toast.error(error.message); }
+    finally { setShippingBusy(null); }
   };
 
   return (
@@ -857,17 +884,8 @@ export default function SalesFlow({ onNavigate, focus, onFocusConsumed }) {
                     </span>
                   </div>
                 </div>
-                {o.trackingNumber || o.tracking_number ? (
-                  <div className="text-xxs text-dim mt-6">Tracking: {o.trackingNumber || o.tracking_number}</div>
-                ) : (
-                  <button
-                    className="btn btn-primary btn-sm mt-8"
-                    onClick={() => automateShipping(o.id)}
-                    disabled={shippingBusy === o.id}
-                  >
-                    {shippingBusy === o.id ? <Spinner size={12} /> : <IconCheck size={12} />} Auto-Ship
-                  </button>
-                )}
+                {(o.trackingNumber || o.tracking_number) && <div className="text-xxs text-dim mt-6">Tracking: {o.trackingNumber || o.tracking_number}</div>}
+                <OrderShippingActions order={o} busy={shippingBusy === o.id} onPrepare={automateShipping} onDispatch={confirmDispatch} />
               </div>
             ))
           )}

@@ -20,6 +20,8 @@ function persistSession(queue) {
 
 export function useBatchWorkflow() {
   const toast = useToast();
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
   const { catalog, setCatalog, useServer } = useData();
   const [batchMode, setMode] = useState(null);
   const [batchQueue, setQueue] = useState([]);
@@ -44,7 +46,7 @@ export function useBatchWorkflow() {
       readyRef.current = true;
       if (restored.length) setMode("process");
     }).catch((error) => {
-      if (!cancelled) toast.error(`Batch restore failed: ${error.message}. Reload before starting another batch.`);
+      if (!cancelled) toastRef.current.error(`Batch restore failed: ${error.message}. Reload before starting another batch.`);
     });
     return () => { cancelled = true; mountedRef.current = false; };
   }, []);
@@ -166,8 +168,12 @@ export function useBatchWorkflow() {
         onSaved: async (item) => {
           if (!mountedRef.current) throw new Error("Card saved; resume the batch to finish");
           const entry = savedEntries.get(item.id);
+          const remaining = queueRef.current.filter((scan) => scan.id !== item.id);
+          await persistSession(remaining);
+          if (!mountedRef.current) return;
+          queueRef.current = remaining;
+          setQueue(remaining);
           setCatalog((previous) => [entry, ...previous.filter((card) => card.id !== entry.id)]);
-          await updateQueue((queue) => queue.filter((scan) => scan.id !== item.id));
           setProcessedCount((count) => count + 1);
         },
         onError: (item, error) => {

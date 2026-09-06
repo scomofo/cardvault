@@ -166,6 +166,9 @@ export const PARALLEL_FIELD_MAP = {
 };
 
 export const ORDER_FIELD_MAP = {
+  label_status: "labelStatus",
+  card_name: "cardName",
+  storage_location: "storageLocation",
   sale_id: "saleId",
   listing_id: "listingId",
   item_id: "itemId",

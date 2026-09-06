@@ -2,8 +2,8 @@ import { MarketplaceAdapter } from "./marketplaceAdapter.js";
 import { get } from "../../database.js";
 import { readImageFile } from "../../services/imageStore.js";
 import { getEbayStatus } from "../ebay/ebayAuth.js";
-import { addItem, addFixedPriceItem, reviseItem, endItem, createInventoryItem, createOffer, publishOffer, getOrders, uploadSiteHostedPictures } from "../ebay/ebayClient.js";
-import { listingToTradingXml, listingToInventoryItem, listingToOffer } from "../ebay/ebayMapper.js";
+import { addItem, addFixedPriceItem, reviseItem, endItem, getOrders, uploadSiteHostedPictures } from "../ebay/ebayClient.js";
+import { listingToTradingXml } from "../ebay/ebayMapper.js";
 
 // Upload the item's stored front/back images to eBay Picture Services.
 // Per-image failures are tolerated — a listing without one photo is still
@@ -60,16 +60,10 @@ export class EbayAdapter extends MarketplaceAdapter {
       const xml = listingToTradingXml(listing, item, { pictureUrls });
       externalId = await addItem(xml);
     } else {
-      try {
-        const sku = "CV-" + listing.id;
-        await createInventoryItem(sku, listingToInventoryItem(listing, item, { pictureUrls }));
-        const offer = await createOffer(listingToOffer(listing, sku));
-        const pub = await publishOffer(offer.offerId);
-        externalId = pub.listingId || offer.offerId;
-      } catch {
-        const xml = listingToTradingXml(listing, item, { pictureUrls });
-        externalId = await addFixedPriceItem(xml);
-      }
+      // Use the existing Trading implementation directly. Retrying through a
+      // different API after a timeout can create a second live listing.
+      const xml = listingToTradingXml(listing, item, { pictureUrls });
+      externalId = await addFixedPriceItem(xml);
     }
 
     return {
@@ -214,7 +208,8 @@ export class EbayAdapter extends MarketplaceAdapter {
 
     const itemId = listing.external_listing_id || listing.externalListingId;
     if (!itemId) {
-      return super.sync(listing);
+      return { marketplace: this.marketplace, externalListingId: null,
+        status: listing.channel_status || listing.channelStatus || "draft", payload: listing };
     }
 
     const order = await this.fetchRemoteOrderForListing(listing);
@@ -222,7 +217,7 @@ export class EbayAdapter extends MarketplaceAdapter {
       return {
         marketplace: this.marketplace,
         externalListingId: itemId,
-        status: "active",
+        status: listing.channel_status || listing.channelStatus || listing.status || "draft",
         payload: listing,
         syncedAt: new Date().toISOString(),
       };

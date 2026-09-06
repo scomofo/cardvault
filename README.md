@@ -17,8 +17,8 @@
 | Feature | Description |
 |:--------|:------------|
 | **AI Card Recognition** | Snap a photo — Claude identifies the card, set, year, and rarity |
-| **AI Price Lookup** | Real-time market pricing from eBay sold data with trend charts |
-| **AI Grade Prediction** | PSA grade predictions with centering, corners, edges, surface sub-scores |
+| **AI Price Lookup** | Search-assisted price estimates; review the source evidence before listing |
+| **AI Grade Prediction** | Photo-based condition suggestions, not professional grading or authentication |
 | **Portfolio Dashboard** | Live portfolio value, P/L tracking, and collection analytics |
 | **10-Platform Sales** | Track listings, fees, and profit across eBay, TCGplayer, Mercari, and more |
 | **Batch Scanning** | Drag-and-drop bulk card photos for auto-identification |
@@ -152,3 +152,15 @@ All prices in CAD. Canada Post shipping rates built in. eBay listing generator w
 ---
 
 *Built by Scott Morley*
+
+### Selling workflow safety
+
+Batch sessions now retain unfinished scans on the same device and save cards with
+stable retry IDs. Choose the inspected condition explicitly; AI prices remain
+unverified estimates. New listings are drafts until a marketplace confirms them.
+
+Shipping preparation does not buy a label or mark an order shipped. After a real
+label purchase (or using your own postage), use **Confirm dispatched** only after
+handing the package to the carrier. Check eBay/carrier history before retrying an
+uncertain publish or label purchase. See [the safety notes](docs/Selling-Workflow-Safety.md)
+for state contracts, test coverage, and remaining work.

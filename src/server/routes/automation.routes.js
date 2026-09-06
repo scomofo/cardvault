@@ -131,7 +131,7 @@ async function runCanadaPostValidation({ connection, body = {} }) {
     {
       id: "label_endpoint",
       label: "Label endpoint dry-run",
-      ok: endpointValidation.ok !== false,
+      ok: !endpointValidation.attempted || endpointValidation.ok !== false,
       attempted: Boolean(endpointValidation.attempted),
       message: endpointValidation.attempted
         ? "Label endpoint dry-run completed"

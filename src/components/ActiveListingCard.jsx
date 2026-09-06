@@ -1,5 +1,5 @@
 import { PLATFORMS, PLATFORM_FEES } from "../lib/constants";
-import { isStubChannel } from "../lib/scanPublish";
+import { isStubChannel, listingLifecycle } from "../lib/scanPublish";
 import { fmtShort } from "../lib/utils";
 import { IconCheck, IconX, Spinner } from "./Icons";
 import ProfitWarning from "./ProfitWarning";
@@ -11,12 +11,16 @@ export default function ActiveListingCard({ listing: l, catalog, busyListingId, 
   const isRepricing = repricingId === l.id;
   const feeRate = getFeeRate(l.platform);
   const previewNet = sellPrice ? (parseFloat(sellPrice) - (parseFloat(catalog.find((c) => c.id === l.cardId)?.costBasis) || 0) - Math.round(parseFloat(sellPrice) * feeRate * 100) / 100 - (l.shipping || 0)) : null;
-  const publishStatus = String(l.publishStatus || "").toLowerCase();
   // A stub publish (marketplace wasn't connected) must not lock the Publish
   // button — the user needs to re-publish for real after connecting.
   const isStubPublish = isStubChannel(l, { marketplace: l.platform, listingId: l.id });
-  const isPublished = !isStubPublish
-    && (["active", "revised", "sold"].includes(publishStatus) || Boolean(l.externalListingId || l.external_listing_id));
+  const lifecycle = listingLifecycle(l);
+  const isPublished = !isStubPublish && ["live", "sold", "ended", "handoff"].includes(lifecycle);
+  const publish = () => {
+    const needsReview = ["needs_review", "publishing"].includes(lifecycle);
+    if (needsReview && !window.confirm("Check eBay Seller Hub first. Have you confirmed this listing was NOT published? Retrying without checking can create a duplicate.")) return;
+    onPublish(l.id, l.platform || "ebay", needsReview ? { confirmNotPublished: true } : {});
+  };
   const lastSyncAt = l.lastSyncAt || l.last_sync_at;
   const lastSyncLabel = lastSyncAt && !Number.isNaN(new Date(lastSyncAt).getTime())
     ? `Synced ${new Date(lastSyncAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`
@@ -44,9 +48,7 @@ export default function ActiveListingCard({ listing: l, catalog, busyListingId, 
                       {tl === "Ended" ? "Auction ended" : `Ends in ${tl}`}
                     </span>
                   )}
-                  {l.publishStatus && (
-                    <span className="badge badge-dim">{l.publishStatus}</span>
-                  )}
+                  <span className="badge badge-dim">{({ live: "Live", draft: "Draft — not published", needs_review: "Needs review", publishing: "Publication in progress", handoff: "Partner handoff" })[lifecycle] || lifecycle}</span>
                   {lastSyncLabel && (
                     <span className="text-xxs text-dim">{lastSyncLabel}</span>
                   )}
@@ -56,8 +58,8 @@ export default function ActiveListingCard({ listing: l, catalog, busyListingId, 
                   <div className="flex-1" />
                   {!isSelling && !isRepricing && (
                     <>
-                      <button className="btn btn-ghost btn-sm" disabled={busyListingId === l.id || isPublished} onClick={() => onPublish(l.id, l.platform || "ebay")}>
-                        {busyListingId === l.id ? <Spinner size={12} /> : isPublished ? "Published" : "Publish"}
+                      <button className="btn btn-ghost btn-sm" disabled={busyListingId === l.id || isPublished} onClick={publish}>
+                        {busyListingId === l.id ? <Spinner size={12} /> : isPublished ? "Published / handed off" : ["needs_review", "publishing"].includes(lifecycle) ? "Review and retry" : "Publish"}
                       </button>
                       <button className="btn btn-ghost btn-sm" disabled={busyListingId === l.id} onClick={() => onSync(l.id, l.platform || "ebay")}>
                         Sync

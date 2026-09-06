@@ -170,7 +170,8 @@ test("shipping automation purchases provider labels through a live HTTP client",
   assert.equal(Object.hasOwn(labelEndpoint.requests[0].payload, "api_key"), false);
   assert.equal(JSON.stringify(labelEndpoint.requests[0].payload).includes("secret-provider-key"), false);
   assert.equal(shipment.label_status, "purchased");
-  assert.equal(shipment.status, "shipped");
+  assert.equal(shipment.status, "label_purchased");
+  assert.equal(shipment.shipped_at, null);
   assert.equal(shipment.tracking_number, "HTTP-TRACK-123");
   assert.equal(shipment.label_url, `labels/http/HTTP-TRACK-123/${shipment.id}.pdf`);
 
@@ -179,7 +180,7 @@ test("shipping automation purchases provider labels through a live HTTP client",
     const event = db.prepare(
       `SELECT payload
        FROM listing_channel_events
-       WHERE event_type = 'tracking_sync'
+       WHERE event_type = 'label_purchased'
        ORDER BY created_at DESC
        LIMIT 1`,
     ).get();
@@ -197,6 +198,7 @@ test("shipping automation applies Canada Post native payload defaults for live p
     res.end(JSON.stringify({
       labelStatus: "purchased",
       trackingNumber: "CP-LIVE-123",
+      labelUrl: "labels/canada-post/{trackingNumber}/{shipmentId}.pdf",
     }));
   });
   t.after(labelEndpoint.close);
@@ -246,7 +248,8 @@ test("shipping automation applies Canada Post native payload defaults for live p
   assert.match(labelEndpoint.requests[0].payload.canadaPost.createShipmentXml, /<service-code>DOM\.EP<\/service-code>/);
   assert.match(labelEndpoint.requests[0].payload.canadaPost.createShipmentXml, /<postal-code>K1A0B1<\/postal-code>/);
   assert.equal(shipment.label_status, "purchased");
-  assert.equal(shipment.status, "shipped");
+  assert.equal(shipment.status, "label_purchased");
+  assert.equal(shipment.shipped_at, null);
   assert.equal(shipment.tracking_number, "CP-LIVE-123");
   assert.equal(shipment.label_url, `labels/canada-post/CP-LIVE-123/${shipment.id}.pdf`);
 });
@@ -310,7 +313,8 @@ test("shipping automation submits native Canada Post Create Shipment XML directl
 
   assert.equal(canadaPostEndpoint.requests.length, 1);
   assert.equal(shipment.label_status, "purchased");
-  assert.equal(shipment.status, "shipped");
+  assert.equal(shipment.status, "label_purchased");
+  assert.equal(shipment.shipped_at, null);
   assert.equal(shipment.tracking_number, "CP123456789CA");
   assert.equal(shipment.label_url, `${canadaPostEndpoint.baseUrl}/rs/artifact/label-123`);
 });
@@ -685,7 +689,7 @@ test("shipping automation truncates non-json live provider label errors", async 
   }
 });
 
-test("shipping automation persists purchased provider label metadata", async (t) => {
+test("static purchased-label metadata stays a quote with no artifacts", async (t) => {
   const { baseUrl, dbPath } = await startTestServer(t, { dirPrefix: "cardvault-label-purchased-" });
   insertShippingProvider(dbPath, {
     rates: [{
@@ -711,29 +715,31 @@ test("shipping automation persists purchased provider label metadata", async (t)
   assert.equal(response.status, 200);
   const shipment = await response.json();
 
-  assert.equal(shipment.label_status, "purchased");
-  assert.equal(shipment.status, "shipped");
-  assert.equal(shipment.tracking_number, "CP-PURCHASED-123");
-  assert.equal(shipment.label_url, `labels/canada-post/CP-PURCHASED-123/${shipment.id}.pdf`);
+  assert.equal(shipment.label_status, "pending");
+  assert.equal(shipment.status, "pending");
+  assert.equal(shipment.tracking_number, null);
+  assert.equal(shipment.label_url, null);
+  assert.equal(shipment.purchased_at, null);
+  assert.equal(shipment.shipped_at, null);
 
   const db = new Database(dbPath, { readonly: true });
   try {
     const event = db.prepare(
       `SELECT payload
        FROM listing_channel_events
-       WHERE event_type = 'tracking_sync'
+       WHERE event_type = 'shipping_prepared'
        ORDER BY created_at DESC
        LIMIT 1`,
     ).get();
     assert.ok(event);
-    assert.match(event.payload, /"labelStatus":"purchased"/);
+    assert.match(event.payload, /"labelStatus":"pending"/);
     assert.doesNotMatch(event.payload, /secret-provider-key|apiKey|api_key/);
   } finally {
     db.close();
   }
 });
 
-test("shipping automation records provider label failures for retry", async (t) => {
+test("static failure metadata cannot claim a live provider call occurred", async (t) => {
   const { baseUrl, dbPath } = await startTestServer(t, { dirPrefix: "cardvault-label-failed-" });
   insertShippingProvider(dbPath, {
     rates: [{
@@ -758,34 +764,16 @@ test("shipping automation records provider label failures for retry", async (t) 
   assert.equal(response.status, 200);
   const shipment = await response.json();
 
-  assert.equal(shipment.label_status, "failed");
-  assert.equal(shipment.status, "exception");
+  assert.equal(shipment.label_status, "pending");
+  assert.equal(shipment.status, "pending");
   assert.equal(shipment.tracking_number, null);
-
+  assert.equal(shipment.purchased_at, null);
   const ordersResponse = await fetch(`${baseUrl}/api/orders`);
   assert.equal(ordersResponse.status, 200);
   const order = (await ordersResponse.json()).find((entry) => entry.id === orderId);
-  assert.equal(order.fulfillmentStatus, "shipping_exception");
-
-  const queueResponse = await fetch(`${baseUrl}/api/action-queue`);
-  assert.equal(queueResponse.status, 200);
-  const retryAction = (await queueResponse.json()).find((entry) => entry.subjectId === orderId);
-  assert.equal(retryAction.queue, "shipping_exception");
-  assert.equal(retryAction.suggestedAction, "retry_shipment");
-
+  assert.equal(order.fulfillmentStatus, "pending");
   const db = new Database(dbPath, { readonly: true });
   try {
-    const event = db.prepare(
-      `SELECT event_type, status, payload
-       FROM listing_channel_events
-       WHERE event_type = 'shipping_exception'
-       ORDER BY created_at DESC
-       LIMIT 1`,
-    ).get();
-    assert.equal(event.status, "failed");
-    assert.match(event.payload, /Carrier label endpoint unavailable/);
-    assert.doesNotMatch(event.payload, /secret-provider-key|apiKey|api_key/);
-  } finally {
-    db.close();
-  }
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM listing_channel_events WHERE event_type = 'shipping_exception'").get().count, 0);
+  } finally { db.close(); }
 });

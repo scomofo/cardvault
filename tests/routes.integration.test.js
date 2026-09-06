@@ -421,7 +421,7 @@ test("server routes handle validation, migration, and listing side effects", asy
   const draftedItemResponse = await fetch(`${baseUrl}/api/items/draft-route-item`);
   assert.equal(draftedItemResponse.status, 200);
   const draftedItemPayload = await draftedItemResponse.json();
-  assert.equal(draftedItemPayload.status, "listed");
+  assert.equal(draftedItemPayload.status, "inventory");
   assert.equal(draftedItemPayload.listingStatus, "draft");
   assert.equal(draftedItemPayload.saleStatus, "available");
 
@@ -471,7 +471,7 @@ test("server routes handle validation, migration, and listing side effects", asy
   const redraftedItemResponse = await fetch(`${baseUrl}/api/items/draft-route-item`);
   assert.equal(redraftedItemResponse.status, 200);
   const redraftedItemPayload = await redraftedItemResponse.json();
-  assert.equal(redraftedItemPayload.status, "listed");
+  assert.equal(redraftedItemPayload.status, "inventory");
   assert.equal(redraftedItemPayload.listingStatus, "draft");
   assert.equal(redraftedItemPayload.saleStatus, "available");
 
@@ -757,7 +757,7 @@ test("server routes handle validation, migration, and listing side effects", asy
   const reopenedDraftItemResponse = await fetch(`${baseUrl}/api/items/sold-draft-item`);
   assert.equal(reopenedDraftItemResponse.status, 200);
   const reopenedDraftItemPayload = await reopenedDraftItemResponse.json();
-  assert.equal(reopenedDraftItemPayload.status, "listed");
+  assert.equal(reopenedDraftItemPayload.status, "inventory");
   assert.equal(reopenedDraftItemPayload.listingStatus, "draft");
   assert.equal(reopenedDraftItemPayload.saleStatus, "available");
   assert.equal(reopenedDraftItemPayload.soldAt, null);
