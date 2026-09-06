@@ -43,6 +43,7 @@ const APP_PORT = Number(process.env.PORT);
 const DEV_URL = process.env.CARDVAULT_DEV_URL || null;
 
 let mainWindow = null;
+let windowPromise = null;
 let serverPromise = null;
 let pendingDeepLink = null;
 let cvServiceProcess = null;
@@ -154,9 +155,8 @@ function rebuildMenu() {
 }
 
 function openMainWindow() {
-  if (!mainWindow) {
-    createWindow();
-    return;
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return createWindow();
   }
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.show();
@@ -193,8 +193,9 @@ async function deliverScanImage(filePath) {
   if (!isScanImageExtension(filePath)) return;
   try {
     const dataUrl = await readImageAsDataUrl(filePath);
-    if (!mainWindow) {
+    if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isLoadingMainFrame()) {
       pendingScanImage = dataUrl;
+      if (app.isReady()) openMainWindow();
       return;
     }
     openMainWindow();
@@ -240,12 +241,12 @@ if (!app.isDefaultProtocolClient("cardvault")) {
 
 function deliverDeepLink(url) {
   if (!url || !url.startsWith("cardvault://")) return;
-  if (mainWindow) {
+  if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isLoadingMainFrame()) {
     mainWindow.webContents.send("cardvault:deep-link", url);
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
+    openMainWindow();
   } else {
     pendingDeepLink = url;
+    if (app.isReady()) openMainWindow();
   }
 }
 
@@ -257,10 +258,7 @@ app.on("open-url", (event, url) => {
 app.on("second-instance", (_event, argv) => {
   const link = argv.find((a) => typeof a === "string" && a.startsWith("cardvault://"));
   if (link) deliverDeepLink(link);
-  if (mainWindow) {
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
-  }
+  if (app.isReady()) openMainWindow();
 });
 
 async function ensureServer() {
@@ -295,7 +293,8 @@ async function maybeAutoStartCvService() {
 }
 
 async function maybeShowOnboarding() {
-  if (!mainWindow) return;
+  const window = mainWindow;
+  if (!window || window.isDestroyed()) return;
   try {
     const res = await fetch(`http://127.0.0.1:${APP_PORT}/api/ai/status`, {
       signal: AbortSignal.timeout(2000),
@@ -303,7 +302,8 @@ async function maybeShowOnboarding() {
     if (!res.ok) return;
     const data = await res.json();
     if (data?.configured) return;
-    mainWindow.webContents.send("cardvault:open-settings");
+    if (window.isDestroyed() || mainWindow !== window) return;
+    window.webContents.send("cardvault:open-settings");
     notify("Welcome to CardVault", "Add your Anthropic API key in Settings to enable card recognition and pricing.");
   } catch {
     // server may still be warming up; skip onboarding silently
@@ -326,7 +326,7 @@ function buildMenu() {
             {
               label: "Settings…",
               accelerator: "Cmd+,",
-              click: () => mainWindow?.webContents.send("cardvault:open-settings"),
+              click: () => deliverDeepLink("cardvault://settings"),
             },
             { type: "separator" },
             { role: "services" },
@@ -410,7 +410,17 @@ function buildMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-async function createWindow() {
+function createWindow() {
+  if (windowPromise) return windowPromise;
+  if (mainWindow && !mainWindow.isDestroyed()) return Promise.resolve(mainWindow);
+  const pending = buildWindow().finally(() => {
+    if (windowPromise === pending) windowPromise = null;
+  });
+  windowPromise = pending;
+  return windowPromise;
+}
+
+async function buildWindow() {
   const url = await ensureServer().catch((err) => {
     dialog.showErrorBox("CardVault failed to start", String(err?.stack || err));
     app.quit();
@@ -418,7 +428,7 @@ async function createWindow() {
   });
 
   const isMac = process.platform === "darwin";
-  mainWindow = new BrowserWindow({
+  const window = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 960,
@@ -436,8 +446,15 @@ async function createWindow() {
       sandbox: true,
     },
   });
+  mainWindow = window;
+  window.once("closed", () => {
+    if (mainWindow === window) {
+      mainWindow = null;
+      windowPromise = null;
+    }
+  });
 
-  const session = mainWindow.webContents.session;
+  const session = window.webContents.session;
   const allowedRendererOrigins = new Set([getOrigin(url)].filter(Boolean));
   session.setPermissionRequestHandler((wc, permission, callback, details) => {
     callback(canGrantRendererPermission({
@@ -454,7 +471,7 @@ async function createWindow() {
     });
   });
 
-  mainWindow.webContents.setWindowOpenHandler(({ url: target }) => {
+  window.webContents.setWindowOpenHandler(({ url: target }) => {
     if (isAllowedExternalUrl(target)) shell.openExternal(target);
     return { action: "deny" };
   });
@@ -463,15 +480,15 @@ async function createWindow() {
   // redirect, e.g. /api/ebay/callback back to /#settings). Anything else —
   // an OAuth provider's page, a stray link — must not load into the main
   // window, where the preload bridge and IPC channels are attached.
-  mainWindow.webContents.on("will-navigate", (event, targetUrl) => {
+  window.webContents.on("will-navigate", (event, targetUrl) => {
     if (!isAllowedNavigation({ targetUrl, allowedOrigins: allowedRendererOrigins })) {
       event.preventDefault();
       if (isAllowedExternalUrl(targetUrl)) shell.openExternal(targetUrl);
     }
   });
 
-  mainWindow.once("ready-to-show", () => mainWindow.show());
-  mainWindow.webContents.once("did-finish-load", () => {
+  window.once("ready-to-show", () => window.show());
+  window.webContents.on("did-finish-load", () => {
     if (pendingDeepLink) {
       const link = pendingDeepLink;
       pendingDeepLink = null;
@@ -480,11 +497,18 @@ async function createWindow() {
     if (pendingScanImage) {
       const img = pendingScanImage;
       pendingScanImage = null;
-      mainWindow.webContents.send("cardvault:scan-image", img);
+      window.webContents.send("cardvault:scan-image", img);
     }
-    setTimeout(() => maybeShowOnboarding(), 800);
   });
-  await mainWindow.loadURL(url);
+  window.webContents.once("did-finish-load", () => setTimeout(() => maybeShowOnboarding(), 800));
+  try {
+    await window.loadURL(url);
+  } catch (error) {
+    // Cmd+W can cancel the first load. A closed window must neither block
+    // reopening nor turn that expected cancellation into a startup failure.
+    if (!window.isDestroyed()) throw error;
+  }
+  return window.isDestroyed() ? null : window;
 }
 
 ipcMain.on("cardvault:set-badge", (_event, count) => {

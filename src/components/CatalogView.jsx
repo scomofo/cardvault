@@ -3,7 +3,7 @@ import { useToast } from "./Toast";
 import { useData } from "../lib/DataContext";
 import { condOf, fmtShort, download } from "../lib/utils";
 import { loadImage, deleteImage, loadString, saveString } from "../lib/storage";
-import { cardEstimate, catalogStatus, filterCatalog, summarizeCatalog } from "../lib/catalogState";
+import { cardEstimate, catalogStatus, catalogReturnFocusId, filterCatalog, summarizeCatalog } from "../lib/catalogState";
 import { genCSV, genEbayCSV, genInsurancePDF } from "../lib/exports";
 import { IconSearch, IconDownload, IconChevron, IconCamera, IconCopy, IconGrid, IconList, IconX } from "./Icons";
 import CardDetail from "./CardDetail";
@@ -22,24 +22,22 @@ export default function CatalogView({ onNavigate, focus, onFocusConsumed }) {
   const [thumbs, setThumbs] = useState({});
   const thumbAttempted = useRef(new Set());
   const cardButtons = useRef(new Map());
-  const returnFocusId = useRef(null);
+  const returnFocusOrigin = useRef(null);
+  const detailIndex = useRef(0);
   const searchInput = useRef(null);
+  const collectionHeading = useRef(null);
 
   const detail = useMemo(() => detailId ? catalog.find((c) => c.id === detailId) || null : null, [detailId, catalog]);
 
   // Action queue and global-search deep links open the card directly.
   useEffect(() => {
     if (!focus?.id) return;
-    if (catalog.some((c) => c.id === focus.id)) setDetailId(focus.id);
+    if (catalog.some((c) => c.id === focus.id)) {
+      detailIndex.current = 0;
+      setDetailId(focus.id);
+    }
     onFocusConsumed?.();
   }, [focus, catalog, onFocusConsumed]);
-
-  useEffect(() => {
-    if (!detailId && returnFocusId.current) {
-      cardButtons.current.get(returnFocusId.current)?.focus();
-      returnFocusId.current = null;
-    }
-  }, [detailId]);
 
   const binders = useMemo(() => [...new Set(catalog.map((c) => c.binder).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true })), [catalog]);
@@ -48,6 +46,15 @@ export default function CatalogView({ onNavigate, focus, onFocusConsumed }) {
   }), [catalog, binderF, statusF, sortBy, catSearch]);
   const summary = useMemo(() => summarizeCatalog(catalog), [catalog]);
   const hasFilters = Boolean(binderF || statusF !== "all" || catSearch.trim());
+
+  useEffect(() => {
+    if (!detailId && returnFocusOrigin.current) {
+      const id = catalogReturnFocusId(filtered, returnFocusOrigin.current);
+      const target = cardButtons.current.get(id) || searchInput.current || collectionHeading.current;
+      target?.focus();
+      returnFocusOrigin.current = null;
+    }
+  }, [detailId, filtered]);
 
   useEffect(() => {
     filtered.forEach((c) => {
@@ -76,9 +83,8 @@ export default function CatalogView({ onNavigate, focus, onFocusConsumed }) {
       if (d?.backImgId) await deleteImage(d.backImgId).catch(() => {});
       setCatalog((p) => p.filter((c) => c.id !== deleteId));
       toast.info("Card deleted");
-    } else {
-      returnFocusId.current = detailId;
     }
+    returnFocusOrigin.current = { id: detailId, index: detailIndex.current };
     setDetailId(null);
   };
 
@@ -107,7 +113,7 @@ export default function CatalogView({ onNavigate, focus, onFocusConsumed }) {
   return (
     <div className="catalog-view fade">
       <div className="catalog-heading">
-        <h1 className="page-title">Collection</h1>
+        <h1 className="page-title" ref={collectionHeading} tabIndex={-1}>Collection</h1>
         {catalog.length > 0 && onNavigate && (
           <button className="btn btn-primary btn-sm" onClick={() => onNavigate("scan")}>
             <IconCamera size={16} aria-hidden="true" /> Scan card
@@ -211,7 +217,7 @@ export default function CatalogView({ onNavigate, focus, onFocusConsumed }) {
             </div>
           ) : (
             <ul className={`catalog-entries catalog-entries-${layout}`} aria-label="Collection cards">
-              {filtered.map((c) => {
+              {filtered.map((c, index) => {
                 const co = condOf(c.condition);
                 const value = cardEstimate(c);
                 const status = catalogStatus(c);
@@ -221,7 +227,7 @@ export default function CatalogView({ onNavigate, focus, onFocusConsumed }) {
                     <button className="catalog-entry" ref={(node) => {
                       if (node) cardButtons.current.set(c.id, node);
                       else cardButtons.current.delete(c.id);
-                    }} onClick={() => setDetailId(c.id)}>
+                    }} onClick={() => { detailIndex.current = index; setDetailId(c.id); }}>
                       <span className={`catalog-photo ${thumb ? "" : "catalog-photo-empty"}`} aria-hidden="true">
                         {thumb ? <img src={thumb} alt="" loading="lazy" decoding="async"
                           onError={() => setThumbs((p) => ({ ...p, [c.frontImgId]: null }))} />
