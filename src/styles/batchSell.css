@@ -1,0 +1,43 @@
+.batch-sell { max-width: 1080px; margin: auto; padding-bottom: 28px; }
+.batch-sell h1 { font-size: 1.8rem; margin: 0 0 8px; }
+.batch-sell h2 { font-size: 1.15rem; margin: 0 0 12px; }
+.batch-sell p { line-height: 1.5; }
+.batch-sell .card { margin-bottom: 14px; }
+.batch-sell .btn, .batch-sell .chip { min-height: 44px; }
+.batch-sell .inp { font-size: 1rem; min-height: 44px; margin-top: 5px; }
+.batch-sell label { font-size: .875rem; }
+.batch-heading, .batch-toolbar, .batch-row-heading { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.batch-heading { justify-content: space-between; margin: 22px 0 8px; }
+.batch-heading p, .batch-help, .batch-row-name span, .batch-row-total small { color: var(--tx2); font-size: .875rem; }
+.batch-help { margin: 10px 0; }
+.batch-status { font-size: .875rem; color: var(--acc2); margin: 8px 0 16px; }
+.batch-fields { border: 0; padding: 14px 0 0; min-width: 0; display: grid; gap: 16px; }
+.batch-form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.batch-check, .batch-select { display: flex; align-items: center; gap: 10px; }
+.batch-sell input[type=checkbox] { width: 20px; height: 20px; flex-shrink: 0; }
+.batch-upload { position: relative; overflow: hidden; cursor: pointer; }
+.batch-upload input { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
+.batch-picker { max-height: 290px; overflow: auto; margin: 12px 0; }
+.batch-picker-row { display: flex; gap: 12px; align-items: center; padding: 10px 4px; border-bottom: 1px solid var(--brd); }
+.batch-picker-row span, .batch-row-name, .batch-row-total { display: grid; gap: 5px; }
+.batch-picker-row small { color: var(--tx2); }
+.batch-filters { display: flex; gap: 8px; flex-wrap: wrap; margin: 18px 0; }
+.batch-row-name { flex: 1; min-width: 140px; overflow-wrap: anywhere; }
+.batch-row-total { text-align: right; }
+.batch-row-total strong { font-size: 1.2rem; color: var(--acc2); }
+.batch-photo { width: 48px; height: 68px; object-fit: contain; border-radius: 6px; background: var(--s2); }
+.batch-photo-missing { display: inline-flex; align-items: center; justify-content: center; text-align: center; font-size: .7rem; color: var(--tx2); }
+.batch-photos { display: flex; gap: 16px; }
+.batch-photos > div { display: grid; gap: 8px; max-width: 200px; flex: 1; }
+.batch-photos .batch-photo { width: 100%; height: 190px; }
+.batch-sell summary { cursor: pointer; padding: 10px 0; font-weight: 600; min-height: 44px; }
+.batch-sell textarea { resize: vertical; }
+.batch-warning { color: var(--orange); padding: 10px; border: 1px solid var(--brd); border-radius: 6px; }
+.batch-error { color: var(--red); overflow-wrap: anywhere; }
+.batch-row-saved { border-color: var(--grn-brd); }
+.batch-row-ready { border-color: var(--acc-brd); }
+.batch-save-bar { border-color: var(--acc-brd); padding: 18px; }
+.batch-empty { text-align: center; padding: 35px 20px; }
+.batch-sell :focus-visible { outline: 2px solid var(--acc2); outline-offset: 3px; }
+@media (max-width: 650px) { .batch-form-grid { grid-template-columns: 1fr 1fr; } .batch-row-total { width: 100%; text-align: left; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; } .batch-save-bar .btn-primary { width: 100%; } }
+@media (max-width: 400px) { .batch-form-grid { grid-template-columns: 1fr; } }

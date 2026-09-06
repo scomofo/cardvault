@@ -1,6 +1,4 @@
 import { useEffect, useState } from "react";
-import BatchCaptureMode from "./BatchCaptureMode";
-import BatchProcessView from "./BatchProcessView";
 import ScanCaptureStep from "./scan/ScanCaptureStep";
 import ScanDetailsStep from "./scan/ScanDetailsStep";
 import ScanIdentifyStep from "./scan/ScanIdentifyStep";
@@ -114,51 +112,15 @@ export default function ScanView({ onNavigate, pendingImage, onPendingImageConsu
     step,
     visualSearching,
     identificationResult,
-    batchMode,
-    batchQueue,
-    batchProcessing,
-    batchProcessedCount,
   } = state;
 
   const steps = ["Capture", "Identify", "Details", "List"];
 
-  if (batchMode === "capture") {
-    return (
-      <>
-        <h1 className="page-title">Scan Card</h1>
-        <BatchCaptureMode
-          queue={batchQueue}
-          onAddToQueue={actions.addToBatchQueue}
-          onDone={() => { actions.setBatchMode("process"); actions.processBatchQueue(); }}
-          onCancel={() => { actions.setBatchMode(null); }}
-        />
-      </>
-    );
-  }
-
-  if (batchMode === "process") {
-    return (
-      <>
-        <h1 className="page-title">Scan Card</h1>
-        <BatchProcessView
-          queue={batchQueue}
-          processing={batchProcessing}
-          processedCount={batchProcessedCount}
-          onSaveAll={actions.saveBatchCards}
-          onRetry={(id) => actions.processBatchQueue(id)}
-          onApprove={actions.approveBatchItem}
-          onRemove={actions.removeBatchItem}
-          onCancel={() => { actions.setBatchMode(null); }}
-        />
-      </>
-    );
-  }
-
   return (
     <>
       <h1 className="page-title">Scan Card</h1>
-      <button className="btn btn-outline btn-full mb-12" onClick={() => actions.setBatchMode("capture")}>
-        Batch Capture Mode
+      <button className="btn btn-outline btn-full mb-12" onClick={() => onNavigate?.("sell")}>
+        Sell a batch — photos to drafts
       </button>
       <ScanStepper step={step} steps={steps} onStepChange={setStep} />
 
