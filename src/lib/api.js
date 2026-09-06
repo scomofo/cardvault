@@ -93,6 +93,7 @@ export const listingsAPI = {
   readiness: (id) => request(`/listings/${id}/ebay-readiness`),
   checkEbay: (id) => request(`/listings/${encodeURIComponent(id)}/ebay-check`, { method: "POST", body: {}, timeoutMs: 90_000 }),
   recoverEbay: (id) => request(`/listings/${encodeURIComponent(id)}/ebay-recover`, { method: "POST", body: { confirmNotPublished: true } }),
+  createDraft: (data) => request("/listings/draft", { method: "POST", body: data }),
   list: (params) => request(`/listings${toQuery(params)}`),
   create: (data) => request("/listings", { method: "POST", body: data }),
   update: (id, data) =>

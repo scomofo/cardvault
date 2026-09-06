@@ -17,7 +17,6 @@ import { catalogCardToItemPatch, describeCatalogCard } from "../lib/identificati
 import { computeDHash } from "../lib/phash";
 import { loadData, saveData, saveImage } from "../lib/storage";
 import { condOf, fmtShort, uid } from "../lib/utils";
-import { useBatchWorkflow } from "./useBatchWorkflow";
 
 const MIN_CAPTURE_SHORT_EDGE = 600;
 const CV_DETECTION_THRESHOLD = 0.6;
@@ -66,7 +65,6 @@ function buildListingRecord({ card, entry, listing }) {
 export function useScanWorkflow() {
   const toast = useToast();
   const { catalog, setCatalog, setListings, useServer } = useData();
-  const batchWorkflow = useBatchWorkflow();
   const [step, setStep] = useState(0);
   const [frontImg, setFrontImg] = useState(null);
   const [backImg, setBackImg] = useState(null);
@@ -388,7 +386,6 @@ export function useScanWorkflow() {
 
   return {
     actions: {
-      ...batchWorkflow.actions,
       copyListing, doCvAnalyze, doRecognize, doSearch, doVisualSearch, prepareListing, reset,
       saveAndList, saveCard, captureFrontImg, captureBackImg, applyIdentificationCorrection,
       dismissDuplicateWarning, dismissIdentificationResult, setBackImg: clearBackImg,
@@ -408,7 +405,6 @@ export function useScanWorkflow() {
       },
     },
     state: {
-      ...batchWorkflow.state,
       backImg, card, cvAnalyzing, cvOnline, cvResult, duplicateWarning, frontImg,
       gradingData, listing, priceEst, priceHistory, publishing, publishTarget,
       recognizing, results, saving, searchQ, searching, showCvOverlay,

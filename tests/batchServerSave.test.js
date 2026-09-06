@@ -2,14 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-test("server-backed batch saves apply created cards to the current catalog", async () => {
-  const batchView = await readFile(new URL("../src/components/BatchView.jsx", import.meta.url), "utf8");
-
-  assert.match(batchView, /await itemsAPI\.create\(entry\)/);
-  assert.match(batchView, /const id = item\.id/);
-  assert.match(batchView, /setCatalog\(\(previous\) => \[entry, \.\.\.previous\.filter/);
-  assert.match(batchView, /await persistIntake\(remaining\)/);
-  assert.doesNotMatch(batchView, /setQueue\(\[\]\)/);
+test("legacy batch routes use the shared draft queue and never bulk-publish", async () => {
+  const view = await readFile(new URL("../src/components/BatchView.jsx", import.meta.url), "utf8");
+  const hook = await readFile(new URL("../src/hooks/useBatchDraft.js", import.meta.url), "utf8");
+  assert.match(view, /BatchSellView/);
+  assert.match(hook, /await listingsAPI\.createDraft\(payload\)/);
+  assert.doesNotMatch(hook, /marketplacesAPI|\.publish\(/);
 });
 
 test("dealer mode listing generation uses the selected export platform", async () => {
