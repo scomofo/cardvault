@@ -17,7 +17,7 @@ jobs:
           node-version: 22
       - run: npm ci
       - name: Package source and dependencies for isolated review
-        run: tar --exclude=.git --exclude=.env --exclude=dist --exclude=dist-electron -czf /tmp/cardvault-review.tgz .
+        run: tar --exclude=./.git --exclude=./.env --exclude=./dist --exclude=./dist-electron -czf /tmp/cardvault-review.tgz .
       - uses: actions/upload-artifact@v4
         with:
           name: cardvault-review
