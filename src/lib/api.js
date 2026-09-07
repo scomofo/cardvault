@@ -277,3 +277,15 @@ export async function checkBackend() {
     return false;
   }
 }
+
+// Bounded individual operations; all batch progress is persisted server-side.
+export const batchPublishAPI = {
+  policies: () => request("/publish-batches/policies", { timeoutMs: 90000 }),
+  recent: () => request("/publish-batches"),
+  get: (id) => request(`/publish-batches/${id}`),
+  create: (data) => request("/publish-batches", { method: "POST", body: data }),
+  check: (id, row) => request(`/publish-batches/${id}/check/${row}`, { method: "POST", body: {}, timeoutMs: 180000 }),
+  approve: (id, data) => request(`/publish-batches/${id}/approve`, { method: "POST", body: data, timeoutMs: 90000 }),
+  next: (id) => request(`/publish-batches/${id}/process-next`, { method: "POST", body: {}, timeoutMs: 90000 }),
+  cancel: (id) => request(`/publish-batches/${id}/cancel`, { method: "POST", body: {} }),
+};

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useBatchDraft } from "../hooks/useBatchDraft";
 import { CONDITIONS } from "../lib/constants";
 import { conditionLabel } from "../lib/batchDraft";
+import BatchPublishPanel from "./batch/BatchPublishPanel";
 import BatchCaptureMode from "./BatchCaptureMode";
 import BatchDraftRow from "./batch/BatchDraftRow";
 import BatchInventoryPicker from "./batch/BatchInventoryPicker";
@@ -23,7 +24,7 @@ export default function BatchSellView({ onNavigate }) {
   const importFiles = (files) => { if (files.length) actions.importPhotos([...files], paired); };
 
   return <section className="batch-sell fade" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); if (!disabled) importFiles(event.dataTransfer.files); }}>
-    <header className="batch-heading"><div><h1>Sell a batch</h1><p>Photos or inventory → review → saved drafts. Nothing goes live here.</p></div><span className="badge badge-dim">{actions.data.useServer ? "Server connected" : "Offline / local drafts"}</span></header>
+    <header className="batch-heading"><div><h1>Sell a batch</h1><p>Photos or inventory → reviewed drafts → check and explicitly approve publication.</p></div><span className="badge badge-dim">{actions.data.useServer ? "Server connected" : "Offline / local drafts"}</span></header>
     <p className="batch-status" role="status">{actions.busy || (actions.saving ? "Saving your changes…" : "Batch saved on this browser and device")}</p>
     {actions.error && <div className="card batch-error" role="alert">{actions.error}<button className="btn btn-outline" onClick={actions.reload}>Reload saved batch</button></div>}
     {!actions.data.useServer && <p className="batch-warning">Drafts stay on this device until server sync. Reconnect and check the latest inventory before live publication.</p>}
@@ -48,6 +49,7 @@ export default function BatchSellView({ onNavigate }) {
     </div>}
     {!entries.length && <div className="card batch-empty"><h2>Your next sale starts here</h2><p>Photograph a stack or choose cards you already own. Your photos, edits and unfinished reviews stay together.</p></div>}
     {entries.filter((entry) => filter === "all" || actions.readiness(entry).bucket === filter).map((entry) => <BatchDraftRow key={entry.id} entry={entry} actions={actions} disabled={disabled} onNavigate={onNavigate} />)}
+    <BatchPublishPanel listings={actions.data.listings} useServer={actions.data.useServer} onNavigate={onNavigate} />
     {entries.length > 0 && <footer className="card batch-save-bar"><div><strong>{readyCount} selected ready for drafts</strong><p className="batch-help">{counts.review} need review · {counts.lot} held for lots / low return · {counts.saved} saved</p><p className="batch-help">Estimated proceeds use {(actions.feeRate * 100).toFixed(2)}% fees on price + buyer shipping, less postage and packaging. Not profit; acquisition cost and other charges are excluded.</p></div><div className="batch-toolbar"><button className="btn btn-primary" disabled={disabled || actions.saving || !readyCount} onClick={actions.saveSelected}>Save {readyCount} reviewed drafts</button>{counts.saved > 0 && <button className="btn btn-ghost" disabled={disabled} onClick={actions.clearFinished}>Clear finished from queue</button>}</div></footer>}
   </section>;
 }

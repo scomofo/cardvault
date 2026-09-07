@@ -166,3 +166,12 @@ label purchase (or using your own postage), use **Confirm dispatched** only afte
 handing the package to the carrier. Check eBay/carrier history before retrying an
 uncertain publish or label purchase. See [the safety notes](docs/Selling-Workflow-Safety.md)
 for state contracts, test coverage, and remaining work.
+
+### Reviewed batch publication
+
+Open **Sell → Check and publish saved drafts** to load eBay Canada business
+policies, check up to 25 raw sports-card fixed-price drafts, review the exact
+definitions and explicitly approve publication. Checking uploads photos and
+validates but does not list anything. Results and unfinished approvals persist on
+the server; uncertain outcomes never automatically retry. Begin with sandbox and
+see `docs/Batch-Publish.md` for shipping constraints, recovery and test limitations.
