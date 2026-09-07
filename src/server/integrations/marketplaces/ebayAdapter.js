@@ -1,3 +1,4 @@
+import { REVIEWED_DEFINITION } from "../../services/batchPublish/reviewedDefinition.js";
 import { MarketplaceAdapter } from "./marketplaceAdapter.js";
 import { get } from "../../database.js";
 import { readImageFile } from "../../services/imageStore.js";
@@ -47,7 +48,13 @@ export class EbayAdapter extends MarketplaceAdapter {
    * @param {object} listing
    * @returns {Promise<object>}
    */
-  async publish(listing) {
+  async publish(listing, options = {}) {
+    const reviewed = options[REVIEWED_DEFINITION];
+    if (reviewed) {
+      if (!this.isConnected()) { const error = new Error("eBay disconnected; approved listing was not sent"); error.notSent = true; throw error; }
+      const externalListingId = await addFixedPriceItem(reviewed.itemXml, { beforeSend: reviewed.beforeSend, compatibilityLevel: "1475" });
+      return { marketplace: this.marketplace, externalListingId, status: "active", payload: { reviewed: true }, syncedAt: new Date().toISOString() };
+    }
     if (!this.isConnected()) return super.publish(listing);
 
     const item = (listing.card_id

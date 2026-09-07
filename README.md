@@ -129,10 +129,12 @@ mkcert -key-file certs/cardvault-key.pem -cert-file certs/cardvault-cert.pem loc
 
 ### All Features
 
+- **Sell a batch** — One resumable photo-to-draft queue with existing-inventory selection, editable previews, saved selling presets and per-card results. Nothing is published by this screen. See [Batch Sell v1](docs/Batch-Sell-V1.md).
+
 - **Scan** — 4-step workflow: photograph, AI identify, edit details, create listing
 - **Collection** — Search across card details, filter by binder and status, sort by value/date/name, and browse in list or photo-grid view
 - **Sales Flow** — Create listings, track auctions with countdown timers, log purchases
-- **Batch** — Drag-and-drop multi-photo scanning with bulk ID and pricing
+- **Batch** — Camera and drag-and-drop photo intake share the selling queue, preserving unresolved work and reviewed drafts
 - **Sets** — Completion tracking with progress bars per set
 - **Grading** — PSA/BGS/SGC/CGC submission tracker with status pipeline
 - **Watchlist** — Price target alerts with one-click refresh
@@ -164,3 +166,12 @@ label purchase (or using your own postage), use **Confirm dispatched** only afte
 handing the package to the carrier. Check eBay/carrier history before retrying an
 uncertain publish or label purchase. See [the safety notes](docs/Selling-Workflow-Safety.md)
 for state contracts, test coverage, and remaining work.
+
+### Reviewed batch publication
+
+Open **Sell → Check and publish saved drafts** to load eBay Canada business
+policies, check up to 25 raw sports-card fixed-price drafts, review the exact
+definitions and explicitly approve publication. Checking uploads photos and
+validates but does not list anything. Results and unfinished approvals persist on
+the server; uncertain outcomes never automatically retry. Begin with sandbox and
+see `docs/Batch-Publish.md` for shipping constraints, recovery and test limitations.

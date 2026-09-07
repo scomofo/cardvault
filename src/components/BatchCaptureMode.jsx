@@ -1,3 +1,4 @@
+import BatchPhoto from "./batch/BatchPhoto";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { IconCamera, IconUpload, IconCheck, Spinner } from "./Icons";
 
@@ -118,7 +119,7 @@ export default function BatchCaptureMode({ queue, onAddToQueue, onDone, onCancel
         </div>}
       </div>
       <div className="flex gap-4 mb-12" style={{ overflowX: "auto" }}>
-        {queue.map((item, index) => <img key={item.id} src={item.front} alt={`Saved card ${index + 1}`} style={{ height: 48, width: 34, borderRadius: 4, objectFit: "cover", flexShrink: 0 }} />)}
+        {queue.map((item, index) => <BatchPhoto key={item.id} inlineImage={item.front} imageId={item.frontImgId} alt={`Saved card ${index + 1}`} />)}
       </div>
       <div className="flex gap-8">
         <button className="btn btn-primary btn-lg flex-1" disabled={saving || (!queue.length && !front)} onClick={() => leave(true)}><IconCheck size={14} /> Review {queue.length + (front ? 1 : 0)} cards</button>

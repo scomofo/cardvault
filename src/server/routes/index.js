@@ -1,3 +1,5 @@
+import { registerBatchPublishRoutes } from "./batchPublish.routes.js";
+import { registerBatchDraftRoutes } from "./batchDraft.routes.js";
 import { registerActionQueueRoutes } from "./actionQueue.routes.js";
 import { registerAlertsRoutes } from "./alerts.routes.js";
 import { registerAutomationRoutes } from "./automation.routes.js";
@@ -30,6 +32,8 @@ export function registerRoutes(app) {
   registerOrderRoutes(app);
   registerPricingRecommendationsRoutes(app);
   registerListingRoutes(app);
+  registerBatchDraftRoutes(app);
+  registerBatchPublishRoutes(app);
   registerMarketplaceRoutes(app);
   registerFeeModelsRoutes(app);
   registerIdentificationRoutes(app);

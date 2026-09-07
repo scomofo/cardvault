@@ -369,10 +369,11 @@ export async function publishListingToMarketplace(listingId, marketplace, option
     if (liveEbay && !result?.externalListingId) throw new Error("eBay returned no confirmed listing ID");
   } catch (error) {
     if (liveEbay) {
-      const message = `${error.message}. Check eBay before retrying; the publish outcome may be unknown.`;
-      const channelId = upsertChannel({ listingId, marketplace, status: "publish_unknown", publishError: message, payload: {} });
-      addChannelEvent(channelId, "publish", "publish_unknown", { error: message });
-      run(`UPDATE listings SET publish_status = 'publish_unknown', publish_error = ? WHERE id = ?`, [message, listingId]);
+      const status = error.notSent ? "draft" : error.code === "EBAY_REJECTED" ? "rejected" : "publish_unknown";
+      const message = status === "publish_unknown" ? `${error.message}. Check eBay before retrying; the publish outcome may be unknown.` : error.message;
+      const channelId = upsertChannel({ listingId, marketplace, status, publishError: message, payload: {} });
+      addChannelEvent(channelId, "publish", status, { error: message });
+      run(`UPDATE listings SET publish_status = ?, publish_error = ? WHERE id = ?`, [status, message, listingId]);
     }
     throw error;
   }
