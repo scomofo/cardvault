@@ -75,6 +75,7 @@ export const salesAPI = {
 };
 
 export const ordersAPI = {
+  dispatch: (id, data) => request(`/orders/${id}/dispatch`, { method: "POST", body: data }),
   list: () => request("/orders"),
   create: (data) => request("/orders", { method: "POST", body: data }),
   update: (id, data) => request(`/orders/${id}`, { method: "PUT", body: data }),

@@ -151,7 +151,7 @@ export function registerMarketplaceRoutes(app) {
       if (!listingId || !marketplace) {
         return res.status(400).json({ error: "listingId and marketplace required" });
       }
-      res.json(await publishListingToMarketplace(listingId, marketplace, { connectionId }));
+      res.json(await publishListingToMarketplace(listingId, marketplace, { connectionId, confirmNotPublished: req.body.confirmNotPublished === true }));
     } catch (error) {
       if (error.code === "HANDOFF_LOCKED") {
         return res.status(409).json({ error: error.message });

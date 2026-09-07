@@ -60,7 +60,7 @@ function normalizeLabelPurchase(value) {
   };
 }
 
-function normalizeProviderRate(connection, metadata, rate, purchasedLabel) {
+function normalizeProviderRate(connection, metadata, rate, purchasedLabel, context = {}) {
   const cost = Number(firstDefined(rate.cost, rate.rate, rate.amount));
   if (!Number.isFinite(cost) || cost < 0) return null;
   const service = firstDefined(
@@ -76,7 +76,10 @@ function normalizeProviderRate(connection, metadata, rate, purchasedLabel) {
     carrier: firstDefined(rate.carrier, metadata.carrier, connection.provider),
     service, serviceCode, cost, tracking: rate.tracking !== false,
     trackingNumber: purchased ? purchase.trackingNumber : null,
-    labelUrl: purchased ? purchase.labelUrl : null,
+    labelUrl: purchased ? purchase.labelUrl
+      .replaceAll("{provider}", String(connection.provider).toLowerCase().replace(/\s+/g, "-"))
+      .replaceAll("{trackingNumber}", purchase.trackingNumber || "")
+      .replaceAll("{shipmentId}", context.shipmentId || "") : null,
     labelStatus: purchase?.labelStatus || "pending",
     shipmentStatus: purchase?.error ? "exception" : purchased ? "label_purchased" : "pending",
     purchaseError: purchase?.error || null,
@@ -116,8 +119,11 @@ export async function testConfiguredProviderService(connection, context) {
   } catch (error) {
     purchasedLabel = uncertainPurchase(error);
   }
-  const service = normalizeProviderRate(connection, candidate.metadata, candidate.rate, purchasedLabel) || candidate.service;
-  const failed = service.labelStatus !== "purchased" || Boolean(service.purchaseError);
+  if (purchasedLabel == null) return { service: candidate.service, endpointValidation: { attempted: false, ok: false } };
+  const validated = ["validated", "validation_passed", "ready"].includes(String(purchasedLabel?.labelStatus || purchasedLabel?.status || "").toLowerCase());
+  const service = validated ? { ...candidate.service, labelStatus: "validated" }
+    : normalizeProviderRate(connection, candidate.metadata, candidate.rate, purchasedLabel, context) || candidate.service;
+  const failed = !validated && (service.labelStatus !== "purchased" || Boolean(service.purchaseError));
   return {
     service,
     endpointValidation: {
@@ -144,5 +150,5 @@ export async function purchaseConfiguredProviderService(connection, context) {
   } catch (error) {
     purchasedLabel = uncertainPurchase(error);
   }
-  return normalizeProviderRate(connection, candidate.metadata, candidate.rate, purchasedLabel) || candidate.service;
+  return normalizeProviderRate(connection, candidate.metadata, candidate.rate, purchasedLabel, context) || candidate.service;
 }

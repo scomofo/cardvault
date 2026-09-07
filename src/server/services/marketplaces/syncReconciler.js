@@ -188,7 +188,7 @@ function compareStatus(channel, remoteState) {
   if (local === "revised" && remote === "active") return null;
   return {
     type: "status_mismatch",
-    severity: "warning",
+    severity: ["sold", "ended"].includes(local) && ["active", "revised", "draft"].includes(remote) ? "error" : "warning",
     field: "status",
     localValue: local,
     remoteValue: remote,

@@ -90,7 +90,11 @@ test("automation routes handle identify-price, listing generation, aging reprici
   });
   assert.equal(shipmentResponse.status, 200);
   const shipmentPayload = await shipmentResponse.json();
-  assert.equal(shipmentPayload.status, "shipped");
+  assert.equal(shipmentPayload.status, "pending");
+  assert.equal(shipmentPayload.tracking_number, null);
+  assert.equal(shipmentPayload.label_url, null);
+  assert.equal(shipmentPayload.purchased_at, null);
+  assert.equal(shipmentPayload.shipped_at, null);
   assert.match(shipmentPayload.service_level, /Canada Post/);
 
   const queueResponse = await fetch(`${baseUrl}/api/automation/action-queue`);
@@ -184,7 +188,7 @@ test("shipping automation records tracking against the order marketplace channel
     const trackingEvents = db.prepare(
       `SELECT listing_channel_id, event_type, status, payload
        FROM listing_channel_events
-       WHERE event_type = 'tracking_sync'
+       WHERE event_type = 'shipping_prepared'
        ORDER BY created_at DESC`,
     ).all();
 
@@ -292,16 +296,17 @@ test("shipping automation uses configured provider rate and label metadata", asy
   const shipmentPayload = await shipmentResponse.json();
 
   assert.equal(shipmentPayload.service_level, "Canada Post Expedited Parcel");
-  assert.equal(shipmentPayload.shipping_cost, 9.75);
-  assert.match(shipmentPayload.tracking_number, /^CP/);
-  assert.match(shipmentPayload.label_url, /^labels\/canada-post\//);
+  assert.equal(shipmentPayload.shipping_cost, 0, "a rate quote is not a paid expense");
+  assert.equal(shipmentPayload.tracking_number, null);
+  assert.equal(shipmentPayload.label_url, null);
+  assert.equal(shipmentPayload.label_status, "pending");
 
   const readonlyDb = new Database(dbPath, { readonly: true });
   try {
     const trackingEvent = readonlyDb.prepare(
       `SELECT payload
        FROM listing_channel_events
-       WHERE event_type = 'tracking_sync'
+       WHERE event_type = 'shipping_prepared'
        ORDER BY created_at DESC
        LIMIT 1`,
     ).get();
@@ -394,7 +399,7 @@ test("shipping automation is idempotent for the same order", async (t) => {
   }
 });
 
-test("orders API includes shipment tracking after automated shipping", async (t) => {
+test("orders API includes pending preparation without fabricated tracking", async (t) => {
   const { baseUrl } = await startTestServer(t, { dirPrefix: "cardvault-automation-orders-" });
 
   const itemResponse = await fetch(`${baseUrl}/api/items`, {
@@ -459,7 +464,9 @@ test("orders API includes shipment tracking after automated shipping", async (t)
   const order = ordersPayload.find((entry) => entry.id === "orders-api-order");
 
   assert.ok(order);
-  assert.equal(order.fulfillmentStatus, "shipped");
+  assert.equal(order.fulfillmentStatus, "pending");
+  assert.equal(order.labelStatus, "pending");
+  assert.equal(order.trackingNumber, null);
   assert.equal(order.trackingNumber, shipmentPayload.tracking_number);
   assert.equal(order.shipmentStatus, shipmentPayload.status);
   assert.equal(order.serviceLevel, shipmentPayload.service_level);

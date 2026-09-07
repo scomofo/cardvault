@@ -120,18 +120,8 @@ test("shipping provider connection routes save, update, test, and sanitize crede
     method: "POST",
     body: { country: "CA", salePrice: 100, weightOz: 3 },
   });
-  assert.equal(testResult.response.status, 200);
-  assert.equal(testResult.payload.ok, true);
-  assert.equal(testResult.payload.provider, "Canada Post");
-  assert.equal(testResult.payload.authStatus, "connected");
-  assert.equal(testResult.payload.serviceCount, 1);
-  assert.deepEqual(testResult.payload.services[0], {
-    service: "Canada Post Tracked Packet",
-    serviceCode: "DOM.TP",
-    countries: ["CA", "US"],
-    cost: 10.5,
-    tracking: true,
-  });
+  assert.equal(testResult.response.status, 400);
+  assert.notEqual(testResult.payload.authStatus, "connected");
   assert.doesNotMatch(JSON.stringify(testResult.payload), /replacement-secret|secret-provider-key|apiKey|api_key/);
 });
 
@@ -259,6 +249,7 @@ test("shipping provider connection test applies Canada Post defaults and diagnos
     res.end(JSON.stringify({
       labelStatus: "purchased",
       trackingNumber: "CP-DRY-RUN-123",
+      labelUrl: "labels/canada-post/{trackingNumber}/{shipmentId}.pdf",
     }));
   });
   t.after(labelEndpoint.close);

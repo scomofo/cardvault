@@ -116,6 +116,8 @@ test("applyChannelToListing maps snake_case channel rows onto the local listing"
       platform: "ebay",
       startPrice: 10,
       publishStatus: "active",
+      publishError: null,
+      status: "active",
       externalListingId: "123",
       lastSyncAt: "2026-07-08 12:00:00",
     },

@@ -146,36 +146,34 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
     setSalePrice(""); setSaleFees(""); setSaleShipping("");
   };
 
+  const quickListAttempt = useRef(null);
   const quickList = async (id) => {
-    if (!quickListPrice) { toast.error("Enter a price"); return; }
-    const c = catalog.find((x) => x.id === id);
-    if (!c) return;
+    if (quickListAttempt.current?.busy) return;
+    if (!Number.isFinite(Number(quickListPrice)) || Number(quickListPrice) <= 0) { toast.error("Enter a positive price"); return; }
+    const card = catalog.find((entry) => entry.id === id);
+    if (!card) return;
+    if (!quickListAttempt.current) quickListAttempt.current = { id: uid(), busy: false };
+    quickListAttempt.current.busy = true;
     const listing = {
-      id: uid(), cardId: id, cardName: c.name, set: c.set, number: c.number,
-      platform: quickListPlatform, format: quickListFormat,
-      startPrice: parseFloat(quickListPrice),
-      buyNowPrice: null, auctionEndDate: null,
-      shipping: 4.99, currentBid: null,
-      status: "active", notes: "", createdAt: new Date().toISOString(),
+      id: quickListAttempt.current.id, cardId: id, cardName: card.name, set: card.set, number: card.number,
+      platform: quickListPlatform, format: quickListFormat, startPrice: Number(quickListPrice),
+      buyNowPrice: null, auctionEndDate: null, shipping: 4.99, currentBid: null,
+      status: "draft", publishStatus: "draft", notes: "", createdAt: new Date().toISOString(),
     };
-    const updatedCard = { ...c, status: "listed", listedOn: [...(c.listedOn || []), quickListPlatform] };
-
-    if (useServer) {
-      // Persist explicitly, same ordering as SalesFlow.createListing —
-      // listings POST 404s on a missing card_id, so the item must land
-      // first rather than racing the debounced sync engine.
-      await itemsAPI
-        .create(updatedCard)
-        .then(() => listingsAPI.create(listing))
-        .catch(() => {});
+    try {
+      if (useServer) {
+        await itemsAPI.create(card);
+        await listingsAPI.create(listing);
+      }
+      setListings((previous) => [listing, ...previous.filter((entry) => entry.id !== listing.id)]);
+      setShowQuickList(false);
+      setQuickListPrice("");
+      quickListAttempt.current = null;
+      toast.info(`Draft saved for ${card.name}. Nothing has been published; open Sales to review and publish.`);
+    } catch (error) {
+      quickListAttempt.current.busy = false;
+      toast.error(`Draft save failed: ${error.message}. Your price is retained for retry.`);
     }
-
-    setListings((p) => [listing, ...p]);
-    setCatalog((p) => p.map((x) => x.id === id ? updatedCard : x));
-    setDecisions((current) => current.filter((decision) => decision.decisionType !== "listing_readiness"));
-    setShowQuickList(false);
-    setQuickListPrice("");
-    toast.success(`Listed ${c.name} on ${quickListPlatform} for ${fmtShort(quickListPrice)}`);
   };
 
   const doDelete = async () => {
@@ -316,7 +314,7 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
             <div className="lbl" style={{ margin: 0 }}>Listed On</div>
             {detail.status !== "sold" && (
               <button className="btn btn-primary btn-sm" onClick={() => { setShowQuickList(!showQuickList); setQuickListPrice(detail.priceEstimate?.mid ? String(detail.priceEstimate.mid) : ""); }}>
-                <IconPlus size={12} /> Quick List
+                <IconPlus size={12} /> Create draft
               </button>
             )}
           </div>
@@ -330,7 +328,7 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
             ))}
           </div>
 
-          {/* Quick List form */}
+          {/* Create draft form */}
           {showQuickList && detail.status !== "sold" && (
             <div className="fade mt-10" style={{ padding: 12, background: "var(--acc-bg)", borderRadius: "var(--radius)", border: "1px solid var(--acc-brd)" }}>
               <div className="form-grid mt-4">

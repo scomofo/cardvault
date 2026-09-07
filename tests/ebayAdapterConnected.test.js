@@ -62,26 +62,21 @@ test("eBay adapter uses the live APIs when a connection exists", async (t) => {
       assert.equal(call.options.headers["X-EBAY-API-CALL-NAME"], "AddItem");
     });
 
-    await t.test("publish uses the Inventory API for fixed-price listings", async () => {
-      handlers.inventory = async () => new Response("{}", { status: 200 });
-      handlers.offer = async () => new Response(JSON.stringify({ offerId: "OF1" }), { status: 200 });
-      handlers.publish = async () => new Response(JSON.stringify({ listingId: "L100" }), { status: 200 });
-
+    await t.test("fixed-price publish uses exactly one Trading call", async () => {
+      handlers.trading = tradingSuccess("100");
+      const before = fetchCalls.length;
       const result = await adapter.publish({ id: "fixed-1", listing_title: "Fixed Card", start_price: 10 }, {});
-      assert.equal(result.externalListingId, "L100");
-      assert.ok(fetchCalls.some((call) => call.url.includes("/inventory_item/CV-fixed-1")));
-      assert.ok(fetchCalls.some((call) => call.url.includes("/offer/OF1/publish")));
+      assert.equal(result.externalListingId, "100");
+      assert.equal(fetchCalls.length, before + 1);
+      assert.equal(fetchCalls.at(-1).options.headers["X-EBAY-API-CALL-NAME"], "AddFixedPriceItem");
+      assert.ok(fetchCalls.at(-1).options.signal);
     });
 
-    await t.test("publish falls back to the Trading API when Inventory calls fail", async () => {
-      handlers.inventory = async () =>
-        new Response(JSON.stringify({ errors: [{ message: "inventory unavailable" }] }), { status: 400 });
-      handlers.trading = tradingSuccess("222");
-
-      const result = await adapter.publish({ id: "fixed-2", listing_title: "Fallback Card" }, {});
-      assert.equal(result.externalListingId, "222");
-      const call = fetchCalls.at(-1);
-      assert.equal(call.options.headers["X-EBAY-API-CALL-NAME"], "AddFixedPriceItem");
+    await t.test("an uncertain publish never falls back to another create call", async () => {
+      handlers.trading = async () => { throw new Error("connection lost after submission"); };
+      const before = fetchCalls.length;
+      await assert.rejects(adapter.publish({ id: "fixed-2", listing_title: "Retry Card" }, {}), /connection lost/);
+      assert.equal(fetchCalls.length, before + 1);
     });
 
     await t.test("revise and end target the stored external listing id", async () => {
@@ -130,10 +125,18 @@ test("eBay adapter uses the live APIs when a connection exists", async (t) => {
         return new Response(JSON.stringify({ orders: [] }), { status: 200 });
       };
 
-      const listing = { id: "l1", platform: "ebay", external_listing_id: "EXT1", created_at: "2026-01-01T00:00:00.000Z" };
+      const listing = { id: "l1", platform: "ebay", channel_status: "active", external_listing_id: "EXT1", created_at: "2026-01-01T00:00:00.000Z" };
       const result = await adapter.sync(listing);
       assert.equal(result.status, "active");
       assert.deepEqual(pages, [0, 200], "a full page triggers a second request");
+    });
+
+    await t.test("missing orders preserve terminal and draft channel states", async () => {
+      handlers.orders = async () => new Response(JSON.stringify({ orders: [] }), { status: 200 });
+      for (const status of ["ended", "sold", "draft", "publish_unknown"]) {
+        const result = await adapter.sync({ id: "keep-state", external_listing_id: "999", channel_status: status });
+        assert.equal(result.status, status);
+      }
     });
 
     await t.test("sync marks listings sold when a matching order line item exists", async () => {
@@ -155,7 +158,7 @@ test("eBay adapter uses the live APIs when a connection exists", async (t) => {
         );
       };
 
-      const listing = { id: "l1", platform: "ebay", external_listing_id: "EXT1", created_at: "2026-01-01T00:00:00.000Z" };
+      const listing = { id: "l1", platform: "ebay", channel_status: "active", external_listing_id: "EXT1", created_at: "2026-01-01T00:00:00.000Z" };
       const result = await adapter.sync(listing);
       assert.equal(result.status, "sold");
       assert.equal(result.payload.externalOrderId, "ORDER-9");

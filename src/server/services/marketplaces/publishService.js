@@ -1,4 +1,4 @@
-import { all, get, run } from "../../database.js";
+import { all, get, run, runInImmediateTransaction } from "../../database.js";
 import { uid } from "../../routes/shared.js";
 import { getMarketplaceAdapter } from "../../integrations/marketplaces/marketplaceRegistry.js";
 import { refreshListingAggregateState } from "./listingAggregateState.js";
@@ -337,7 +337,47 @@ export async function publishListingToMarketplace(listingId, marketplace, option
   assertHandoffNotLocked(marketplace, existingChannel, "publish");
 
   const adapter = getMarketplaceAdapter(marketplace);
-  const result = await adapter.publish(listing, options);
+  const existingRealEbayId = marketplace === "ebay" && existingChannel?.external_listing_id
+    && existingChannel.external_listing_id !== `${marketplace}-${listingId.slice(0, 12)}`;
+  if (existingRealEbayId && ["active", "revised", "sold", "ended"].includes(existingChannel.status)) return existingChannel;
+  const liveEbay = marketplace === "ebay" && adapter.isConnected();
+  if (marketplace === "ebay" && !liveEbay && ["publishing", "publish_unknown"].includes(existingChannel?.status)) {
+    throw new Error("Reconnect eBay and review the previous publish outcome before retrying. An unknown result must not be replaced by a draft.");
+  }
+  if (liveEbay) {
+    const claim = runInImmediateTransaction(() => {
+      const current = get(`SELECT * FROM listing_channels WHERE listing_id = ? AND marketplace = ?`, [listingId, marketplace]);
+      const realId = current?.external_listing_id && current.external_listing_id !== `${marketplace}-${listingId.slice(0, 12)}`;
+      if (realId && ["active", "revised", "sold", "ended"].includes(current.status)) return current;
+      if (["sold", "ended"].includes(listing.status)) throw new Error("Cannot publish a sold or ended listing; review its existing marketplace listing");
+      const startedAt = current?.updated_at ? Date.parse(current.updated_at.replace(" ", "T") + (current.updated_at.endsWith("Z") ? "" : "Z")) : NaN;
+      if (current?.status === "publishing" && (!Number.isFinite(startedAt) || Date.now() - startedAt < 120_000)) {
+        throw new Error("A publish attempt is still in progress. Review its result before retrying.");
+      }
+      if (current && ["publishing", "publish_unknown"].includes(current.status) && options.confirmNotPublished !== true) {
+        throw new Error("Publish outcome needs review. Check eBay Seller Hub before confirming a retry; do not create a second listing.");
+      }
+      upsertChannel({ listingId, marketplace, status: "publishing", payload: {}, connectionId: options.connectionId });
+      run(`UPDATE listings SET publish_status = 'publishing', publish_error = NULL WHERE id = ?`, [listingId]);
+      return null;
+    });
+    if (claim) return claim;
+  }
+  let result;
+  try {
+    result = await adapter.publish(listing, options);
+    if (liveEbay && !result?.externalListingId) throw new Error("eBay returned no confirmed listing ID");
+  } catch (error) {
+    if (liveEbay) {
+      const message = `${error.message}. Check eBay before retrying; the publish outcome may be unknown.`;
+      const channelId = upsertChannel({ listingId, marketplace, status: "publish_unknown", publishError: message, payload: {} });
+      addChannelEvent(channelId, "publish", "publish_unknown", { error: message });
+      run(`UPDATE listings SET publish_status = 'publish_unknown', publish_error = ? WHERE id = ?`, [message, listingId]);
+    }
+    throw error;
+  }
+  // A disconnected adapter may only prepare a draft, never claim it is live.
+  if (marketplace === "ebay" && !liveEbay) result = { ...result, status: "draft" };
   const channelId = upsertChannel({
     listingId,
     marketplace,

@@ -17,7 +17,7 @@ import {
   validateCanadaPostShipmentReadiness,
 } from "../src/server/integrations/shipping/canadaPostNativeAdapter.js";
 
-test("configured shipping provider adapter normalizes purchased label metadata", () => {
+test("configured rates ignore static example label purchase metadata", () => {
   const service = selectConfiguredProviderService(
     {
       provider: "Canada Post",
@@ -50,10 +50,10 @@ test("configured shipping provider adapter normalizes purchased label metadata",
   assert.equal(service.serviceCode, "DOM.EP");
   assert.equal(service.cost, 9.75);
   assert.equal(service.tracking, true);
-  assert.equal(service.trackingNumber, "CP-PURCHASED-123");
-  assert.equal(service.labelStatus, "purchased");
-  assert.equal(service.shipmentStatus, "shipped");
-  assert.equal(service.labelUrl, "labels/canada-post/CP-PURCHASED-123/shipment-123.pdf");
+  assert.equal(service.trackingNumber, null);
+  assert.equal(service.labelStatus, "pending");
+  assert.equal(service.shipmentStatus, "pending");
+  assert.equal(service.labelUrl, null);
   assert.equal(service.source, "provider_connection");
   assert.equal(Object.hasOwn(service, "api_key"), false);
 });

@@ -124,7 +124,8 @@ export function buildManualSaleFulfillment({
     fees,
     shippingCharge: shipping,
     paymentStatus: "paid",
-    fulfillmentStatus: tracking ? "shipped" : "pending",
+    // Entering a tracking number is not physical dispatch confirmation.
+    fulfillmentStatus: "pending",
     soldAt,
     ...(tracking ? { trackingNumber: tracking } : {}),
   };

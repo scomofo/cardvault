@@ -6,7 +6,7 @@ import {
 } from "./canadaPostNativeAdapter.js";
 import { assertPublicOutboundUrl, fetchPublic } from "../../outboundUrlGuard.js";
 
-const DEFAULT_LABEL_PURCHASE_TIMEOUT_MS = 10000;
+import { labelPurchaseTimeoutMs } from "./purchaseTiming.js";
 const PROVIDER_ERROR_TEXT_LIMIT = 200;
 const CANADA_POST_CLIENT_KEY = "canada_post";
 const CANADA_POST_LABEL_URL_TEMPLATE = "labels/canada-post/{trackingNumber}/{shipmentId}.pdf";
@@ -110,18 +110,6 @@ async function readProviderPayload(response, { parseCanadaPostXml = false } = {}
   }
 }
 
-function labelPurchaseTimeoutMs(metadata = {}, rate = {}) {
-  const configuredTimeout = firstDefined(
-    rate.labelPurchaseTimeoutMs,
-    rate.label_purchase_timeout_ms,
-    metadata.labelPurchaseTimeoutMs,
-    metadata.label_purchase_timeout_ms,
-  );
-  const timeoutMs = Number(configuredTimeout);
-  return Number.isFinite(timeoutMs) && timeoutMs > 0
-    ? timeoutMs
-    : DEFAULT_LABEL_PURCHASE_TIMEOUT_MS;
-}
 
 function purchasePayload({ connection, service, shipment }) {
   const postalCode = shipment.destinationPostalCode
@@ -425,10 +413,7 @@ async function purchaseLabelViaCanadaPost(input) {
   const status = String(firstDefined(purchase.labelStatus, purchase.label_status, purchase.status, "")).toLowerCase();
   if (status === "failed" || firstDefined(purchase.labelUrl, purchase.label_url)) return purchase;
 
-  return {
-    ...purchase,
-    labelUrl: CANADA_POST_LABEL_URL_TEMPLATE,
-  };
+  return { ...purchase, labelStatus: "purchase_unknown", error: "Canada Post returned no label artifact; verify the purchase before retrying" };
 }
 
 const builtinClients = new Map([

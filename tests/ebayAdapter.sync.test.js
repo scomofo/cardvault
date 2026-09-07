@@ -92,6 +92,7 @@ test("eBay adapter sync keeps listing active when no fulfillment order matches",
     id: "local-listing",
     external_listing_id: "ebay-legacy-1",
     listing_title: "Active listing",
+    channel_status: "active",
   });
 
   assert.equal(result.status, "active");

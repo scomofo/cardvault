@@ -4,6 +4,8 @@ import { toCamel, toCamelArray, toSnake } from "../mappers/recordMappers.js";
 import { markListingSold, restoreListingAfterOperationalDelete, syncItemState } from "../services/listingStateSync.js";
 import { requireJsonBody, validateNumberLike, sendValidationError } from "../validation/common.js";
 import { uid } from "./shared.js";
+import { requireProtectedConfigWrite } from "../auth.js";
+import { confirmShipmentDispatch } from "../services/automation/dispatchShipment.js";
 
 // Fulfillment states written by shipping automation; a stale create-retry
 // must not revert them (e.g. un-ship a shipped order).
@@ -72,6 +74,10 @@ function applyOrderUpdate(orderId, existing, updates) {
 }
 
 export function registerOrderRoutes(app) {
+  app.post("/api/orders/:id/dispatch", requireProtectedConfigWrite, requireJsonBody, (req, res) => {
+    try { res.json(confirmShipmentDispatch(req.params.id, req.body)); }
+    catch (error) { res.status(error.message === "Order not found" ? 404 : 409).json({ error: error.message }); }
+  });
   app.get("/api/orders", (_req, res) => {
     try {
       res.json(toCamelArray(all(`
@@ -81,16 +87,20 @@ export function registerOrderRoutes(app) {
           shipments.tracking_number,
           shipments.label_url,
           shipments.status AS shipment_status,
+          shipments.label_status,
+          user_items.name AS card_name,
+          user_items.storage_location,
           shipments.carrier,
           shipments.service_level,
           shipments.shipped_at
         FROM orders
+        LEFT JOIN user_items ON user_items.id = orders.item_id
         LEFT JOIN shipments
           ON shipments.id = (
             SELECT id
             FROM shipments
             WHERE order_id = orders.id
-            ORDER BY created_at DESC
+            ORDER BY created_at DESC, rowid DESC
             LIMIT 1
           )
         ORDER BY orders.sold_at DESC, orders.created_at DESC

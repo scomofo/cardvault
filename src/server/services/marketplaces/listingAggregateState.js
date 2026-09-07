@@ -1,6 +1,7 @@
 import { all, get, run } from "../../database.js";
+import { syncItemState } from "../listingStateSync.js";
 
-const ACTIVE_CHANNEL_STATUSES = new Set(["draft", "active", "revised"]);
+const ACTIVE_CHANNEL_STATUSES = new Set(["active", "revised"]);
 const HANDOFF_CHANNEL_STATUSES = new Set([
   "handoff_ready",
   "handoff_exported",
@@ -44,6 +45,10 @@ function deriveAggregateState(channels) {
     return { status: "active", publishStatus };
   }
 
+  if (statuses.includes("publish_unknown")) return { status: "draft", publishStatus: "publish_unknown" };
+  if (statuses.includes("publishing")) return { status: "draft", publishStatus: "publishing" };
+  if (statuses.includes("draft")) return { status: "draft", publishStatus: "draft" };
+
   if (statuses.includes("ended")) {
     return { status: "ended", publishStatus: "ended" };
   }
@@ -85,5 +90,6 @@ export function refreshListingAggregateState(listingId, { syncedAt = null } = {}
     ],
   );
 
+  syncItemState(listing.card_id);
   return get(`SELECT * FROM listings WHERE id = ?`, [listingId]);
 }

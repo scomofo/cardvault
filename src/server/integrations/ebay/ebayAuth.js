@@ -113,6 +113,7 @@ export async function exchangeCodeForToken(code) {
   const url = creds.sandbox ? SANDBOX.token : PROD.token;
   const auth = Buffer.from(creds.appId + ":" + creds.certId).toString("base64");
   const res = await fetch(url, {
+    signal: AbortSignal.timeout(20_000),
     method: "POST",
     headers: { Authorization: "Basic " + auth, "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: creds.ruName }),
@@ -141,6 +142,7 @@ export async function getAccessToken() {
   const url = creds.sandbox ? SANDBOX.token : PROD.token;
   const auth = Buffer.from(creds.appId + ":" + creds.certId).toString("base64");
   const res = await fetch(url, {
+    signal: AbortSignal.timeout(20_000),
     method: "POST",
     headers: { Authorization: "Basic " + auth, "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refresh, scope: SCOPES }),
