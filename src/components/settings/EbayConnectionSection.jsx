@@ -69,6 +69,27 @@ function EbayConnectionSection({ onStatusChange }) {
     onStatusChange?.();
   };
 
+  const setEnvironment = async (sandbox) => {
+    if (sandbox === status.sandbox) return;
+    const target = sandbox ? "sandbox" : "production";
+    if (status.connected && !window.confirm(`Switch to ${target}? This disconnects eBay and you will need to authorize again.`)) return;
+    setSaving(true);
+    try {
+      const r = await fetch(apiPath("/ebay/environment"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sandbox }),
+      });
+      if (r.ok) {
+        setStatus((p) => ({ ...p, connected: false, sandbox }));
+        setCreds((p) => ({ ...p, sandbox }));
+        toast.success(`eBay set to ${target}. Authorize to connect.`);
+        onStatusChange?.();
+      } else toast.error("Failed to change eBay environment");
+    } catch { toast.error("Server not reachable"); }
+    setSaving(false);
+  };
+
   const copyCallback = async () => {
     try {
       await navigator.clipboard.writeText(callbackUrl);
@@ -84,7 +105,7 @@ function EbayConnectionSection({ onStatusChange }) {
         <IconBarChart size={16} style={{ color: status.connected ? "var(--grn)" : "var(--acc-solid)" }} />
         <div className="lbl" style={{ margin: 0 }}>eBay Connection</div>
         {status.connected && <span className="badge badge-grn"><IconCheck size={10} /> Connected</span>}
-        {status.sandbox && <span className="badge badge-dim">Sandbox</span>}
+        {status.configured && <span className="badge badge-dim">{status.sandbox ? "Sandbox" : "Production"}</span>}
       </div>
 
       {status.connected ? (
@@ -97,7 +118,10 @@ function EbayConnectionSection({ onStatusChange }) {
       ) : status.configured ? (
         <div>
           <div className="text-xs text-dim mb-8">Credentials saved. Authorize to connect.</div>
-          <button className="btn btn-primary btn-sm" onClick={authorize}>Authorize with eBay</button>
+          <div className="flex gap-8">
+            <button className="btn btn-primary btn-sm" onClick={authorize}>Authorize with eBay</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setShowSetup(!showSetup)}>Edit credentials</button>
+          </div>
         </div>
       ) : (
         <div>
@@ -107,6 +131,15 @@ function EbayConnectionSection({ onStatusChange }) {
           <button className="btn btn-outline btn-sm" onClick={() => setShowSetup(!showSetup)}>
             <IconPlus size={12} /> Set Up eBay
           </button>
+        </div>
+      )}
+
+      {status.configured && (
+        <div className="flex items-center gap-8 mt-10">
+          <span className="text-xxs text-dim">Environment</span>
+          <button className={`btn btn-sm ${status.sandbox ? "btn-primary" : "btn-outline"}`} disabled={saving} onClick={() => setEnvironment(true)}>Sandbox</button>
+          <button className={`btn btn-sm ${status.sandbox ? "btn-outline" : "btn-primary"}`} disabled={saving} onClick={() => setEnvironment(false)}>Production</button>
+          <span className="text-xxs text-dim">Switching clears the saved authorization; use the RuName from the matching tab of eBay&apos;s User Tokens page.</span>
         </div>
       )}
 

@@ -150,6 +150,26 @@ export function registerEbayRoutes(app) {
     }
   });
 
+  // Switch between sandbox and production without re-entering the full
+  // credential set. Tokens are environment-specific, so any saved
+  // authorization is cleared and the user must authorize again.
+  app.post("/api/ebay/environment", requireProtectedConfigWrite, requireJsonBody, (req, res) => {
+    try {
+      const normalizedSandbox = parseSandboxFlag(req.body.sandbox);
+      if (normalizedSandbox == null) {
+        return res.status(400).json({ error: "sandbox must be a boolean" });
+      }
+      if (!getEbayStatus().configured) {
+        return res.status(409).json({ error: "Save eBay credentials before changing the environment" });
+      }
+      run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", ["ebay_sandbox", String(normalizedSandbox)]);
+      for (const key of ["ebay_access_token", "ebay_refresh_token", "ebay_token_expires"]) {
+        run("DELETE FROM settings WHERE key = ?", [key]);
+      }
+      res.json({ saved: true, sandbox: normalizedSandbox });
+    } catch (e) { sendInternalError(res, "Failed to change eBay environment:", e); }
+  });
+
   app.post("/api/ebay/disconnect", requireProtectedConfigWrite, (_req, res) => {
     try {
       for (const key of ["ebay_access_token", "ebay_refresh_token", "ebay_token_expires"]) {
