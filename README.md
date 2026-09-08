@@ -137,7 +137,12 @@ Draft edits and retry IDs survive navigation and reloads on the same device.
 
 The home screen separates draft review, confirmed live listings, and paid orders
 to pack and ship. It prioritizes paid orders and publication exceptions; every
-listing/order opens directly in Sales. Review and publish each draft there.
+listing/order opens directly in Sales. **Review & publish** opens each eBay draft
+with an editable title, description, asking price, shipping and inspected condition.
+Add or replace front/back photos, review the sale terms, then save or publish.
+Missing photos and incomplete details are caught before submission. A failed photo
+upload keeps the listing a draft; uncertain listing-creation outcomes still require
+checking eBay before retrying.
 Collection analytics and advanced automation remain under the expandable
 **Collection insights and advanced tools** section. Price estimates are still
 unverified, and batch draft creation never publishes to a marketplace.
@@ -176,4 +181,6 @@ Shipping preparation does not buy a label or mark an order shipped. After a real
 label purchase (or using your own postage), use **Confirm dispatched** only after
 handing the package to the carrier. Check eBay/carrier history before retrying an
 uncertain publish or label purchase. See [the safety notes](docs/Selling-Workflow-Safety.md)
-for state contracts, test coverage, and remaining work.
+for state contracts, test coverage, and remaining work. The
+[draft review notes](docs/Selling-Draft-Review.md) cover the latest review flow and
+current eBay publishing limitations.

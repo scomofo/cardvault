@@ -34,6 +34,18 @@
 .seller-result { background: var(--acc-bg); padding: 14px; border-radius: var(--radius); font-size: 1rem; line-height: 1.5; margin: 12px 0; }
 .seller-result .btn { display: flex; margin-top: 10px; }
 .seller-insights > summary { font-size: 1rem; color: var(--tx2); cursor: pointer; padding: 16px 0; }
+.draft-review { border-top: 1px solid var(--brd2); padding-top: 16px; }
+.draft-review h3 { font-size: 1.125rem; margin: 0 0 16px; }
+.draft-review > label, .draft-review .form-grid > label { display: block; font-size: .875rem; margin: 12px 0; }
+.draft-review .inp { font-size: 1rem; margin-top: 6px; min-height: 44px; }
+.draft-review p, .draft-review li { font-size: .875rem; line-height: 1.6; }
+.draft-review .btn { min-height: 44px; font-size: .875rem; }
+.draft-review > .seller-card-select { display: flex; }
+.draft-photos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.draft-photos img, .draft-photo-missing { width: 100%; height: 210px; object-fit: contain; background: var(--bg); border-radius: var(--radius); }
+.draft-photo-missing { display: flex; align-items: center; justify-content: center; color: var(--tx2); padding: 12px; font-size: .875rem; }
+.draft-photos label { display: block; font-size: .875rem; margin-top: 8px; }
+.draft-photos input { display: block; width: 100%; min-height: 44px; font-size: .875rem; margin-top: 6px; }
 @media (max-width: 620px) {
   .seller-stages { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .seller-prepare-row { grid-template-columns: minmax(0, 1fr) minmax(100px, 130px); }

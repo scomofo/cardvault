@@ -1,4 +1,4 @@
-import { API_BASE, apiPath } from "./apiBase";
+import { apiPath } from "./apiBase.js";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
@@ -12,7 +12,7 @@ function getStoredProxyToken() {
 }
 
 async function request(path, options = {}) {
-  const { method = "GET", body, timeoutMs = DEFAULT_TIMEOUT_MS } = options;
+  const { method = "GET", body, timeoutMs = DEFAULT_TIMEOUT_MS, responseType = "json" } = options;
   const opts = {
     method,
     headers: { "Content-Type": "application/json" },
@@ -43,7 +43,7 @@ async function request(path, options = {}) {
     apiError.status = res.status;
     throw apiError;
   }
-  return res.json();
+  return responseType === "blob" ? res.blob() : res.json();
 }
 
 function toQuery(params) {
@@ -84,10 +84,13 @@ export const ordersAPI = {
 
 // Listings
 export const imagesAPI = {
+  read: (id) => request(`/images/${encodeURIComponent(id)}`, { responseType: "blob" }),
   upload: (id, dataUrl) => request(`/images/${id}`, { method: "POST", body: { dataUrl } }),
 };
 
 export const listingsAPI = {
+  saveReview: (id, data) => request(`/listings/${id}/review`, { method: "POST", body: data }),
+  readiness: (id) => request(`/listings/${id}/ebay-readiness`),
   list: (params) => request(`/listings${toQuery(params)}`),
   create: (data) => request("/listings", { method: "POST", body: data }),
   update: (id, data) =>

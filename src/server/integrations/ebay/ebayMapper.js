@@ -1,11 +1,13 @@
+import { ungradedCardCondition } from "../../../lib/listingContent.js";
+
 /**
  * Map CardVault condition to eBay condition ID.
  * @param {string} condition
  * @returns {number}
  */
 export function conditionToEbayCode(condition) {
-  const map = { MT: 2750, NM: 3000, EX: 4000, VG: 5000, G: 6000, FR: 7000, P: 7000 };
-  return map[(condition || "NM").toUpperCase()] || 4000;
+  // An inspected raw condition is not evidence of professional grading.
+  return ungradedCardCondition(condition) ? 4000 : null;
 }
 
 function esc(str) { return String(str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
@@ -21,8 +23,11 @@ export function listingToTradingXml(listing, item, options = {}) {
   const isAuction = listing.format === "auction";
   const duration = options.duration || (isAuction ? "Days_7" : "GTC");
   const condId = conditionToEbayCode(item.condition);
+  const condition = ungradedCardCondition(item.condition);
+  const conditionXml = condition ? `<ConditionID>${condId}</ConditionID>\n  <ConditionDescriptors><ConditionDescriptor><Name>40001</Name><Value>${condition.descriptor}</Value></ConditionDescriptor></ConditionDescriptors>` : "";
   const price = listing.start_price || listing.startPrice || 0;
-  const shipping = listing.shipping || 4.99;
+  const shipping = listing.shipping ?? 4.99;
+  const description = String(listing.listing_description || listing.listingDescription || "").replace(/\]\]>/g, "]]]]><![CDATA[>");
   const pictureUrls = (options.pictureUrls || []).filter(Boolean);
   const pictureDetails = pictureUrls.length
     ? `\n  <PictureDetails>\n    ${pictureUrls.map((url) => `<PictureURL>${esc(url)}</PictureURL>`).join("\n    ")}\n  </PictureDetails>`
@@ -40,10 +45,10 @@ export function listingToTradingXml(listing, item, options = {}) {
 
   return `<Item>
   <Title>${esc(listing.listing_title || listing.listingTitle || listing.cardName || item.name)}</Title>
-  <Description><![CDATA[${listing.listing_description || listing.listingDescription || ""}]]></Description>${pictureDetails}
+  <Description><![CDATA[${description}]]></Description>${pictureDetails}
   <PrimaryCategory><CategoryID>261328</CategoryID></PrimaryCategory>
   <StartPrice>${price}</StartPrice>
-  <ConditionID>${condId}</ConditionID>
+  ${conditionXml}
   <Country>CA</Country>
   <Currency>CAD</Currency>
   <ListingDuration>${duration}</ListingDuration>
@@ -57,6 +62,7 @@ export function listingToTradingXml(listing, item, options = {}) {
     <ShippingServiceOptions>
       <ShippingService>CA_StandardInternationalFlat</ShippingService>
       <ShippingServiceCost>${shipping}</ShippingServiceCost>
+      <ShippingServicePriority>1</ShippingServicePriority>${Number(shipping) === 0 ? "<FreeShipping>true</FreeShipping>" : ""}
     </ShippingServiceOptions>
   </ShippingDetails>
   <ReturnPolicy>
@@ -79,13 +85,13 @@ export function listingToInventoryItem(listing, item, options = {}) {
   const pictureUrls = (options.pictureUrls || []).filter(Boolean);
   return {
     availability: { shipToLocationAvailability: { quantity: 1 } },
-    condition: conditionToEbayCode(item.condition) <= 3000 ? "NEW_OTHER" : "USED_VERY_GOOD",
+    condition: "USED_VERY_GOOD",
     product: {
       title: listing.listing_title || listing.listingTitle || listing.cardName || item.name,
       description: listing.listing_description || listing.listingDescription || "",
       ...(pictureUrls.length ? { imageUrls: pictureUrls } : {}),
       aspects: {
-        Sport: [item.sport || "Baseball"],
+        ...(item.sport ? { Sport: [item.sport] } : {}),
         ...(item.player_name || item.playerName ? { "Player/Athlete": [item.player_name || item.playerName] } : {}),
         ...(item.team ? { Team: [item.team] } : {}),
         ...(item.card_set || item.set ? { Set: [item.card_set || item.set] } : {}),

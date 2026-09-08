@@ -39,6 +39,7 @@ test("eBay publish claims survive overlaps, ambiguous failures and retries", asy
   const { initDB, run, get } = await import("../src/server/database.js");
   const { getMarketplaceAdapter } = await import("../src/server/integrations/marketplaces/marketplaceRegistry.js");
   const { publishListingToMarketplace } = await import("../src/server/services/marketplaces/publishService.js");
+  const { saveImageFile } = await import("../src/server/services/imageStore.js");
   const db = initDB();
   const adapter = getMarketplaceAdapter("ebay");
   const originalPublish = adapter.publish;
@@ -50,9 +51,10 @@ test("eBay publish claims survive overlaps, ambiguous failures and retries", asy
     else process.env.CARDVAULT_DB_PATH = previousPath;
     await rm(dir, { recursive: true, force: true });
   });
-  for (const id of ["overlap", "ambiguous", "ended"]) {
-    run("INSERT INTO user_items (id, name) VALUES (?,?)", [`item-${id}`, "Test"]);
-    run("INSERT INTO listings (id, card_id, platform, status) VALUES (?,?,?,?)", [id, `item-${id}`, "ebay", id === "ended" ? "ended" : "draft"]);
+  saveImageFile("publish-front", "data:image/png;base64,aGVsbG8=");
+  for (const id of ["overlap", "ambiguous", "ended", "photo-failed", "incomplete"]) {
+    run("INSERT INTO user_items (id, name, front_img_id) VALUES (?,?,?)", [`item-${id}`, "Test", "publish-front"]);
+    run("INSERT INTO listings (id, card_id, platform, status, listing_title, listing_description, start_price, shipping) VALUES (?,?,?,?,?,?,?,?)", [id, `item-${id}`, "ebay", id === "ended" ? "ended" : "draft", "Reviewed card", id === "incomplete" ? "" : "Reviewed description", 10, 0]);
   }
   adapter.isConnected = () => true;
   let calls = 0, release;
@@ -87,6 +89,14 @@ test("eBay publish claims survive overlaps, ambiguous failures and retries", asy
   assert.equal(calls, 3);
   await assert.rejects(publishListingToMarketplace("ended", "ebay"), /sold or ended/);
   assert.equal(calls, 3);
+  await assert.rejects(publishListingToMarketplace("incomplete", "ebay"), /description/);
+  assert.equal(get("SELECT status FROM listing_channels WHERE listing_id = ?", ["incomplete"]), undefined);
+  assert.equal(calls, 3, "preflight must run before a claim or provider call");
+  adapter.publish = async () => { const error = new Error("Photo upload failed; listing not submitted"); error.code = "EBAY_PREPARATION_FAILED"; throw error; };
+  await assert.rejects(publishListingToMarketplace("photo-failed", "ebay"), /Photo upload/);
+  assert.equal(get("SELECT status FROM listing_channels WHERE listing_id = ?", ["photo-failed"]).status, "draft");
+  adapter.publish = async () => ({ externalListingId: "777777", status: "active" });
+  assert.equal((await publishListingToMarketplace("photo-failed", "ebay")).status, "active", "known pre-submission failure is directly retryable");
 });
 
 test("recording a sale with tracking does not imply dispatch", () => {

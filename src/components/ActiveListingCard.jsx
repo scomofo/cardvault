@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+import DraftReview from "./DraftReview";
 import { PLATFORMS, PLATFORM_FEES } from "../lib/constants";
 import { isStubChannel, listingLifecycle } from "../lib/scanPublish";
 import { fmtShort } from "../lib/utils";
@@ -15,6 +17,12 @@ export default function ActiveListingCard({ listing: l, catalog, busyListingId, 
   // button — the user needs to re-publish for real after connecting.
   const isStubPublish = isStubChannel(l, { marketplace: l.platform, listingId: l.id });
   const lifecycle = listingLifecycle(l);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const supportsReview = l.platform === "ebay" && lifecycle === "draft";
+  useEffect(() => {
+    if (highlighted && supportsReview) setReviewOpen(true);
+    if (!supportsReview) setReviewOpen(false);
+  }, [highlighted, supportsReview]);
   const isPublished = !isStubPublish && ["live", "sold", "ended", "handoff"].includes(lifecycle);
   const publish = () => {
     const needsReview = ["needs_review", "publishing"].includes(lifecycle);
@@ -56,10 +64,10 @@ export default function ActiveListingCard({ listing: l, catalog, busyListingId, 
                     <span className="text-xxs text-dim">{l.priceChanges.length} reprice{l.priceChanges.length > 1 ? "s" : ""}</span>
                   )}
                   <div className="flex-1" />
-                  {!isSelling && !isRepricing && (
+                  {!isSelling && !isRepricing && !reviewOpen && (
                     <>
-                      <button className="btn btn-ghost btn-sm" disabled={busyListingId === l.id || isPublished} onClick={publish}>
-                        {busyListingId === l.id ? <Spinner size={12} /> : isPublished ? "Published / handed off" : ["needs_review", "publishing"].includes(lifecycle) ? "Review and retry" : "Publish"}
+                      <button className="btn btn-ghost btn-sm" disabled={busyListingId === l.id || isPublished} onClick={supportsReview ? () => setReviewOpen(true) : publish}>
+                        {busyListingId === l.id ? <Spinner size={12} /> : isPublished ? "Published / handed off" : supportsReview ? "Review & publish" : ["needs_review", "publishing"].includes(lifecycle) ? "Review and retry" : "Publish"}
                       </button>
                       <button className="btn btn-ghost btn-sm" disabled={busyListingId === l.id} onClick={() => onSync(l.id, l.platform || "ebay")}>
                         Sync
@@ -77,6 +85,8 @@ export default function ActiveListingCard({ listing: l, catalog, busyListingId, 
                     </>
                   )}
                 </div>
+
+                {reviewOpen && supportsReview && <DraftReview listing={l} card={catalog.find((card) => card.id === l.cardId)} onClose={() => setReviewOpen(false)} />}
 
                 {/* Inline sale confirmation */}
                 {isSelling && (

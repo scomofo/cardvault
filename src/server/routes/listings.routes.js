@@ -1,5 +1,9 @@
 import { all, get, run, runInImmediateTransaction } from "../database.js";
-import { LISTING_FIELD_MAP } from "../mappers/fieldMaps.js";
+import { LISTING_FIELD_MAP, ITEM_FIELD_MAP } from "../mappers/fieldMaps.js";
+import { requireProtectedConfigWrite } from "../auth.js";
+import { requireJsonBody } from "../validation/common.js";
+import { ebayPublishReadiness, saveDraftReview } from "../services/listings/draftReviewService.js";
+import { getEbayStatus } from "../integrations/ebay/ebayAuth.js";
 import {
   json,
   toCamel,
@@ -23,6 +27,21 @@ function derivePublishStatus(status, fallback = null) {
 }
 
 export function registerListingRoutes(app) {
+  app.get("/api/listings/:id/ebay-readiness", (req, res) => {
+    try {
+      const listing = get("SELECT * FROM listings WHERE id = ?", [req.params.id]);
+      if (!listing) return res.status(404).json({ error: "Listing not found" });
+      res.json({ ...ebayPublishReadiness(listing), connected: getEbayStatus().connected });
+    } catch (error) { res.status(error.status || 500).json({ error: error.message }); }
+  });
+
+  app.post("/api/listings/:id/review", requireProtectedConfigWrite, requireJsonBody, (req, res) => {
+    try {
+      const result = saveDraftReview(req.params.id, req.body);
+      res.json({ listing: toCamel(result.listing, LISTING_FIELD_MAP), item: toCamel(result.item, ITEM_FIELD_MAP) });
+    } catch (error) { res.status(error.status || 500).json({ error: error.message }); }
+  });
+
   app.get("/api/listings", (req, res) => {
     try {
       const { status } = req.query;
@@ -158,15 +177,20 @@ export function registerListingRoutes(app) {
       const existing = get("SELECT * FROM listings WHERE id = ?", [req.params.id]);
       if (!existing) return res.status(404).json({ error: "Listing not found" });
       const updates = toSnake(req.body);
+      const channelBacked = Boolean(get("SELECT id FROM listing_channels WHERE listing_id = ? LIMIT 1", [existing.id]));
+      if (channelBacked) {
+        // A delayed sync must not reset provider-confirmed or uncertain state.
+        for (const key of ["publish_status", "publish_error", "external_listing_id", "last_sync_at", "status", "sold_price", "sold_date"]) delete updates[key];
+      }
       const body = { ...existing, ...updates };
       if (body.card_id && !get("SELECT id FROM user_items WHERE id = ?", [body.card_id])) {
         return res.status(404).json({ error: "linked item not found" });
       }
       const normalizedStatus = normalizeStatus(body.status);
-      const nextPublishStatus = derivePublishStatus(normalizedStatus, body.publish_status);
+      const nextPublishStatus = channelBacked ? existing.publish_status : derivePublishStatus(normalizedStatus, body.publish_status);
       const hasSoldSignal = updates.sold_price != null || updates.sold_date != null;
-      const nextSoldPrice = normalizedStatus === "sold" || hasSoldSignal ? body.sold_price : null;
-      const nextSoldDate = normalizedStatus === "sold" || hasSoldSignal ? body.sold_date : null;
+      const nextSoldPrice = channelBacked ? existing.sold_price : (normalizedStatus === "sold" || hasSoldSignal ? body.sold_price : null);
+      const nextSoldDate = channelBacked ? existing.sold_date : (normalizedStatus === "sold" || hasSoldSignal ? body.sold_date : null);
       const saved = runInImmediateTransaction(() => {
         run(
           `UPDATE listings SET card_id=?, external_listing_id=?, card_name=?, card_set=?, card_number=?,

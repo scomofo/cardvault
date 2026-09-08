@@ -4,21 +4,24 @@ import { readImageFile } from "../../services/imageStore.js";
 import { getEbayStatus } from "../ebay/ebayAuth.js";
 import { addItem, addFixedPriceItem, reviseItem, endItem, getOrders, uploadSiteHostedPictures } from "../ebay/ebayClient.js";
 import { listingToTradingXml } from "../ebay/ebayMapper.js";
+import { assertEbayPublishReady } from "../../services/listings/draftReviewService.js";
 
 // Upload the item's stored front/back images to eBay Picture Services.
-// Per-image failures are tolerated — a listing without one photo is still
-// better than a failed publish.
+// Never omit a reviewed photo. This phase runs before any listing-create call.
 async function collectPictureUrls(item) {
   const urls = [];
   for (const imageId of [item.front_img_id, item.back_img_id]) {
     if (!imageId) continue;
     const stored = readImageFile(imageId);
-    if (!stored) continue;
     try {
+      if (!stored) throw new Error("Stored photo is missing");
       const url = await uploadSiteHostedPictures(stored.buffer, stored.mime);
-      if (url) urls.push(url);
-    } catch {
-      // non-fatal: continue with whatever uploaded
+      if (!url) throw new Error("eBay did not confirm a photo URL");
+      urls.push(url);
+    } catch (cause) {
+      const error = new Error(`Photo upload failed; the listing was not submitted. ${cause.message}`);
+      error.code = "EBAY_PREPARATION_FAILED";
+      throw error;
     }
   }
   return urls;
@@ -29,6 +32,10 @@ export class EbayAdapter extends MarketplaceAdapter {
 
   isConnected() {
     return getEbayStatus().connected;
+  }
+
+  validatePublish(listing) {
+    return assertEbayPublishReady(listing);
   }
 
   getShippingProfile(country = "CA") {
@@ -49,6 +56,7 @@ export class EbayAdapter extends MarketplaceAdapter {
    */
   async publish(listing) {
     if (!this.isConnected()) return super.publish(listing);
+    this.validatePublish(listing);
 
     const item = (listing.card_id
       && get(`SELECT * FROM user_items WHERE id = ?`, [listing.card_id])) || {};
