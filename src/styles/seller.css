@@ -1,0 +1,44 @@
+.seller-home { margin-bottom: 24px; }
+.seller-heading, .seller-shortcuts, .seller-exceptions, .seller-batch-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.seller-heading { justify-content: space-between; margin-bottom: 12px; }
+.seller-heading .page-title { margin: 0; }
+.seller-home .btn { min-height: 44px; font-size: .875rem; }
+.seller-home p { font-size: 1rem; line-height: 1.6; color: var(--tx2); margin: 12px 0; }
+.seller-home label { font-size: .875rem; line-height: 1.5; }
+.seller-home .inp { font-size: 1rem; min-height: 44px; margin-top: 4px; }
+.seller-stages { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 20px 0 12px; }
+.seller-stage { display: flex; flex-direction: column; text-align: left; gap: 6px; padding: 16px; border: 1px solid var(--brd2); border-radius: var(--radius); background: var(--s1); color: var(--tx); cursor: pointer; }
+.seller-stage strong { font-size: 1.75rem; line-height: 1.2; }
+.seller-stage span { font-size: .875rem; }
+.seller-stage.is-selected { border-color: var(--acc); background: var(--acc-bg); }
+.seller-exceptions { margin-bottom: 12px; }
+.seller-exceptions:empty { display: none; }
+.seller-exceptions [aria-pressed="true"] { border-color: var(--acc); }
+.seller-home button:focus-visible, .seller-home input:focus-visible, .seller-insights summary:focus-visible { outline: 2px solid var(--acc); outline-offset: 3px; }
+.seller-work h2 { font-size: 1.25rem; margin: 0; }
+.seller-note { display: block; color: var(--tx2); font-size: .875rem; line-height: 1.5; font-weight: 400; }
+.seller-task { width: 100%; min-height: 68px; background: none; border: 0; border-top: 1px solid var(--brd2); color: var(--tx); padding: 14px 0; display: flex; align-items: center; justify-content: space-between; gap: 14px; text-align: left; cursor: pointer; }
+.seller-task strong { font-size: 1rem; overflow-wrap: anywhere; }
+.seller-task:hover { background: var(--acc-bg); }
+.seller-task svg { flex-shrink: 0; }
+.seller-batch-controls > label { max-width: 200px; }
+.seller-card-list { max-height: 560px; overflow-y: auto; padding: 3px; }
+.seller-prepare-row { display: grid; grid-template-columns: minmax(0, 1fr) 150px; align-items: center; gap: 14px; padding: 16px 0; border-top: 1px solid var(--brd2); }
+.seller-card-select { display: flex; align-items: flex-start; gap: 10px; }
+.seller-card-select input { width: 20px; height: 20px; flex: 0 0 20px; margin-top: 2px; accent-color: var(--acc); }
+.seller-card-select strong { display: block; font-size: 1rem; overflow-wrap: anywhere; }
+.seller-prepare-row > .btn { justify-self: end; }
+.seller-row-issue { grid-column: 1 / -1; color: var(--orange); font-size: .875rem; }
+.seller-save-bar { display: grid; gap: 12px; padding-top: 20px; border-top: 1px solid var(--brd2); margin-top: 8px; }
+.seller-save-bar > .btn { justify-self: start; }
+.seller-result { background: var(--acc-bg); padding: 14px; border-radius: var(--radius); font-size: 1rem; line-height: 1.5; margin: 12px 0; }
+.seller-result .btn { display: flex; margin-top: 10px; }
+.seller-insights > summary { font-size: 1rem; color: var(--tx2); cursor: pointer; padding: 16px 0; }
+@media (max-width: 620px) {
+  .seller-stages { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .seller-prepare-row { grid-template-columns: minmax(0, 1fr) minmax(100px, 130px); }
+  .seller-card-select { grid-column: 1 / -1; }
+  .seller-price { grid-column: 1; }
+  .seller-prepare-row > .btn { justify-self: end; }
+  .seller-save-bar > .btn { width: 100%; }
+}

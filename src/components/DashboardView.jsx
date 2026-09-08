@@ -8,6 +8,7 @@ import AlertQueue from "./AlertQueue";
 import DecisionFeedbackPanel from "./DecisionFeedbackPanel";
 import PricingRecommendationsQueue from "./PricingRecommendationsQueue";
 import SetupWizard from "./settings/SetupWizard";
+import SellerHome from "./SellerHome";
 
 function MiniList({ title, rows, formatter = (value) => value }) {
   return (
@@ -69,15 +70,6 @@ export default function DashboardView({ onNavigate }) {
     };
   }, []);
 
-  if (loading) {
-    return (
-      <div className="fade">
-        <h1 className="page-title">Dashboard</h1>
-        <Skeleton h={120} />
-      </div>
-    );
-  }
-
   const kpis = data?.kpis || {};
   const performance = data?.performance || {};
   const actionQueue = data?.actionQueue || [];
@@ -86,10 +78,11 @@ export default function DashboardView({ onNavigate }) {
 
   return (
     <div className="fade">
-      <h1 className="page-title">Dashboard</h1>
-
+      <SellerHome onNavigate={onNavigate} />
       <SetupWizard />
-
+      <details className="seller-insights">
+        <summary>Collection insights and advanced tools</summary>
+        {loading ? <Skeleton h={120} /> : !data ? <p className="text-xs text-dim">Collection insights are unavailable. Your selling workspace above uses your saved cards and orders.</p> : <>
       {nextAction && (
         <div className="card-hero mb-12" style={{ borderColor: "var(--acc-brd)" }}>
           <div className="flex justify-between items-center">
@@ -241,6 +234,8 @@ export default function DashboardView({ onNavigate }) {
         <MiniList title="ROI By Source" rows={performance.roiBySource} formatter={(value) => `${Number(value || 0).toFixed(1)}%`} />
         <MiniList title="ROI By Category" rows={performance.roiByCategory} formatter={(value) => `${Number(value || 0).toFixed(1)}%`} />
       </div>
+        </>}
+      </details>
     </div>
   );
 }
