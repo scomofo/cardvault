@@ -19,7 +19,7 @@ import "./styles/app.css";
 import "./styles/catalog.css";
 
 const NAV = [
-  { v: "dashboard", l: "Dash", Icon: IconBarChart },
+  { v: "dashboard", l: "Sell", Icon: IconBarChart },
   { v: "scan", l: "Scan", Icon: IconCamera },
   { v: "cards", l: "Cards", Icon: IconCards },
   { v: "sales", l: "Sales", Icon: IconDollar },
@@ -195,6 +195,8 @@ function AppContent() {
           {view === "scan" && (
             <ScanView
               onNavigate={handleNavigate}
+              focus={pendingFocus}
+              onFocusConsumed={() => setPendingFocus(null)}
               pendingImage={pendingScanImage}
               onPendingImageConsumed={() => setPendingScanImage(null)}
             />

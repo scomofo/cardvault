@@ -24,6 +24,7 @@ export function useBatchWorkflow() {
   toastRef.current = toast;
   const { catalog, setCatalog, useServer } = useData();
   const [batchMode, setMode] = useState(null);
+  const [batchReady, setBatchReady] = useState(false);
   const [batchQueue, setQueue] = useState([]);
   const [batchProcessing, setProcessing] = useState(false);
   const [batchProcessedCount, setProcessedCount] = useState(0);
@@ -44,6 +45,7 @@ export function useBatchWorkflow() {
       queueRef.current = restored;
       setQueue(restored);
       readyRef.current = true;
+      setBatchReady(true);
       if (restored.length) setMode("process");
     }).catch((error) => {
       if (!cancelled) toastRef.current.error(`Batch restore failed: ${error.message}. Reload before starting another batch.`);
@@ -204,6 +206,6 @@ export function useBatchWorkflow() {
 
   return {
     actions: { setBatchMode, addToBatchQueue, processBatchQueue, saveBatchCards, approveBatchItem, removeBatchItem, retryBatchItem: processBatchQueue },
-    state: { batchMode, batchQueue, batchProcessing, batchProcessedCount },
+    state: { batchMode, batchQueue, batchProcessing, batchProcessedCount, batchReady },
   };
 }

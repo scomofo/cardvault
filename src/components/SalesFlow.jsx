@@ -14,6 +14,7 @@ import EbayExport from "./EbayExport";
 import ActiveListingCard from "./ActiveListingCard";
 import OrderShippingActions from "./OrderShippingActions";
 import { summarizeShippingOutcome } from "../lib/shippingOutcome";
+import { proposedListingPrice } from "../lib/sellerWorkflow";
 
 const TABS = ["active", "completed", "orders", "purchases"];
 
@@ -81,8 +82,9 @@ export default function SalesFlow({ onNavigate, focus, onFocusConsumed }) {
           setHighlightId(existing.id);
           setShowCreate(false);
         } else {
+          setTab("active");
           setShowCreate(true);
-          setNewListing((previous) => ({ ...previous, cardId: focus.id }));
+          setNewListing((previous) => ({ ...previous, cardId: focus.id, startPrice: proposedListingPrice(catalog.find((card) => card.id === focus.id)) }));
         }
       } else {
         const listing = listings.find((l) => l.cardId === focus.id && l.status === "active");
@@ -721,7 +723,7 @@ export default function SalesFlow({ onNavigate, focus, onFocusConsumed }) {
       {showCreate && (
         <div className="card-elevated fade mb-12">
           <div className="lbl">Create Listing</div>
-          <select className="inp mt-6" value={newListing.cardId} onChange={(e) => setNewListing((p) => ({ ...p, cardId: e.target.value }))}>
+          <select className="inp mt-6" value={newListing.cardId} onChange={(e) => setNewListing((p) => ({ ...p, cardId: e.target.value, startPrice: proposedListingPrice(catalog.find((card) => card.id === e.target.value)) }))}>
             <option value="">Select card...</option>
             {unlistedCards.map((c) => <option key={c.id} value={c.id}>{c.name} {c.set && `- ${c.set}`} {c.number && `#${c.number}`}</option>)}
           </select>
@@ -752,6 +754,7 @@ export default function SalesFlow({ onNavigate, focus, onFocusConsumed }) {
               </>
             )}
           </div>
+          {newListing.cardId && <p className="text-xs text-dim mt-8">Asking price starts from the saved estimate when available. It is unverified — review the card, price and shipping before saving this draft.</p>}
           {newListing.startPrice && (
             <div className="text-xs text-dim mt-8">
               Est. fees: {fmtShort(parseFloat(newListing.startPrice) * newListingFeeRate)} ({(newListingFeeRate * 100).toFixed(1)}%)
@@ -918,4 +921,3 @@ export default function SalesFlow({ onNavigate, focus, onFocusConsumed }) {
     </div>
   );
 }
-

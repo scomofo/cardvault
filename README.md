@@ -129,6 +129,19 @@ mkcert -key-file certs/cardvault-key.pem -cert-file certs/cardvault-cert.pem loc
 
 ### All Features
 
+**Sell your collection** is the default home screen. Start with **Scan a batch**
+or **Upload photos / add cards**, then open **Prepare cards** to select inventory,
+review asking prices and inspected conditions, and save eBay Buy It Now drafts
+together. Shipping is entered once per batch and remembered on this device.
+Draft edits and retry IDs survive navigation and reloads on the same device.
+
+The home screen separates draft review, confirmed live listings, and paid orders
+to pack and ship. It prioritizes paid orders and publication exceptions; every
+listing/order opens directly in Sales. Review and publish each draft there.
+Collection analytics and advanced automation remain under the expandable
+**Collection insights and advanced tools** section. Price estimates are still
+unverified, and batch draft creation never publishes to a marketplace.
+
 - **Scan** — 4-step workflow: photograph, AI identify, edit details, create listing
 - **Collection** — Search across card details, filter by binder and status, sort by value/date/name, and browse in list or photo-grid view
 - **Sales Flow** — Create listings, track auctions with countdown timers, log purchases

@@ -77,9 +77,16 @@ function IdentificationBanner({ result, actions }) {
   );
 }
 
-export default function ScanView({ onNavigate, pendingImage, onPendingImageConsumed }) {
+export default function ScanView({ onNavigate, pendingImage, onPendingImageConsumed, focus, onFocusConsumed }) {
   const { actions, state } = useScanWorkflow();
   const { getFeeRate } = useFeeModels();
+  const { setBatchMode } = actions;
+
+  useEffect(() => {
+    if (focus?.type !== "scan_mode" || focus.id !== "batch" || !state.batchReady) return;
+    if (!state.batchQueue.length) setBatchMode("capture");
+    onFocusConsumed?.();
+  }, [focus, state.batchReady, state.batchQueue.length, setBatchMode, onFocusConsumed]);
 
   useEffect(() => {
     if (!pendingImage) return;
