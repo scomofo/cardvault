@@ -50,3 +50,43 @@ test("eBay auth routes require RuName and enforce OAuth state", async (t) => {
   const callbackPayload = await callbackResponse.json();
   assert.match(callbackPayload.error, /state/i);
 });
+
+test("eBay environment can be switched without re-entering credentials", async (t) => {
+  const { baseUrl } = await startTestServer(t, { dirPrefix: "cardvault-ebay-env-" });
+  const post = (path, body) => fetch(`${baseUrl}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  const beforeCreds = await post("/api/ebay/environment", { sandbox: false });
+  assert.equal(beforeCreds.status, 409);
+
+  const saveCreds = await post("/api/ebay/credentials", {
+    appId: "app-id",
+    certId: "cert-id",
+    sandbox: true,
+    ruName: "CardVaultRuName",
+    callbackUrl: `${baseUrl}/api/ebay/callback`,
+  });
+  assert.equal(saveCreds.status, 200);
+
+  const invalid = await post("/api/ebay/environment", { sandbox: "maybe" });
+  assert.equal(invalid.status, 400);
+
+  const toProduction = await post("/api/ebay/environment", { sandbox: false });
+  assert.equal(toProduction.status, 200);
+  assert.deepEqual(await toProduction.json(), { saved: true, sandbox: false });
+
+  const statusResponse = await fetch(`${baseUrl}/api/ebay/status`);
+  assert.equal(statusResponse.status, 200);
+  const status = await statusResponse.json();
+  assert.equal(status.configured, true);
+  assert.equal(status.sandbox, false);
+  assert.equal(status.connected, false);
+
+  const authResponse = await fetch(`${baseUrl}/api/ebay/auth`, { redirect: "manual" });
+  assert.equal(authResponse.status, 302);
+  const authUrl = new URL(authResponse.headers.get("location"));
+  assert.equal(authUrl.hostname, "auth.ebay.com");
+});
