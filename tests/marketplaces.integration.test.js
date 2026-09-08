@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import Database from "better-sqlite3";
 import { startTestServer } from "./helpers/testServer.js";
 
 test("marketplace ecosystem routes publish crosspost sync and export listings", async (t) => {
@@ -369,7 +370,7 @@ test("ending one marketplace channel does not mark a still-crossposted listing a
 });
 
 test("marketplace sold sync updates the underlying item sale state and creates an order", async (t) => {
-  const { baseUrl } = await startTestServer(t, {
+  const { baseUrl, dbPath } = await startTestServer(t, {
     dirPrefix: "cardvault-marketplaces-sold-",
     portBase: 4700,
     portSpan: 300,
@@ -414,23 +415,11 @@ test("marketplace sold sync updates the underlying item sale state and creates a
   });
   assert.equal(publishResponse.status, 200);
 
-  const updateListingResponse = await fetch(`${baseUrl}/api/listings/sync-sold-listing`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      id: "sync-sold-listing",
-      cardId: "sync-sold-item",
-      cardName: "Connor McDavid",
-      cardSet: "Upper Deck",
-      platform: "ebay",
-      listingTitle: "Connor McDavid card",
-      listingDescription: "Should sync into sold inventory state",
-      startPrice: 159.99,
-      soldPrice: 159.99,
-      status: "active",
-    }),
-  });
-  assert.equal(updateListingResponse.status, 200);
+  // Seed the disconnected adapter's simulated remote-sale signal. Generic
+  // client sync cannot overwrite provider-owned sale fields on a channel.
+  const db = new Database(dbPath);
+  db.prepare("UPDATE listings SET sold_price = ? WHERE id = ?").run(159.99, "sync-sold-listing");
+  db.close();
 
   const syncResponse = await fetch(`${baseUrl}/api/marketplaces/sync`, {
     method: "POST",

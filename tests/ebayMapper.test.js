@@ -7,12 +7,10 @@ import {
   listingToOffer,
 } from "../src/server/integrations/ebay/ebayMapper.js";
 
-test("conditionToEbayCode maps grades case-insensitively with defaults", () => {
-  assert.equal(conditionToEbayCode("MT"), 2750);
-  assert.equal(conditionToEbayCode("nm"), 3000);
-  assert.equal(conditionToEbayCode("P"), 7000);
-  assert.equal(conditionToEbayCode("ZZ"), 4000);
-  assert.equal(conditionToEbayCode(undefined), 3000);
+test("conditionToEbayCode treats inspected conditions as ungraded and leaves unknowns unset", () => {
+  for (const value of ["MT", "nm", "P", "gem_mint", "excellent"]) assert.equal(conditionToEbayCode(value), 4000);
+  assert.equal(conditionToEbayCode("ZZ"), null);
+  assert.equal(conditionToEbayCode(undefined), null);
 });
 
 test("listingToTradingXml builds fixed-price XML with escaped specifics", () => {
@@ -36,7 +34,8 @@ test("listingToTradingXml builds fixed-price XML with escaped specifics", () => 
   );
 
   assert.match(xml, /<Title>Cards &amp; &lt;Stuff&gt;<\/Title>/);
-  assert.match(xml, /<ConditionID>3000<\/ConditionID>/);
+  assert.match(xml, /<ConditionID>4000<\/ConditionID>/);
+  assert.match(xml, /<Name>40001<\/Name><Value>400010<\/Value>/);
   assert.match(xml, /<StartPrice>12.5<\/StartPrice>/);
   assert.match(xml, /<ListingType>FixedPriceItem<\/ListingType>/);
   assert.match(xml, /<ListingDuration>GTC<\/ListingDuration>/);
@@ -83,7 +82,7 @@ test("listingToInventoryItem maps condition and aspects", () => {
     { listing_title: "Inv Title", listing_description: "Inv Desc" },
     { condition: "NM", player_name: "Player One", team: "Team A", card_set: "Set B", year: 2020 },
   );
-  assert.equal(nearMint.condition, "NEW_OTHER");
+  assert.equal(nearMint.condition, "USED_VERY_GOOD");
   assert.equal(nearMint.product.title, "Inv Title");
   assert.deepEqual(nearMint.product.aspects["Player/Athlete"], ["Player One"]);
   assert.deepEqual(nearMint.product.aspects.Team, ["Team A"]);
@@ -93,8 +92,17 @@ test("listingToInventoryItem maps condition and aspects", () => {
   const played = listingToInventoryItem({}, { condition: "EX", name: "Fallback" });
   assert.equal(played.condition, "USED_VERY_GOOD");
   assert.equal(played.product.title, "Fallback");
-  assert.deepEqual(played.product.aspects.Sport, ["Baseball"]);
+  assert.equal(played.product.aspects.Sport, undefined);
   assert.equal(played.product.aspects.Team, undefined);
+});
+
+test("Trading XML preserves reviewed free shipping and safely splits CDATA terminators", () => {
+  const xml = listingToTradingXml({ shipping: 0, listingDescription: "Before ]]> after" }, { condition: "excellent" });
+  assert.match(xml, /<ShippingServiceCost>0<\/ShippingServiceCost>/);
+  assert.match(xml, /<FreeShipping>true<\/FreeShipping>/);
+  assert.match(xml, /<Name>40001<\/Name><Value>400011<\/Value>/);
+  assert.ok(xml.includes("<![CDATA[Before ]]]]><![CDATA[> after]]>"));
+  assert.doesNotMatch(xml, /<ConditionID>2750<\/ConditionID>/);
 });
 
 test("listingToOffer formats pricing and defaults", () => {

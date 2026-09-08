@@ -15,6 +15,7 @@ import ActiveListingCard from "./ActiveListingCard";
 import OrderShippingActions from "./OrderShippingActions";
 import { summarizeShippingOutcome } from "../lib/shippingOutcome";
 import { proposedListingPrice } from "../lib/sellerWorkflow";
+import { buildDraftContent } from "../lib/listingContent";
 
 const TABS = ["active", "completed", "orders", "purchases"];
 
@@ -148,6 +149,7 @@ export default function SalesFlow({ onNavigate, focus, onFocusConsumed }) {
       shipping: parseFloat(newListing.shipping) || 0,
       currentBid: newListing.format === "auction" ? parseFloat(newListing.startPrice) : null,
       status: "draft", publishStatus: "draft", notes: newListing.notes, createdAt: new Date().toISOString(),
+      ...buildDraftContent(card),
     };
     setListings((p) => [listing, ...p]);
     // This is a local draft. Publishing is the separate marketplace action.

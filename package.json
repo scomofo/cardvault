@@ -57,6 +57,7 @@
       "src/electron/**",
       "src/server/**",
       "src/lib/ebayPurchaseImport.js",
+      "src/lib/listingContent.js",
       "server.js",
       "dist/**",
       ".env.example",

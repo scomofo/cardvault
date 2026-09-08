@@ -357,6 +357,7 @@ export async function publishListingToMarketplace(listingId, marketplace, option
       if (current && ["publishing", "publish_unknown"].includes(current.status) && options.confirmNotPublished !== true) {
         throw new Error("Publish outcome needs review. Check eBay Seller Hub before confirming a retry; do not create a second listing.");
       }
+      adapter.validatePublish?.(listing);
       upsertChannel({ listingId, marketplace, status: "publishing", payload: {}, connectionId: options.connectionId });
       run(`UPDATE listings SET publish_status = 'publishing', publish_error = NULL WHERE id = ?`, [listingId]);
       return null;
@@ -369,10 +370,12 @@ export async function publishListingToMarketplace(listingId, marketplace, option
     if (liveEbay && !result?.externalListingId) throw new Error("eBay returned no confirmed listing ID");
   } catch (error) {
     if (liveEbay) {
-      const message = `${error.message}. Check eBay before retrying; the publish outcome may be unknown.`;
-      const channelId = upsertChannel({ listingId, marketplace, status: "publish_unknown", publishError: message, payload: {} });
-      addChannelEvent(channelId, "publish", "publish_unknown", { error: message });
-      run(`UPDATE listings SET publish_status = 'publish_unknown', publish_error = ? WHERE id = ?`, [message, listingId]);
+      const notSubmitted = error.code === "EBAY_PREPARATION_FAILED";
+      const status = notSubmitted ? "draft" : "publish_unknown";
+      const message = notSubmitted ? error.message : `${error.message}. Check eBay before retrying; the publish outcome may be unknown.`;
+      const channelId = upsertChannel({ listingId, marketplace, status, publishError: message, payload: {} });
+      addChannelEvent(channelId, "publish", status, { error: message });
+      run(`UPDATE listings SET publish_status = ?, publish_error = ? WHERE id = ?`, [status, message, listingId]);
     }
     throw error;
   }

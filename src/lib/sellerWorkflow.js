@@ -1,6 +1,7 @@
 import { cardEstimate, catalogStatus } from "./catalogState.js";
 import { listingLifecycle } from "./scanPublish.js";
 import { CONDITIONS } from "./constants.js";
+import { buildDraftContent } from "./listingContent.js";
 
 const OPEN_FULFILLMENT = new Set(["pending", "paid", "processing", "label_purchased", "shipping_exception"]);
 let draftSaveRunning = false;
@@ -87,6 +88,7 @@ async function persistReviewedListingDrafts({ selections, catalog, listings, ord
       cardSet: card.set, cardNumber: card.number, platform: "ebay", format: "fixed",
       startPrice: Number(Number(selection.price).toFixed(2)), shipping: Number(Number(shipping).toFixed(2)),
       status: "draft", publishStatus: "draft", notes: "", createdAt: now,
+      ...buildDraftContent(card),
     };
     try {
       await persistIds([...ids]);
