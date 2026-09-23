@@ -1,5 +1,10 @@
 # Selling: draft review and publish preparation
 
+For the current fixed-price publishing flow, see
+[checked eBay drafts](eBay-Checked-Drafts.md). It replaces the original hardcoded
+fixed-price sale terms described below with saved account policies and an explicit
+eBay check. The remainder of this page records the original PR #30 increment.
+
 This follows the seller home and bulk draft preparation in PR #29. A seller can
 now open **Review & publish** from an eBay draft, inspect front/back photos, edit
 the title, description, condition and prices, and save or publish from one place.

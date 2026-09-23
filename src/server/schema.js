@@ -4,6 +4,17 @@
  */
 export function createTables(db) {
   db.exec(`
+    CREATE TABLE IF NOT EXISTS ebay_listing_checks (
+      id TEXT PRIMARY KEY,
+      listing_id TEXT NOT NULL UNIQUE REFERENCES listings(id) ON DELETE CASCADE,
+      account_key TEXT NOT NULL,
+      fingerprint TEXT NOT NULL,
+      item_xml TEXT NOT NULL,
+      result_json TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      used_at INTEGER
+    );
+
     CREATE TABLE IF NOT EXISTS user_items (
       id TEXT PRIMARY KEY,
       parallel_id INTEGER REFERENCES parallels(id),

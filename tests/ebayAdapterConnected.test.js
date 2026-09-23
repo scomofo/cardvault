@@ -14,6 +14,7 @@ test("eBay adapter uses the live APIs when a connection exists", async (t) => {
   const database = await import("../src/server/database.js");
   const { EbayAdapter } = await import("../src/server/integrations/marketplaces/ebayAdapter.js");
   const { saveImageFile } = await import("../src/server/services/imageStore.js");
+  const { ebayListingChecks } = await import("../src/server/services/listings/ebayListingCheckService.js");
 
   const db = database.initDB();
   const adapter = new EbayAdapter();
@@ -21,10 +22,17 @@ test("eBay adapter uses the live APIs when a connection exists", async (t) => {
   const fetchCalls = [];
   const photoSuccess = () => new Response("<R><Ack>Success</Ack><FullURL>https://i.ebayimg.com/test.jpg</FullURL></R>");
   const handlers = { trading: null, inventory: null, offer: null, publish: null, orders: null, pictures: photoSuccess };
+  const policies = {
+    fulfillmentPolicies: [{ fulfillmentPolicyId: "1", name: "Free domestic", marketplaceId: "EBAY_CA", shippingOptions: [{ optionType: "DOMESTIC", costType: "FLAT_RATE", shippingServices: [{ shippingServiceCode: "CA_RegularParcel", freeShipping: true }] }] }],
+    paymentPolicies: [{ paymentPolicyId: "2", name: "Payment", marketplaceId: "EBAY_CA" }],
+    returnPolicies: [{ returnPolicyId: "3", name: "Returns", marketplaceId: "EBAY_CA" }],
+  };
 
   globalThis.fetch = async (url, options = {}) => {
     const target = String(url);
     fetchCalls.push({ url: target, options });
+    if (target.includes("/sell/account/v1/")) return Response.json(policies);
+    if (options.headers?.["X-EBAY-API-CALL-NAME"] === "VerifyAddFixedPriceItem") return new Response("<VerifyAddFixedPriceItemResponse><Ack>Success</Ack><ItemID>0</ItemID></VerifyAddFixedPriceItemResponse>");
     if (options.headers?.["X-EBAY-API-CALL-NAME"] === "UploadSiteHostedPictures") return handlers.pictures(target, options);
     if (target.includes("/ws/api.dll")) return handlers.trading(target, options);
     if (target.includes("/inventory_item/")) return handlers.inventory(target, options);
@@ -52,13 +60,20 @@ test("eBay adapter uses the live APIs when a connection exists", async (t) => {
   }
 
   saveImageFile("review-front", "data:image/png;base64,aGVsbG8=");
-  database.run("INSERT INTO user_items (id,name,condition,front_img_id) VALUES (?,?,?,?)", ["review-card", "Test card", "near_mint", "review-front"]);
+  saveImageFile("review-back", "data:image/png;base64,YmFjaw==");
+  database.run("INSERT INTO user_items (id,name,condition,front_img_id,back_img_id) VALUES (?,?,?,?,?)", ["review-card", "Test card", "near_mint", "review-front", "review-back"]);
   const reviewed = (values) => ({ card_id: "review-card", listing_description: "Reviewed card description", start_price: 10, shipping: 0, ...values });
+  async function checkedDraft(id) {
+    database.run("INSERT INTO listings (id,card_id,platform,format,status,listing_title,listing_description,start_price,shipping) VALUES (?,?,'ebay','fixed','draft',?,?,10,0)", [id, "review-card", "Fixed Card", "Reviewed card description"]);
+    const check = await ebayListingChecks.check(id);
+    return { listing: database.get("SELECT * FROM listings WHERE id=?", [id]), options: { checkId: check.id, confirmChecked: true, environment: check.environment } };
+  }
 
   try {
     assert.equal(adapter.isConnected(), true);
     assert.equal(adapter.getShippingProfile().shippingService, "CA_StandardInternationalFlat");
     assert.equal(adapter.getShippingProfile("US").shippingCost, 3.99);
+    await ebayListingChecks.saveSetup({ fulfillmentPolicyId: "1", paymentPolicyId: "2", returnPolicyId: "3", postalCode: "T5J0N3", sport: "Hockey", manufacturer: "Upper Deck" });
 
     await t.test("publish routes auctions through the Trading API", async () => {
       handlers.trading = tradingSuccess("111");
@@ -71,19 +86,23 @@ test("eBay adapter uses the live APIs when a connection exists", async (t) => {
 
     await t.test("fixed-price publish uses exactly one Trading call", async () => {
       handlers.trading = tradingSuccess("100");
+      const checked = await checkedDraft("fixed-1");
       const before = fetchCalls.length;
-      const result = await adapter.publish(reviewed({ id: "fixed-1", listing_title: "Fixed Card", start_price: 10 }), {});
+      const result = await adapter.publish(checked.listing, checked.options);
       assert.equal(result.externalListingId, "100");
-      assert.equal(fetchCalls.length, before + 2, "one photo upload and one listing create");
+      assert.equal(fetchCalls.length, before + 4, "three fresh policy reads and one listing create; photos already checked");
       assert.equal(fetchCalls.at(-1).options.headers["X-EBAY-API-CALL-NAME"], "AddFixedPriceItem");
+      assert.match(fetchCalls.at(-1).options.body, /<SellerProfiles>/);
+      assert.doesNotMatch(fetchCalls.at(-1).options.body, /CA_StandardInternationalFlat/);
       assert.ok(fetchCalls.at(-1).options.signal);
     });
 
     await t.test("an uncertain publish never falls back to another create call", async () => {
       handlers.trading = async () => { throw new Error("connection lost after submission"); };
+      const checked = await checkedDraft("fixed-2");
       const before = fetchCalls.length;
-      await assert.rejects(adapter.publish(reviewed({ id: "fixed-2", listing_title: "Retry Card" }), {}), /connection lost/);
-      assert.equal(fetchCalls.length, before + 2);
+      await assert.rejects(adapter.publish(checked.listing, checked.options), /connection lost/);
+      assert.equal(fetchCalls.length, before + 4);
     });
 
     await t.test("missing card/photos and failed picture upload never submit a listing", async () => {
@@ -91,7 +110,7 @@ test("eBay adapter uses the live APIs when a connection exists", async (t) => {
       await assert.rejects(adapter.publish(reviewed({ card_id: "missing", listing_title: "Missing" })), /linked card|front photo/);
       assert.equal(fetchCalls.length, before);
       handlers.pictures = () => new Response("<R><Ack>Failure</Ack><ShortMessage>Photo rejected</ShortMessage></R>");
-      await assert.rejects(adapter.publish(reviewed({ listing_title: "No upload" })), (error) => error.code === "EBAY_PREPARATION_FAILED");
+      await assert.rejects(adapter.publish(reviewed({ format: "auction", listing_title: "No upload" })), (error) => error.code === "EBAY_PREPARATION_FAILED");
       assert.equal(fetchCalls.length, before + 1);
       assert.equal(fetchCalls.at(-1).options.headers["X-EBAY-API-CALL-NAME"], "UploadSiteHostedPictures");
       handlers.pictures = photoSuccess;

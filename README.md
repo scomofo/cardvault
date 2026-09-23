@@ -139,10 +139,13 @@ The home screen separates draft review, confirmed live listings, and paid orders
 to pack and ship. It prioritizes paid orders and publication exceptions; every
 listing/order opens directly in Sales. **Review & publish** opens each eBay draft
 with an editable title, description, asking price, shipping and inspected condition.
-Add or replace front/back photos, review the sale terms, then save or publish.
-Missing photos and incomplete details are caught before submission. A failed photo
-upload keeps the listing a draft; uncertain listing-creation outcomes still require
-checking eBay before retrying.
+Add or replace front/back photos, then save your eBay Canada selling policies and
+ship-from postal code once. **Save & check with eBay** uploads both photos and
+checks the exact fixed-price listing without publishing it. Review the checked
+photos, policy names, prices and Sandbox/Production environment, then explicitly
+approve **Publish checked listing**. Edits, expired checks and changed account or
+policy details require another check. Uncertain listing-creation outcomes still
+require checking Seller Hub before recovering a draft for another attempt.
 Collection analytics and advanced automation remain under the expandable
 **Collection insights and advanced tools** section. Price estimates are still
 unverified, and batch draft creation never publishes to a marketplace.
@@ -183,4 +186,5 @@ handing the package to the carrier. Check eBay/carrier history before retrying a
 uncertain publish or label purchase. See [the safety notes](docs/Selling-Workflow-Safety.md)
 for state contracts, test coverage, and remaining work. The
 [draft review notes](docs/Selling-Draft-Review.md) cover the latest review flow and
-current eBay publishing limitations.
+current eBay publishing limitations. See [checked eBay publication](docs/eBay-Checked-Drafts.md)
+for setup, supported policies and the sandbox acceptance checklist.

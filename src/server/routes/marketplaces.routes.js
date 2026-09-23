@@ -151,12 +151,13 @@ export function registerMarketplaceRoutes(app) {
       if (!listingId || !marketplace) {
         return res.status(400).json({ error: "listingId and marketplace required" });
       }
-      res.json(await publishListingToMarketplace(listingId, marketplace, { connectionId, confirmNotPublished: req.body.confirmNotPublished === true }));
+      res.json(await publishListingToMarketplace(listingId, marketplace, { connectionId, confirmNotPublished: req.body.confirmNotPublished === true,
+        checkId: req.body.checkId, confirmChecked: req.body.confirmChecked === true, environment: req.body.environment }));
     } catch (error) {
       if (error.code === "HANDOFF_LOCKED") {
         return res.status(409).json({ error: error.message });
       }
-      res.status(500).json({ error: error.message });
+      res.status(error.status || 500).json({ error: error.message });
     }
   });
 

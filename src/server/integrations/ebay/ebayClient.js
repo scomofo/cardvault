@@ -13,8 +13,18 @@ const PROD_FULFILLMENT = "https://api.ebay.com/sell/fulfillment/v1";
  * @param {string} xmlBody
  * @returns {Promise<string>}
  */
-export async function tradingApiCall(callName, xmlBody) {
-  const token = await getAccessToken();
+export async function tradingApiCall(callName, xmlBody, { beforeSend, compatibilityLevel = "1155" } = {}) {
+  let token;
+  try { token = await getAccessToken(); }
+  catch (cause) {
+    if (!beforeSend) throw cause;
+    const error = new Error(`eBay authorization failed before submission. ${cause.message}`, { cause });
+    error.code = "EBAY_PREPARATION_FAILED";
+    throw error;
+  }
+  // No await between this guard and fetch: it also handles a disconnect while
+  // token refresh was pending, before credentials can be dereferenced.
+  beforeSend?.();
   const creds = getEbayCredentials();
   const url = creds.sandbox ? SANDBOX_TRADING : PROD_TRADING;
   const xml = `<?xml version="1.0" encoding="utf-8"?>
@@ -25,11 +35,12 @@ export async function tradingApiCall(callName, xmlBody) {
   const res = await fetch(url, {
     signal: AbortSignal.timeout(20_000),
     method: "POST",
+    redirect: "error",
     headers: {
       "Content-Type": "text/xml",
       "X-EBAY-API-CALL-NAME": callName,
       "X-EBAY-API-SITEID": "2", // eBay.ca — must match <Country>CA</Country><Currency>CAD</Currency>
-      "X-EBAY-API-COMPATIBILITY-LEVEL": "1155",
+      "X-EBAY-API-COMPATIBILITY-LEVEL": compatibilityLevel,
       "X-EBAY-API-IAF-TOKEN": token,
     },
     body: xml,
@@ -44,8 +55,11 @@ export async function tradingApiCall(callName, xmlBody) {
   const ack = text.match(/<Ack>(\w+)<\/Ack>/)?.[1];
   if (ack === "Failure") {
     const errMsg = text.match(/<ShortMessage>([^<]+)<\/ShortMessage>/)?.[1] || "Unknown error";
-    throw new Error("eBay " + callName + " failed: " + errMsg);
+    const error = new Error("eBay " + callName + " failed: " + errMsg);
+    if (["AddItem", "AddFixedPriceItem"].includes(callName) && !/<ItemID>[1-9]\d*<\/ItemID>/.test(text)) error.code = "EBAY_REJECTED";
+    throw error;
   }
+  if (["AddItem", "AddFixedPriceItem"].includes(callName) && !["Success", "Warning"].includes(ack)) throw new Error("eBay returned no successful publication acknowledgement; check Seller Hub before retrying.");
   return text;
 }
 
@@ -111,7 +125,7 @@ export async function getOrders({ limit = 200, offset = 0, filter = null } = {})
  * @param {string} [mime]
  * @returns {Promise<string|null>} hosted picture URL
  */
-export async function uploadSiteHostedPictures(imageBuffer, mime = "image/jpeg") {
+export async function uploadSiteHostedPictures(imageBuffer, mime = "image/jpeg", { beforeSend } = {}) {
   const token = await getAccessToken();
   const creds = getEbayCredentials();
   const url = creds.sandbox ? SANDBOX_TRADING : PROD_TRADING;
@@ -123,9 +137,11 @@ export async function uploadSiteHostedPictures(imageBuffer, mime = "image/jpeg")
   const form = new FormData();
   form.append("XML Payload", xml);
   form.append("image", new Blob([imageBuffer], { type: mime }), "card-image");
+  beforeSend?.();
   const res = await fetch(url, {
     signal: AbortSignal.timeout(20_000),
     method: "POST",
+    redirect: "error",
     headers: {
       "X-EBAY-API-CALL-NAME": "UploadSiteHostedPictures",
       "X-EBAY-API-SITEID": "2", // eBay.ca — must match <Country>CA</Country><Currency>CAD</Currency>
@@ -152,7 +168,7 @@ export async function uploadSiteHostedPictures(imageBuffer, mime = "image/jpeg")
 // failure rather than letting the caller record a listing with a null id.
 function requireItemId(callName, text) {
   const itemId = text.match(/<ItemID>(\d+)<\/ItemID>/)?.[1];
-  if (!itemId) throw new Error("eBay " + callName + " succeeded with no ItemID in the response");
+  if (!itemId || !/[1-9]/.test(itemId)) throw new Error("eBay " + callName + " succeeded with no valid ItemID in the response");
   return itemId;
 }
 
@@ -163,8 +179,8 @@ export async function addItem(itemXml) {
 }
 
 /** @returns {Promise<string>} eBay ItemID */
-export async function addFixedPriceItem(itemXml) {
-  const res = await tradingApiCall("AddFixedPriceItem", itemXml);
+export async function addFixedPriceItem(itemXml, options) {
+  const res = await tradingApiCall("AddFixedPriceItem", itemXml, options);
   return requireItemId("AddFixedPriceItem", res);
 }
 
