@@ -18,7 +18,7 @@ export default function ActiveListingCard({ listing: l, catalog, busyListingId, 
   const isStubPublish = isStubChannel(l, { marketplace: l.platform, listingId: l.id });
   const lifecycle = listingLifecycle(l);
   const [reviewOpen, setReviewOpen] = useState(false);
-  const supportsReview = l.platform === "ebay" && lifecycle === "draft";
+  const supportsReview = l.platform === "ebay" && l.format !== "auction" && lifecycle === "draft";
   useEffect(() => {
     if (highlighted && supportsReview) setReviewOpen(true);
     if (!supportsReview) setReviewOpen(false);

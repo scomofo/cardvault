@@ -155,8 +155,15 @@ test("eBay auth, client, and browse layers", async (t) => {
       stubResponse("<R><Ack>Success</Ack></R>", { status: 200 });
       await assert.rejects(
         () => client.addFixedPriceItem("<Title>x</Title>"),
-        /AddFixedPriceItem succeeded with no ItemID/,
+        /AddFixedPriceItem succeeded with no valid ItemID/,
       );
+      stubResponse("<R><Ack>Success</Ack><ItemID>0</ItemID></R>", { status: 200 });
+      await assert.rejects(() => client.addFixedPriceItem(""), /no valid ItemID/);
+      stubResponse("<R><ItemID>123</ItemID></R>", { status: 200 });
+      await assert.rejects(() => client.addFixedPriceItem(""), /no successful publication acknowledgement/);
+      const beforeGuard = calls.length;
+      await assert.rejects(() => client.addFixedPriceItem("", { beforeSend: () => { throw new Error("Changed before submission"); } }), /Changed before submission/);
+      assert.equal(calls.length, beforeGuard, "last-moment guard runs before any create request");
 
       stubResponse("<R><Ack>Success</Ack><ItemID>777</ItemID></R>", { status: 200 });
       assert.equal(await client.reviseItem("<ItemID>777</ItemID>"), "777");
@@ -167,7 +174,7 @@ test("eBay auth, client, and browse layers", async (t) => {
       assert.match(calls[0].options.body, /<ItemID>888<\/ItemID><EndingReason>NotAvailable<\/EndingReason>/);
 
       stubResponse("<R><Ack>Failure</Ack><ShortMessage>Bad title</ShortMessage></R>", { status: 200 });
-      await assert.rejects(() => client.tradingApiCall("AddItem", ""), /eBay AddItem failed: Bad title/);
+      await assert.rejects(() => client.tradingApiCall("AddItem", ""), (error) => error.code === "EBAY_REJECTED" && /Bad title/.test(error.message));
 
       // An HTTP-level failure (a 5xx gateway error page) has no <Ack> tag at
       // all, so it must not be treated as a silent success.

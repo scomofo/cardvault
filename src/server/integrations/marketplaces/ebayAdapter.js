@@ -5,6 +5,7 @@ import { getEbayStatus } from "../ebay/ebayAuth.js";
 import { addItem, addFixedPriceItem, reviseItem, endItem, getOrders, uploadSiteHostedPictures } from "../ebay/ebayClient.js";
 import { listingToTradingXml } from "../ebay/ebayMapper.js";
 import { assertEbayPublishReady } from "../../services/listings/draftReviewService.js";
+import { ebayListingChecks } from "../../services/listings/ebayListingCheckService.js";
 
 // Upload the item's stored front/back images to eBay Picture Services.
 // Never omit a reviewed photo. This phase runs before any listing-create call.
@@ -54,24 +55,24 @@ export class EbayAdapter extends MarketplaceAdapter {
    * @param {object} listing
    * @returns {Promise<object>}
    */
-  async publish(listing) {
+  async publish(listing, options = {}) {
     if (!this.isConnected()) return super.publish(listing);
     this.validatePublish(listing);
 
     const item = (listing.card_id
       && get(`SELECT * FROM user_items WHERE id = ?`, [listing.card_id])) || {};
-    const pictureUrls = await collectPictureUrls(item);
     const isAuction = listing.format === "auction";
     let externalId;
 
     if (isAuction) {
+      const pictureUrls = await collectPictureUrls(item);
       const xml = listingToTradingXml(listing, item, { pictureUrls });
       externalId = await addItem(xml);
     } else {
       // Use the existing Trading implementation directly. Retrying through a
       // different API after a timeout can create a second live listing.
-      const xml = listingToTradingXml(listing, item, { pictureUrls });
-      externalId = await addFixedPriceItem(xml);
+      const checked = await ebayListingChecks.authorize(listing.id, options);
+      externalId = await addFixedPriceItem(checked.xml, { beforeSend: checked.beforeSend, compatibilityLevel: "1475" });
     }
 
     return {

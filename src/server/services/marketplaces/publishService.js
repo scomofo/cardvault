@@ -370,12 +370,25 @@ export async function publishListingToMarketplace(listingId, marketplace, option
     if (liveEbay && !result?.externalListingId) throw new Error("eBay returned no confirmed listing ID");
   } catch (error) {
     if (liveEbay) {
-      const notSubmitted = error.code === "EBAY_PREPARATION_FAILED";
+      const notSubmitted = ["EBAY_PREPARATION_FAILED", "EBAY_REJECTED"].includes(error.code);
       const status = notSubmitted ? "draft" : "publish_unknown";
       const message = notSubmitted ? error.message : `${error.message}. Check eBay before retrying; the publish outcome may be unknown.`;
-      const channelId = upsertChannel({ listingId, marketplace, status, publishError: message, payload: {} });
-      addChannelEvent(channelId, "publish", status, { error: message });
-      run(`UPDATE listings SET publish_status = ?, publish_error = ? WHERE id = ?`, [status, message, listingId]);
+      runInImmediateTransaction(() => {
+        const currentListing = get("SELECT * FROM listings WHERE id=?", [listingId]);
+        const currentChannel = get("SELECT * FROM listing_channels WHERE listing_id=? AND marketplace=?", [listingId, marketplace]);
+        const confirmedId = [currentChannel?.external_listing_id, currentListing?.external_listing_id]
+          .some((id) => id && id !== `${marketplace}-${listingId.slice(0, 12)}`);
+        const terminal = ["sold", "ended"].includes(currentListing?.status) || ["sold", "ended"].includes(currentChannel?.status);
+        const otherEvidence = ["publish_unknown", "needs_review", "sold", "ended"].includes(currentListing?.publish_status)
+          || ["publish_unknown", "needs_review"].includes(currentChannel?.status);
+        if (!currentListing || confirmedId || terminal || otherEvidence) {
+          if (currentChannel) addChannelEvent(currentChannel.id, "publish", currentChannel.status, { error: message, preservedState: true });
+          return;
+        }
+        const channelId = upsertChannel({ listingId, marketplace, status, publishError: message, payload: {} });
+        addChannelEvent(channelId, "publish", status, { error: message });
+        run(`UPDATE listings SET publish_status = ?, publish_error = ? WHERE id = ?`, [status, message, listingId]);
+      });
     }
     throw error;
   }
@@ -393,6 +406,31 @@ export async function publishListingToMarketplace(listingId, marketplace, option
   refreshListingAggregateState(listingId, { syncedAt: result.syncedAt });
 
   return get(`SELECT * FROM listing_channels WHERE id = ?`, [channelId]);
+}
+
+// An explicit Seller Hub review returns uncertainty to an editable draft, not
+// directly to another create request. The next attempt needs a fresh eBay check.
+export function recoverEbayDraft(listingId, confirmed) {
+  const reject = (message, status = 409) => { const error = new Error(message); error.status = status; throw error; };
+  if (confirmed !== true) reject("Confirm in Seller Hub that this listing was not published.", 400);
+  return runInImmediateTransaction(() => {
+    const listing = get("SELECT * FROM listings WHERE id=?", [listingId]);
+    const channel = get("SELECT * FROM listing_channels WHERE listing_id=? AND marketplace='ebay'", [listingId]);
+    if (!listing) reject("Listing not found", 404);
+    if (listing.platform !== "ebay" || listing.format !== "fixed" || ["sold", "ended"].includes(listing.status)) reject("Only unfinished fixed-price eBay drafts can be recovered here.");
+    const item = get("SELECT * FROM user_items WHERE id=?", [listing.card_id]);
+    if (!item || item.status === "sold" || item.sale_status === "sold") reject("The linked card is missing or sold.");
+    if (!channel || !["publishing", "publish_unknown"].includes(channel.status)) reject("Refresh Sales; this listing is not awaiting publication recovery.");
+    const stub = `ebay-${listingId.slice(0, 12)}`;
+    if ([channel.external_listing_id, listing.external_listing_id].some((id) => id && id !== stub)) reject("A confirmed listing ID exists. Review that listing instead of creating another.");
+    const startedAt = channel.updated_at ? Date.parse(channel.updated_at.replace(" ", "T") + (channel.updated_at.endsWith("Z") ? "" : "Z")) : NaN;
+    if (channel.status === "publishing" && (!Number.isFinite(startedAt) || Date.now() - startedAt < 120_000)) reject("A publish attempt is still in progress. Wait and check Seller Hub before recovery.");
+    run("DELETE FROM ebay_listing_checks WHERE listing_id=?", [listingId]);
+    run("UPDATE listing_channels SET status='draft',external_listing_id=NULL,publish_error=NULL,updated_at=datetime('now') WHERE id=?", [channel.id]);
+    addChannelEvent(channel.id, "publication_review", "draft", { confirmedNotPublished: true });
+    run("UPDATE listings SET status='draft',publish_status='draft',external_listing_id=NULL,publish_error=NULL WHERE id=?", [listingId]);
+    return refreshListingAggregateState(listingId);
+  });
 }
 
 export async function reviseListingOnMarketplace(listingId, marketplace, overrides = {}) {

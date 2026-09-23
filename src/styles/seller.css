@@ -46,6 +46,17 @@
 .draft-photo-missing { display: flex; align-items: center; justify-content: center; color: var(--tx2); padding: 12px; font-size: .875rem; }
 .draft-photos label { display: block; font-size: .875rem; margin-top: 8px; }
 .draft-photos input { display: block; width: 100%; min-height: 44px; font-size: .875rem; margin-top: 6px; }
+.ebay-selling-setup, .ebay-check-result { min-width: 0; border: 1px solid var(--brd2); border-radius: var(--radius); padding: 16px; margin: 20px 0; }
+.ebay-selling-setup legend { padding: 0 6px; font-size: 1rem; }
+.ebay-selling-setup summary { cursor: pointer; padding: 12px 0; font-size: .875rem; }
+.ebay-selling-setup summary:focus-visible { outline: 2px solid var(--acc); outline-offset: 3px; }
+.ebay-check-result { background: var(--s1); }
+.ebay-check-result h4 { font-size: 1rem; margin: 16px 0 8px; }
+.ebay-checked-details { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(0, 3fr); gap: 10px 16px; font-size: .875rem; line-height: 1.6; }
+.ebay-checked-details dt { color: var(--tx2); }
+.ebay-checked-details dd { margin: 0; overflow-wrap: anywhere; }
+.ebay-checked-description { white-space: pre-wrap; }
+.ebay-check-result .seller-card-select { font-size: .875rem; line-height: 1.6; }
 @media (max-width: 620px) {
   .seller-stages { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .seller-prepare-row { grid-template-columns: minmax(0, 1fr) minmax(100px, 130px); }

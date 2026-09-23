@@ -19,6 +19,7 @@ import { registerSalesRoutes } from "./sales.routes.js";
 import { registerSettingsRoutes } from "./settings.routes.js";
 import { registerShippingProviderConnectionRoutes } from "./shippingProviderConnections.routes.js";
 import { registerEbayRoutes } from "./ebay.routes.js";
+import { registerEbayListingCheckRoutes } from "./ebayListingCheck.routes.js";
 
 export function registerRoutes(app) {
   registerItemRoutes(app);
@@ -42,4 +43,5 @@ export function registerRoutes(app) {
   registerReferenceRoutes(app);
   registerMigrationRoutes(app);
   registerEbayRoutes(app);
+  registerEbayListingCheckRoutes(app);
 }

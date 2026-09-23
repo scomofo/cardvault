@@ -91,11 +91,19 @@ export const imagesAPI = {
 export const listingsAPI = {
   saveReview: (id, data) => request(`/listings/${id}/review`, { method: "POST", body: data }),
   readiness: (id) => request(`/listings/${id}/ebay-readiness`),
+  checkEbay: (id) => request(`/listings/${encodeURIComponent(id)}/ebay-check`, { method: "POST", body: {}, timeoutMs: 90_000 }),
+  recoverEbay: (id) => request(`/listings/${encodeURIComponent(id)}/ebay-recover`, { method: "POST", body: { confirmNotPublished: true } }),
   list: (params) => request(`/listings${toQuery(params)}`),
   create: (data) => request("/listings", { method: "POST", body: data }),
   update: (id, data) =>
     request(`/listings/${id}`, { method: "PUT", body: data }),
   delete: (id) => request(`/listings/${id}`, { method: "DELETE" }),
+};
+
+export const ebaySellingAPI = {
+  setup: () => request("/ebay/selling-setup"),
+  policies: () => request("/ebay/selling-policies", { method: "POST", body: {}, timeoutMs: 60_000 }),
+  saveSetup: (config) => request("/ebay/selling-setup", { method: "PUT", body: { config } }),
 };
 
 export const decisionsAPI = {
@@ -193,7 +201,7 @@ export const marketplacesAPI = {
   connections: () => request("/marketplace-connections"),
   connect: (data) => request("/marketplace-connections", { method: "POST", body: data }),
   testConnection: (id, data = {}) => request(`/marketplace-connections/${id}/test`, { method: "POST", body: data }),
-  publish: (data) => request("/marketplaces/publish", { method: "POST", body: data }),
+  publish: (data) => request("/marketplaces/publish", { method: "POST", body: data, timeoutMs: data.checkId ? 90_000 : DEFAULT_TIMEOUT_MS }),
   revise: (data) => request("/marketplaces/revise", { method: "POST", body: data }),
   end: (data) => request("/marketplaces/end", { method: "POST", body: data }),
   crosspost: (data) => request("/marketplaces/crosspost", { method: "POST", body: data }),

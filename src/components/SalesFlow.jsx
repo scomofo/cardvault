@@ -425,6 +425,12 @@ export default function SalesFlow({ onNavigate, focus, onFocusConsumed }) {
     try {
       setBusyListingId(listingId);
       const draft = listings.find((entry) => entry.id === listingId);
+      if (marketplace === "ebay" && draft?.format !== "auction" && options.confirmNotPublished === true) {
+        const recovered = await listingsAPI.recoverEbay(listingId);
+        setListings((previous) => previous.map((entry) => entry.id === listingId ? recovered : entry));
+        toast.info("Returned to draft. Open Review & publish for a fresh eBay check.");
+        return;
+      }
       const card = catalog.find((entry) => entry.id === draft?.cardId);
       if (card) await itemsAPI.create(card);
       if (draft) await listingsAPI.create(draft);
