@@ -4,11 +4,14 @@ import { itemsAPI, listingsAPI } from "../lib/api";
 import { isDraftSaveRunning, subscribeDraftSave, listingPreparationIssue, proposedListingPrice, saveReviewedListingDrafts } from "../lib/sellerWorkflow";
 import { loadData, saveData, loadString, saveString } from "../lib/storage";
 import { CONDITIONS } from "../lib/constants";
-import { uid } from "../lib/utils";
+import { fmtShort, uid } from "../lib/utils";
 import { Spinner } from "./Icons";
+import { useFeeModels } from "../hooks/useFeeModels";
+import { estimateDraftOutcome } from "../lib/sellingEstimate";
 
 export default function DraftPreparation({ cards, onNavigate, onWorkStarted }) {
   const { catalog, listings, orders, setCatalog, setListings, useServer } = useData();
+  const { getFeeRate } = useFeeModels(useServer);
   const [restored] = useState(() => loadData("seller_preparation", {}));
   const [selected, setSelected] = useState(new Set(restored.selected || []));
   const [prices, setPrices] = useState(restored.prices || {});
@@ -28,6 +31,13 @@ export default function DraftPreparation({ cards, onNavigate, onWorkStarted }) {
   const selectedCards = cards.filter((card) => selected.has(card.id));
   const validCards = cards.filter((card) => !listingPreparationIssue(reviewedCard(card), priceFor(card)));
   const invalid = selectedCards.some((card) => listingPreparationIssue(reviewedCard(card), priceFor(card)));
+  const outcomeFor = (card) => estimateDraftOutcome({
+    price: priceFor(card), buyerShipping: shipping, feeRate: getFeeRate("ebay"), costBasis: card.costBasis || 0,
+  });
+  const selectedOutcomes = selectedCards.map(outcomeFor).filter(Boolean);
+  const selectedWithCost = selectedOutcomes.filter((outcome) => outcome.hasCostBasis).length;
+  const selectedProfit = selectedOutcomes.filter((outcome) => outcome.hasCostBasis)
+    .reduce((total, outcome) => total + outcome.profitBeforePostage, 0);
 
   useEffect(() => {
     mounted.current = true;
@@ -98,10 +108,16 @@ export default function DraftPreparation({ cards, onNavigate, onWorkStarted }) {
           {selected.size > 0 && <button className="btn btn-ghost" disabled={busy} onClick={() => edit(() => setSelected(new Set()))}>Clear selection</button>}
         </div>
         <p className="seller-note">Shipping starts at your last saved amount. Check it for this batch. Price estimates are unverified.</p>
+        {selectedWithCost > 0 && <div className="seller-profit-preview" role="status">
+          <strong>{fmtShort(selectedProfit)} estimated profit before postage</strong>
+          <span> across {selectedWithCost} selected card{selectedWithCost === 1 ? "" : "s"} with acquisition costs</span>
+          {selectedWithCost < selectedOutcomes.length && <span> · {selectedOutcomes.length - selectedWithCost} missing acquisition cost</span>}
+        </div>}
         <div className="seller-card-list">
           {cards.map((card) => {
             const issue = listingPreparationIssue(reviewedCard(card), priceFor(card));
             const failure = result?.failed.find((entry) => entry.cardId === card.id);
+            const outcome = outcomeFor(card);
             return <div className="seller-prepare-row" key={card.id}>
               <label className="seller-card-select">
                 <input type="checkbox" checked={selected.has(card.id)} disabled={busy} onChange={(event) => edit(() => setSelected((previous) => {
@@ -121,6 +137,9 @@ export default function DraftPreparation({ cards, onNavigate, onWorkStarted }) {
                 </select>
               </label>
               <button className="btn btn-ghost" disabled={busy} onClick={() => onNavigate({ view: "cards", focus: { type: "card", id: card.id } })}>Review card</button>
+              {outcome && <div className={`seller-row-profit ${outcome.hasCostBasis && outcome.profitBeforePostage < 0 ? "is-loss" : ""}`}>
+                {outcome.hasCostBasis ? `${fmtShort(outcome.profitBeforePostage)} profit` : `${fmtShort(outcome.proceedsBeforePostage)} proceeds`} before postage
+              </div>}
               {(issue || failure) && <div className="seller-row-issue">{issue || failure.error}</div>}
             </div>;
           })}
