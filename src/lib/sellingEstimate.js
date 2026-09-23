@@ -6,3 +6,15 @@ export function estimateSellingProceeds({ price, feeRate, shippingCost = 0, buye
   const gross = Number(price) + amounts[2];
   return Math.round((gross - gross * amounts[0] - amounts[1] - amounts[3]) * 100) / 100;
 }
+
+/** A draft preview that stays honest about the postage cost not yet being known. */
+export function estimateDraftOutcome({ price, buyerShipping = 0, feeRate, costBasis = 0 }) {
+  const proceedsBeforePostage = estimateSellingProceeds({ price, feeRate, buyerShipping });
+  const acquisitionCost = Number(costBasis);
+  if (proceedsBeforePostage === null || !Number.isFinite(acquisitionCost) || acquisitionCost < 0) return null;
+  return {
+    proceedsBeforePostage,
+    profitBeforePostage: Math.round((proceedsBeforePostage - acquisitionCost) * 100) / 100,
+    hasCostBasis: acquisitionCost > 0,
+  };
+}

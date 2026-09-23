@@ -29,6 +29,9 @@
 .seller-card-select strong { display: block; font-size: 1rem; overflow-wrap: anywhere; }
 .seller-prepare-row > .btn { justify-self: end; }
 .seller-row-issue { grid-column: 1 / -1; color: var(--orange); font-size: .875rem; }
+.seller-profit-preview { margin: 12px 0; padding: 10px 12px; border: 1px solid var(--grn-brd); border-radius: var(--radius); color: var(--grn); background: var(--grn-bg); }
+.seller-row-profit { grid-column: 1 / -1; font-size: .75rem; color: var(--grn); font-weight: 600; }
+.seller-row-profit.is-loss { color: var(--red); }
 .seller-save-bar { display: grid; gap: 12px; padding-top: 20px; border-top: 1px solid var(--brd2); margin-top: 8px; }
 .seller-save-bar > .btn { justify-self: start; }
 .seller-result { background: var(--acc-bg); padding: 14px; border-radius: var(--radius); font-size: 1rem; line-height: 1.5; margin: 12px 0; }

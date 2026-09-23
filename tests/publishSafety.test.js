@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildManualSaleFulfillment } from "../src/lib/salesViewState.js";
-import { estimateSellingProceeds } from "../src/lib/sellingEstimate.js";
+import { estimateDraftOutcome, estimateSellingProceeds } from "../src/lib/sellingEstimate.js";
 import { listingLifecycle } from "../src/lib/scanPublish.js";
 import { reconcileSyncResult } from "../src/server/services/marketplaces/syncReconciler.js";
 
@@ -14,6 +14,20 @@ test("proceeds use the supplied fee/shipping assumptions and preserve losses and
   for (const price of [null, "", 0, -1, NaN, Infinity]) assert.equal(estimateSellingProceeds({ price, feeRate: 0.1 }), null);
   assert.equal(estimateSellingProceeds({ price: 10, feeRate: 2 }), null);
   assert.equal(estimateSellingProceeds({ price: 10, feeRate: 0.1, shippingCost: -1 }), null);
+});
+
+test("draft outcome separates profit from proceeds and leaves postage explicit", () => {
+  assert.deepEqual(estimateDraftOutcome({ price: 100, buyerShipping: 10, feeRate: 0.1, costBasis: 40 }), {
+    proceedsBeforePostage: 99,
+    profitBeforePostage: 59,
+    hasCostBasis: true,
+  });
+  assert.deepEqual(estimateDraftOutcome({ price: 10, feeRate: 0.1 }), {
+    proceedsBeforePostage: 9,
+    profitBeforePostage: 9,
+    hasCostBasis: false,
+  });
+  assert.equal(estimateDraftOutcome({ price: 10, feeRate: 0.1, costBasis: -1 }), null);
 });
 
 test("a local active flag is not proof of a live marketplace listing", () => {
