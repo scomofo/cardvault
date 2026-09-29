@@ -7,7 +7,7 @@ import { CONDITIONS, TYPES } from "../lib/constants";
 import { classifyListingViability } from "../lib/listingViability";
 import { uid, fmtShort } from "../lib/utils";
 import { aiRecognize, aiPrice } from "../lib/ai";
-import { saveImage, saveData, loadData, loadBatchSession, saveBatchSession } from "../lib/storage";
+import { saveImage, saveData, loadData, loadBatchSession, saveBatchSession, compressImage } from "../lib/storage";
 import { useFeeModels } from "../hooks/useFeeModels";
 import { estimateSellingProceeds } from "../lib/sellingEstimate";
 import { computeDHash } from "../lib/phash";
@@ -47,6 +47,7 @@ export default function BatchView() {
   const [progress, setProgress] = useState(null);
   const [dragging, setDragging] = useState(false);
   const [presets, setPresets] = useState([]);
+  const [focusedIdx, setFocusedIdx] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -94,6 +95,29 @@ export default function BatchView() {
     }
   };
 
+  // Keyboard shortcuts: j/k navigate, a approve (remove from queue → save), d delete, p price
+  useEffect(() => {
+    function onKey(e) {
+      const tag = document.activeElement?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (queue.length === 0) return;
+      if (e.key === "j" || e.key === "ArrowDown") {
+        e.preventDefault();
+        setFocusedIdx((i) => Math.min(i + 1, queue.length - 1));
+      } else if (e.key === "k" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setFocusedIdx((i) => Math.max(i - 1, 0));
+      } else if (e.key === "d" || e.key === "Delete") {
+        e.preventDefault();
+        const item = queue[focusedIdx];
+        if (item) setQueue((p) => p.filter((x) => x.id !== item.id));
+        setFocusedIdx((i) => Math.max(0, i - 1));
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [queue, focusedIdx]);
+
   const handleDrop = useCallback(async (e) => {
     e.preventDefault(); setDragging(false);
     const files = [...(e.dataTransfer?.files || [])].filter((f) => f.type.startsWith("image/"));
@@ -104,7 +128,7 @@ export default function BatchView() {
         const r = new FileReader(); r.onload = (ev) => resolve(ev.target.result); r.onerror = () => resolve(null); r.readAsDataURL(file);
       });
       if (!dataUrl) { toast.error(`Could not read ${file.name}; it was not added.`); continue; }
-      newItems.push({ id: uid(), frontImg: dataUrl, backImg: null, name: "", set: "", year: "", number: "", condition: cond, type, costBasis: "", priceEstimate: null, priceHistory: null });
+      newItems.push({ id: uid(), frontImg: dataUrl, backImg: null, name: "", set: "", year: "", number: "", condition: cond, type, costBasis: "", priceEstimate: null, priceHistory: null, confidence: null });
     }
     const nextQueue = [...queueRef.current, ...newItems];
     try { await persistIntake(nextQueue); }
@@ -117,7 +141,7 @@ export default function BatchView() {
     for (let i = 0; i < newItems.length; i++) {
       setProgress({ current: i + 1, total: newItems.length, action: "Identifying" });
       const r = await aiRecognize(newItems[i].frontImg);
-      if (r?.name) { setQueue((p) => p.map((x) => (x.id === newItems[i].id ? { ...x, ...r } : x))); identified++; }
+      if (r?.name) { setQueue((p) => p.map((x) => (x.id === newItems[i].id ? { ...x, ...r, confidence: r.confidence || null } : x))); identified++; }
     }
     setProgress(null); setProcessing(false);
     if (identified > 0) toast.success(`Identified ${identified}/${newItems.length} cards`);
@@ -134,7 +158,7 @@ export default function BatchView() {
     for (let i = 0; i < items.length; i++) {
       setProgress({ current: i + 1, total: items.length, action: "Identifying" });
       const r = await aiRecognize(items[i].frontImg);
-      if (r?.name) { updateItem(items[i].id, r); identified++; }
+      if (r?.name) { updateItem(items[i].id, { ...r, confidence: r.confidence || null }); identified++; }
     }
     setProgress(null); toast.success(`Identified ${identified} cards`); setProcessing(false);
   };
@@ -170,11 +194,26 @@ export default function BatchView() {
   const saveAll = async () => {
     if (savingRef.current || processing || !restored) return;
     if (!CONDITIONS.some((entry) => entry.v === cond)) { toast.error("Choose the condition you inspected for this batch"); return; }
-    const named = queueRef.current.filter((item) => item.name?.trim()).map((item) => ({ ...item, status: "approved" }));
+    let named = queueRef.current.filter((item) => item.name?.trim()).map((item) => ({ ...item, status: "approved" }));
     if (!named.length) return;
     const floor = Number(minPrice) || 0;
     const belowFloor = named.filter((item) => Number(item.priceEstimate?.mid) > 0 && Number(item.priceEstimate.mid) < floor);
     if (belowFloor.length && !window.confirm(`${belowFloor.length} cards are below ${fmtShort(floor)}. Save as inventory anyway?`)) return;
+    // Skip items classified not worth listing, with confirmation (Epic 4).
+    const notWorth = named.filter((item) => {
+      const mid = parseFloat(item.priceEstimate?.mid) || 0;
+      return classifyListingViability({ mid, net: calcNet(mid), floor: minPrice }) === "not_worth_listing";
+    });
+    if (notWorth.length > 0) {
+      if (!window.confirm(`${notWorth.length} item(s) are not worth listing and will be skipped. Save the rest?`)) {
+        return;
+      }
+      named = named.filter((item) => {
+        const mid = parseFloat(item.priceEstimate?.mid) || 0;
+        return classifyListingViability({ mid, net: calcNet(mid), floor: minPrice }) !== "not_worth_listing";
+      });
+      if (!named.length) return;
+    }
     savingRef.current = true;
     setProcessing(true);
     const entries = new Map();
@@ -188,8 +227,9 @@ export default function BatchView() {
           const backImgId = item.backImg ? `img_${id}_back` : null;
           for (const [imageId, image] of [[frontImgId, item.frontImg], [backImgId, item.backImg]]) {
             if (!imageId) continue;
-            await saveImage(imageId, image);
-            if (useServer) await imagesAPI.upload(imageId, image);
+            const compressed = await compressImage(image);
+            await saveImage(imageId, compressed);
+            if (useServer) await imagesAPI.upload(imageId, compressed);
           }
           let entry = {
             id, name: item.name, set: item.set, cardSet: item.set, year: item.year,
@@ -295,6 +335,7 @@ export default function BatchView() {
             <span className="text-sm text-dim">
               Est. proceeds (priced cards only): <strong className="gold">{fmtShort(totalNet)}</strong>
             </span>
+            <div className="text-xxs text-dim mt-2">j/k navigate · d delete</div>
             {progress && (
               <div className="flex items-center gap-6 mt-4">
                 <Spinner size={12} />
@@ -316,8 +357,15 @@ export default function BatchView() {
         const belowFloor = floor > 0 && mid > 0 && mid < floor;
         const viability = classifyListingViability({ mid, net, floor });
         const viabilityLabel = VIABILITY_LABELS[viability];
+        const isFocused = idx === focusedIdx;
+        const confColor = { high: "var(--grn)", medium: "var(--orange)", low: "var(--red)" }[item.confidence] || "var(--dim)";
         return (
-          <div key={item.id} className="card fade mb-10" style={{ padding: 14, animationDelay: `${idx * .04}s` }}>
+          <div
+            key={item.id}
+            className="card fade mb-10"
+            onClick={() => setFocusedIdx(idx)}
+            style={{ padding: 14, animationDelay: `${idx * .04}s`, outline: isFocused ? "1px solid var(--acc-brd)" : "none" }}
+          >
             <div className="flex gap-8 mb-8">
               <Camera side="front" image={item.frontImg} onCapture={(img) => updateItem(item.id, { frontImg: img })} onRetake={() => updateItem(item.id, { frontImg: null })} compact />
               <Camera side="back" image={item.backImg} onCapture={(img) => updateItem(item.id, { backImg: img })} onRetake={() => updateItem(item.id, { backImg: null })} compact />
@@ -337,10 +385,11 @@ export default function BatchView() {
                   proceeds {fmtShort(net)}
                 </span>
               )}
-              {belowFloor && (
-                <span className="text-xs fw-700" style={{ color: "var(--red)" }}>
-                  below floor
-                </span>
+              {item.confidence && (
+                <span className="text-xs fw-700" style={{ color: confColor }}>{item.confidence}</span>
+              )}
+              {belowFloor && !viabilityLabel && (
+                <span className="text-xs fw-700" style={{ color: "var(--red)" }}>below floor</span>
               )}
               {viabilityLabel && (
                 <span className="text-xs fw-700" style={{ color: viabilityLabel.color }}>
@@ -356,7 +405,7 @@ export default function BatchView() {
 
       <button className="btn btn-primary btn-full btn-lg" disabled={processing || !restored} onClick={() => setQueue((p) => [...p, {
         id: uid(), frontImg: null, backImg: null, name: "", set: "", year: "", number: "",
-        condition: cond, type, costBasis: "", priceEstimate: null, priceHistory: null,
+        condition: cond, type, costBasis: "", priceEstimate: null, priceHistory: null, confidence: null,
       }])}><IconPlus size={14} /> Add Manual Card</button>
     </div>
   );

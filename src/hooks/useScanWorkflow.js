@@ -15,7 +15,7 @@ import {
 import { findLikelyDuplicate } from "../lib/duplicateDetection";
 import { catalogCardToItemPatch, describeCatalogCard } from "../lib/identificationDisplay";
 import { computeDHash } from "../lib/phash";
-import { loadData, saveData, saveImage } from "../lib/storage";
+import { loadData, saveData, saveImage, compressImage } from "../lib/storage";
 import { condOf, fmtShort, uid } from "../lib/utils";
 import { useBatchWorkflow } from "./useBatchWorkflow";
 
@@ -98,6 +98,7 @@ export function useScanWorkflow() {
   const [visualSearching, setVisualSearching] = useState(false);
   const [visualSearchResult, setVisualSearchResult] = useState(null);
   const [identificationResult, setIdentificationResult] = useState(null);
+  const [matchConfidence, setMatchConfidence] = useState(null);
 
   useEffect(() => { checkCvHealth().then(setCvOnline); }, []);
   useEffect(() => {
@@ -211,6 +212,7 @@ export function useScanWorkflow() {
       if (response.results?.length > 0) setResults(response.results);
       if (response.priceEstimate) setPriceEst({ ...response.priceEstimate, evidence: "ai_estimate_unverified", results: response.results || [] });
       if (response.priceHistory?.length > 0) setPriceHistory(response.priceHistory);
+      setMatchConfidence(response.confidence || null);
       setStatus(`✓ ${response.name} - ${response.results?.length || 0} source results; AI estimate, verify before listing (${response.confidence})`);
       setStep(1);
     } else {
@@ -252,8 +254,9 @@ export function useScanWorkflow() {
         type: response.type || previous.type,
       }));
       setSearchQ([response.name, response.set, response.number && `#${response.number}`].filter(Boolean).join(" "));
+      setMatchConfidence(response.confidence || null);
       setStatus(`✓ ${response.name} (${response.confidence})`);
-    } else { setStatus("Couldn't ID - enter manually"); toast.error("Card recognition failed"); }
+    } else { setMatchConfidence(null); setStatus("Couldn't ID - enter manually"); toast.error("Card recognition failed"); }
     setRecognizing(false);
   }
 
@@ -267,8 +270,9 @@ export function useScanWorkflow() {
       let frontImgId = null, backImgId = null, frontImgPhash = null;
       if (frontImg) {
         frontImgId = `img_${id}_front`;
-        await saveImage(frontImgId, frontImg);
-        if (useServer) await imagesAPI.upload(frontImgId, frontImg);
+        const compressedFront = await compressImage(frontImg);
+        await saveImage(frontImgId, compressedFront);
+        if (useServer) await imagesAPI.upload(frontImgId, compressedFront);
         frontImgPhash = await computeDHash(frontImg);
         if (frontImgPhash && !duplicateWarning) {
           const duplicate = findLikelyDuplicate(catalog, frontImgPhash);
@@ -277,8 +281,9 @@ export function useScanWorkflow() {
       }
       if (backImg) {
         backImgId = `img_${id}_back`;
-        await saveImage(backImgId, backImg);
-        if (useServer) await imagesAPI.upload(backImgId, backImg);
+        const compressedBack = await compressImage(backImg);
+        await saveImage(backImgId, compressedBack);
+        if (useServer) await imagesAPI.upload(backImgId, compressedBack);
       }
       let entry = buildSavedCard({ id, card, frontImgId, backImgId, frontImgPhash, gradingData, cvResult, priceEst, priceHistory });
       if (useServer) entry = { ...entry, ...await itemsAPI.create(entry) };
@@ -325,6 +330,7 @@ export function useScanWorkflow() {
     setPriceHistory([]); setListing({ ...EMPTY_LISTING }); setStatus("");
     setShowGrading(false); setGradingData(null); setCvResult(null); setCvAnalyzing(false);
     setVisualSearching(false); setVisualSearchResult(null); setIdentificationResult(null); setDuplicateWarning(null);
+    setMatchConfidence(null);
     scanItemRef.current = null;
     listingDraftRef.current = null;
   }
@@ -413,6 +419,7 @@ export function useScanWorkflow() {
       gradingData, listing, priceEst, priceHistory, publishing, publishTarget,
       recognizing, results, saving, searchQ, searching, showCvOverlay,
       showGrading, status, step, visualSearching, identificationResult,
+      matchConfidence,
     },
   };
 }

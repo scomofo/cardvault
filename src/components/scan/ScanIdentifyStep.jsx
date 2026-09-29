@@ -32,6 +32,12 @@ const SEARCH_LINKS = [
   },
 ];
 
+const CONFIDENCE_STYLE = {
+  high:   { cls: "badge-grn",    label: "High confidence" },
+  medium: { cls: "badge-acc",    label: "Medium confidence — verify match" },
+  low:    { cls: "badge-red",    label: "Low confidence — review required" },
+};
+
 export default function ScanIdentifyStep({
   backImg,
   cvResult,
@@ -49,8 +55,10 @@ export default function ScanIdentifyStep({
   searching,
   showCvOverlay,
   status,
+  matchConfidence = null,
 }) {
   const busy = searching || recognizing;
+  const confStyle = matchConfidence ? CONFIDENCE_STYLE[matchConfidence] : null;
 
   return (
     <section className="slide-up">
@@ -60,13 +68,23 @@ export default function ScanIdentifyStep({
         </h2>
 
         {status && (
-          <div className="badge mb-8" style={{ display: "inline-flex" }}>
-            {busy && <Spinner size={12} />}
-            <span
-              className={busy ? "badge-acc" : results.length ? "badge-grn" : "badge-red"}
-            >
-              {status}
-            </span>
+          <div className="flex items-center gap-6 flex-wrap mb-8">
+            <div className="badge" style={{ display: "inline-flex" }}>
+              {busy && <Spinner size={12} />}
+              <span className={busy ? "badge-acc" : results.length ? "badge-grn" : "badge-red"}>
+                {status}
+              </span>
+            </div>
+            {confStyle && (
+              <span className={`badge ${confStyle.cls}`} style={{ fontSize: 10 }}>
+                {confStyle.label}
+              </span>
+            )}
+          </div>
+        )}
+        {matchConfidence === "low" && !busy && (
+          <div className="glass mb-8" style={{ padding: "8px 12px", borderColor: "var(--red-brd)", borderRadius: "var(--radius)", fontSize: 12 }}>
+            <span style={{ color: "var(--red)" }}>Low confidence match — search manually or re-capture before listing.</span>
           </div>
         )}
 
@@ -213,8 +231,11 @@ export default function ScanIdentifyStep({
         )}
       </div>
 
-      <button className="btn btn-primary btn-lg btn-full" onClick={onContinue}>
-        Continue <IconChevron size={14} />
+      <button
+        className={`btn btn-lg btn-full ${matchConfidence === "low" ? "btn-outline" : "btn-primary"}`}
+        onClick={onContinue}
+      >
+        {matchConfidence === "low" ? "Continue anyway" : "Continue"} <IconChevron size={14} />
       </button>
     </section>
   );

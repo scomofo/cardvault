@@ -125,6 +125,7 @@ export default function ScanView({ onNavigate, pendingImage, onPendingImageConsu
     batchQueue,
     batchProcessing,
     batchProcessedCount,
+    matchConfidence,
   } = state;
 
   const steps = ["Capture", "Identify", "Details", "List"];
@@ -238,6 +239,7 @@ export default function ScanView({ onNavigate, pendingImage, onPendingImageConsu
           searching={searching}
           showCvOverlay={showCvOverlay}
           status={status}
+          matchConfidence={matchConfidence}
         />
       )}
 
@@ -270,6 +272,7 @@ export default function ScanView({ onNavigate, pendingImage, onPendingImageConsu
       {step === 3 && (
         <ScanListingStep
           listing={listing}
+          card={card}
           onCopy={actions.copyListing}
           onListingChange={(key, value) =>
             setListing((previous) => ({ ...previous, [key]: value }))
