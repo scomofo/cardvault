@@ -68,6 +68,22 @@ test("legacy migration retains ready, failed and unresolved scans with stable in
   assert.equal(migrateDraftSession(result).entries.length, 3);
   assert.throws(() => migrateDraftSession(null, [{ front: "missing id" }]), /missing its ID/);
 });
+test("draft saves persist concurrently while callbacks stay ordered", async () => {
+  const entries = ["a", "b", "c"].map((id) => ready(id));
+  let inFlight = 0, maxInFlight = 0;
+  const savedOrder = [];
+  const result = await saveDraftSelection({ entries, batchId: "batch", feeRate: .1,
+    persist: async () => {
+      inFlight += 1; maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      inFlight -= 1; return {};
+    },
+    onSaved: (entry) => { savedOrder.push(entry.id); }, onError: () => {},
+  });
+  assert.ok(maxInFlight > 1, `expected overlapping persists, saw max ${maxInFlight}`);
+  assert.deepEqual(savedOrder, ["a", "b", "c"]);
+  assert.deepEqual(result.savedIds, ["a", "b", "c"]);
+});
 test("mixed batch saves only selected ready entries and retains partial failures", async () => {
   let entries = [ready("ok"), ready("fail"), { ...ready("unselected"), selected: false }, { ...ready("review"), identityConfirmed: false }, { ...ready("lot"), disposition: "lot" }];
   const seen = [];

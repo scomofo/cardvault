@@ -25,7 +25,7 @@ export default function BatchSellView({ onNavigate }) {
 
   return <section className="batch-sell fade" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); if (!disabled) importFiles(event.dataTransfer.files); }}>
     <header className="batch-heading"><div><h1>Sell a batch</h1><p>Photos or inventory → reviewed drafts → check and explicitly approve publication.</p></div><span className="badge badge-dim">{actions.data.useServer ? "Server connected" : "Offline / local drafts"}</span></header>
-    <p className="batch-status" role="status">{actions.busy || (actions.saving ? "Saving your changes…" : "Batch saved on this browser and device")}</p>
+    <p className="batch-status" role="status">{actions.identifyProgress ? `Identifying ${actions.identifyProgress.done} of ${actions.identifyProgress.total}…` : (actions.busy || (actions.saving ? "Saving your changes…" : "Batch saved on this browser and device"))}</p>
     {actions.error && <div className="card batch-error" role="alert">{actions.error}<button className="btn btn-outline" onClick={actions.reload}>Reload saved batch</button></div>}
     {!actions.data.useServer && <p className="batch-warning">Drafts stay on this device until server sync. Reconnect and check the latest inventory before live publication.</p>}
     {capture ? <BatchCaptureMode queue={entries.filter((entry) => entry.stage !== "saved")} onAddToQueue={actions.capture} onDone={() => setCapture(false)} onCancel={() => setCapture(false)} /> : <>

@@ -18,7 +18,6 @@ import { automateIdentificationAndPricing } from "../services/automation/identif
 import { refreshPricingForAllOwned } from "../services/pricing/batchRefresh.js";
 import { automateListingGeneration } from "../services/automation/listingGenerationAutomation.js";
 import { runMarketTrendAutomation } from "../services/automation/marketTrendAutomation.js";
-import { addItemToBatch, createIntakeBatch, finalizeIntakeBatch, processBatchItem } from "../services/automation/scanIntakeBulkAutomation.js";
 import { automateShipment } from "../services/automation/shippingAutomation.js";
 import { uid } from "./shared.js";
 
@@ -472,42 +471,6 @@ export function registerAutomationRoutes(app) {
   app.get("/api/automation/cashflow", (_req, res) => {
     try {
       res.json(runCashflowInventoryAutomation());
-    } catch (error) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.post("/api/automation/intake/batches", requireJsonBody, (req, res) => {
-    try {
-      res.status(201).json(createIntakeBatch(req.body));
-    } catch (error) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.post("/api/automation/intake/batches/:batchId/items", requireJsonBody, (req, res) => {
-    try {
-      if (!req.params.batchId) return res.status(400).json({ error: "batchId required" });
-      if (!req.body.itemId) return res.status(400).json({ error: "itemId required" });
-      res.status(201).json(addItemToBatch(req.params.batchId, req.body));
-    } catch (error) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.post("/api/automation/intake/batch-items/:batchItemId/process", requireJsonBody, async (req, res) => {
-    try {
-      if (!req.params.batchItemId) return res.status(400).json({ error: "batchItemId required" });
-      res.json(await processBatchItem(req.params.batchItemId, req.body));
-    } catch (error) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.post("/api/automation/intake/batches/:batchId/finalize", requireJsonBody, (req, res) => {
-    try {
-      if (!req.params.batchId) return res.status(400).json({ error: "batchId required" });
-      res.json(finalizeIntakeBatch(req.params.batchId, req.body));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

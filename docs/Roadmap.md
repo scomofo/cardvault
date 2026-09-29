@@ -11,7 +11,7 @@ Status values:
 
 | Feature | Status | Module |
 |---|---|---|
-| Bulk scan intake | implemented | `services/automation/scanIntakeBulkAutomation.js` |
+| Bulk scan intake | implemented | `components/BatchSellView.jsx` + `hooks/useBatchDraft.js` |
 | Auto identification | implemented | `services/identification/identificationService.js` |
 | Auto pricing | implemented | `services/automation/identificationPricingAutomation.js` |
 | Bulk listing generator | implemented | `services/automation/listingGenerationAutomation.js` |

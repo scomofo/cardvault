@@ -9,30 +9,36 @@ This document is for contributors adding new workflow steps, integrations, or au
 ```
 [scan capture] → [identification] → [CV centering] → [sub-grading]
       ↓                                                    ↓
-  intake batch                                       projected_grade
+  selling batch                                      projected_grade
                                                     vault_status
                                                           ↓
                                     [pricing] → [decision engine] → [listing] → [shipping]
 ```
 
-## 1. Scan capture → intake batch
+## 1. Scan capture → selling batch
 
-**Producer:** `useScanWorkflow` (client), `POST /api/automation/intake/batches/:batchId/items`.
-**Consumer:** `scanIntakeBulkAutomation.addItemToBatch`.
+**Producer:** `BatchCaptureMode` (client) → `useBatchDraft().capture`, which runs `addCapture`.
+**Consumer:** the `selling` session in `batchDraftStore` (localStorage), with photos in IndexedDB.
 
-Payload:
+Payload per entry:
 ```
 {
+  id:         string,  // uuid for the draft entry
   itemId:     string,  // uuid for the prospective user_item row
-  captureId:  string,  // uuid tying front/back images together
-  frontImgId: string,  // references `images` table
-  backImgId:  string   // optional; back photo may come later
+  frontImgId: string,  // `img_<itemId>_front` in IndexedDB (downscaled JPEG)
+  backImgId:  string,  // optional; back photo may come later
+  source:     "photo",
+  stage:      ...,      // draft lifecycle in `batchDraft.js`
 }
 ```
 
 Invariants:
-- `itemId` must be unique per batch — duplicates are rejected by `detectDuplicateInventory`.
-- Images must be uploaded before the batch item is created (they're referenced by id, not embedded).
+- Photos are downscaled via `prepareImageForAi` and stored in IndexedDB before the entry is appended; the session holds lightweight metadata only.
+- Identification runs later, per entry, via `aiVisualSearch` (client → `POST /api/ai`), and writes back through `applyDraftIdentification`.
+
+(Retired 2026-09-29: the server-side `/api/automation/intake/*` batch automation and its
+`intake_batches` tables were unreachable from any UI and have been removed. The tables remain
+in the schema for existing databases.)
 
 ## 2. Identification
 

@@ -191,14 +191,6 @@ export const automationAPI = {
   bundles: () => request("/automation/bundles"),
   grading: (params) => request(`/automation/grading${toQuery(params)}`),
   cashflow: () => request("/automation/cashflow"),
-  createIntakeBatch: (data) =>
-    request("/automation/intake/batches", { method: "POST", body: data }),
-  addItemToBatch: (batchId, data) =>
-    request(`/automation/intake/batches/${batchId}/items`, { method: "POST", body: data }),
-  processBatchItem: (batchItemId, data) =>
-    request(`/automation/intake/batch-items/${batchItemId}/process`, { method: "POST", body: data }),
-  finalizeIntakeBatch: (batchId, data) =>
-    request(`/automation/intake/batches/${batchId}/finalize`, { method: "POST", body: data }),
 };
 
 export const marketplacesAPI = {

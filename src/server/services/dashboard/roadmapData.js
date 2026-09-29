@@ -5,7 +5,7 @@
  */
 export const ROADMAP = {
   tier1: [
-    { name: "Bulk scan intake", status: "implemented", module: "services/automation/scanIntakeBulkAutomation.js" },
+    { name: "Bulk scan intake", status: "implemented", module: "components/BatchSellView.jsx + hooks/useBatchDraft.js" },
     { name: "Auto identification", status: "implemented", module: "services/identification/identificationService.js" },
     { name: "Auto pricing", status: "implemented", module: "services/automation/identificationPricingAutomation.js" },
     { name: "Bulk listing generator", status: "implemented", module: "services/automation/listingGenerationAutomation.js" },
