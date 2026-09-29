@@ -142,7 +142,10 @@ test("actual publisher separates definite eBay rejection, pre-send rejection and
   const { service, dependencies, adapter, checked } = fixture(t, 3);
   adapter.isConnected = () => true; delete dependencies.publish;
   const real = createBatchPublishService(dependencies);
-  for (const [index, kind, expectedRow, expectedChannel] of [[0, "definite", "rejected", "rejected"], [1, "notSent", "stale", "draft"], [2, "unknown", "unknown", "publish_unknown"]]) {
+  // A definite eBay rejection records the channel as "draft" (nothing was listed;
+  // the batch row still reports "rejected"). This follows master's draft-review
+  // safety semantics: unsubmitted work stays a recoverable draft.
+  for (const [index, kind, expectedRow, expectedChannel] of [[0, "definite", "rejected", "draft"], [1, "notSent", "stale", "draft"], [2, "unknown", "unknown", "publish_unknown"]]) {
     adapter.publish = async () => { const error = new Error(kind); if (kind === "definite") error.code = "EBAY_REJECTED"; if (kind === "notSent") error.notSent = true; throw error; };
     const batch = await checked([`draft-${index}`]); await service.approve(batch.id, approval(batch));
     const result = await real.processNext(batch.id);

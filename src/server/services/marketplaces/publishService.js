@@ -370,7 +370,10 @@ export async function publishListingToMarketplace(listingId, marketplace, option
     if (liveEbay && !result?.externalListingId) throw new Error("eBay returned no confirmed listing ID");
   } catch (error) {
     if (liveEbay) {
-      const notSubmitted = ["EBAY_PREPARATION_FAILED", "EBAY_REJECTED"].includes(error.code);
+      // A pre-send refusal (error.notSent, set by the reviewed-definition path when the
+      // draft changed or the check expired before submission) means nothing reached
+      // eBay: the listing stays a draft, never publish_unknown.
+      const notSubmitted = error.notSent || ["EBAY_PREPARATION_FAILED", "EBAY_REJECTED"].includes(error.code);
       const status = notSubmitted ? "draft" : "publish_unknown";
       const message = notSubmitted ? error.message : `${error.message}. Check eBay before retrying; the publish outcome may be unknown.`;
       runInImmediateTransaction(() => {
