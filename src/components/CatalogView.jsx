@@ -7,6 +7,7 @@ import { cardEstimate, catalogStatus, catalogReturnFocusId, filterCatalog, summa
 import { genCSV, genEbayCSV, genInsurancePDF } from "../lib/exports";
 import { IconSearch, IconDownload, IconChevron, IconCamera, IconCopy, IconGrid, IconList, IconX } from "./Icons";
 import CardDetail from "./CardDetail";
+import CsvImport from "./CsvImport";
 
 export default function CatalogView({ onNavigate, focus, onFocusConsumed }) {
   const toast = useToast();
@@ -271,6 +272,8 @@ export default function CatalogView({ onNavigate, focus, onFocusConsumed }) {
               }}><IconDownload size={14} aria-hidden="true" /> Insurance</button>
             </div>
           </section>
+
+          <CsvImport onImported={() => {}} />
         </>
       )}
     </div>

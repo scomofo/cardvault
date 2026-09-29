@@ -1,4 +1,5 @@
 import { apiPath } from "./apiBase.js";
+import { getToken } from "./authApi.js";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
@@ -13,12 +14,18 @@ function getStoredProxyToken() {
 
 async function request(path, options = {}) {
   const { method = "GET", body, timeoutMs = DEFAULT_TIMEOUT_MS, responseType = "json" } = options;
+  const headers = { "Content-Type": "application/json" };
+  // Session auth (seller_password deployments) and the proxy token
+  // (PROXY_TOKEN API-only deployments) share the Authorization header.
+  // PROXY_TOKEN is blank when using the built-in UI, so the session token
+  // takes precedence; fall back to the stored proxy token when no session.
+  const sessionToken = getToken();
+  const authToken = sessionToken || getStoredProxyToken();
+  if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
   const opts = {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers,
   };
-  const proxyToken = getStoredProxyToken();
-  if (proxyToken) opts.headers.Authorization = `Bearer ${proxyToken}`;
   if (body) opts.body = JSON.stringify(body);
 
   const controller = new AbortController();
@@ -275,6 +282,14 @@ export const refAPI = {
   players: (params) => request(`/ref/players${toQuery(params)}`),
   cards: (params) => request(`/ref/cards${toQuery(params)}`),
   parallels: (params) => request(`/ref/parallels${toQuery(params)}`),
+};
+
+// Listing templates
+export const listingTemplatesAPI = {
+  list: (platform) => request(`/listing-templates${platform ? `?platform=${encodeURIComponent(platform)}` : ""}`),
+  create: (data) => request("/listing-templates", { method: "POST", body: data }),
+  update: (id, data) => request(`/listing-templates/${id}`, { method: "PUT", body: data }),
+  delete: (id) => request(`/listing-templates/${id}`, { method: "DELETE" }),
 };
 
 // Check if backend is available

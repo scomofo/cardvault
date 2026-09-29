@@ -212,7 +212,7 @@ export function registerOrderRoutes(app) {
       }
       const linkedItemId = explicitItemId || linkedSale?.card_id || listingRecord?.card_id || null;
       const itemRecord = linkedItemId
-        ? get("SELECT id FROM user_items WHERE id = ?", [linkedItemId])
+        ? get("SELECT id, sale_status FROM user_items WHERE id = ?", [linkedItemId])
         : null;
       if (linkedItemId && !itemRecord) {
         return res.status(404).json({ error: "linked item not found" });

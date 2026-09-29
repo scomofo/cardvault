@@ -26,3 +26,19 @@ export function download(content, filename, type = "text/csv") {
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
 }
+
+export function applyListingTemplate(template, card, condOf) {
+  const cond = condOf(card.condition);
+  const tokens = {
+    name: card.name || "",
+    set: card.set || "",
+    year: card.year || "",
+    number: card.number ? `#${card.number}` : "",
+    condition: cond.l || "",
+    condition_short: cond.s || "",
+    parallel: card.parallel || "",
+    rarity: card.rarity || "",
+  };
+  return template.replace(/\{(\w+)\}/g, (_, k) => tokens[k] ?? "")
+    .replace(/\s+/g, " ").trim();
+}
