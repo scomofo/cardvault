@@ -193,3 +193,39 @@ export function clearAppData() {
   }
   keys.forEach((k) => localStorage.removeItem(k));
 }
+
+// One transaction migrates old batches and their photos, or rolls everything back.
+// Revisions also reject stale writes from a second tab instead of losing its work.
+export async function transactSellingBatch(transform) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([SESSION_STORE, IMG_STORE], "readwrite");
+    const store = tx.objectStore(SESSION_STORE);
+    const values = {};
+    let remaining = 3, result, failure;
+    for (const key of ["selling", "scan", "tools"]) {
+      const request = store.get(key);
+      request.onsuccess = () => {
+        values[key] = request.result;
+        if (--remaining) return;
+        try {
+          const change = transform(values);
+          result = change.session;
+          store.put(result, "selling");
+          if (change.migrate) {
+            for (const queue of [values.scan || [], values.tools || []]) {
+              for (const item of queue) {
+                const front = item.front || item.frontImg, back = item.back || item.backImg;
+                if (front) tx.objectStore(IMG_STORE).put(front, `img_${item.id}_front`);
+                if (back) tx.objectStore(IMG_STORE).put(back, `img_${item.id}_back`);
+              }
+            }
+            store.delete("scan"); store.delete("tools");
+          }
+        } catch (error) { failure = error; tx.abort(); }
+      };
+    }
+    tx.oncomplete = () => resolve(result);
+    tx.onerror = tx.onabort = () => reject(failure || tx.error || new Error("Selling batch storage failed"));
+  });
+}

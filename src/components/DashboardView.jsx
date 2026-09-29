@@ -79,6 +79,12 @@ export default function DashboardView({ onNavigate }) {
   return (
     <div className="fade">
       <SellerHome onNavigate={onNavigate} />
+
+      <div className="card mb-12">
+        <div className="fw-800">Turn a stack of cards into reviewed drafts</div>
+        <p className="text-xs text-dim">Capture photos, use existing inventory, or resume an unfinished selling batch.</p>
+        <button className="btn btn-primary" onClick={() => onNavigate?.("sell")}>Start / resume selling batch</button>
+      </div>
       <SetupWizard />
       <details className="seller-insights">
         <summary>Collection insights and advanced tools</summary>
