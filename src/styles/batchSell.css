@@ -36,6 +36,8 @@
 .batch-error { color: var(--red); overflow-wrap: anywhere; }
 .batch-row-saved { border-color: var(--grn-brd); }
 .batch-row-ready { border-color: var(--acc-brd); }
+.batch-row-focused { outline: 2px solid var(--acc2); outline-offset: 2px; }
+.batch-shortcuts { font-size: .75rem; margin: 0 0 8px; }
 .batch-save-bar { border-color: var(--acc-brd); padding: 18px; }
 .batch-empty { text-align: center; padding: 35px 20px; }
 .batch-sell :focus-visible { outline: 2px solid var(--acc2); outline-offset: 3px; }
