@@ -150,10 +150,11 @@ Collection analytics and advanced automation remain under the expandable
 **Collection insights and advanced tools** section. Price estimates are still
 unverified, and batch draft creation never publishes to a marketplace.
 
+- **Sell a batch** — One resumable photo-to-draft queue with existing-inventory selection, editable previews, saved selling presets and per-card results. Nothing is published by this screen. See [Batch Sell v1](docs/Batch-Sell-V1.md).
 - **Scan** — 4-step workflow: photograph, AI identify, edit details, create listing
 - **Collection** — Search across card details, filter by binder and status, sort by value/date/name, and browse in list or photo-grid view
 - **Sales Flow** — Create listings, track auctions with countdown timers, log purchases
-- **Batch** — Drag-and-drop multi-photo scanning with bulk ID and pricing
+- **Batch** — Camera and drag-and-drop photo intake share the selling queue, preserving unresolved work and reviewed drafts
 - **Sets** — Completion tracking with progress bars per set
 - **Grading** — PSA/BGS/SGC/CGC submission tracker with status pipeline
 - **Watchlist** — Price target alerts with one-click refresh
@@ -188,3 +189,12 @@ for state contracts, test coverage, and remaining work. The
 [draft review notes](docs/Selling-Draft-Review.md) cover the latest review flow and
 current eBay publishing limitations. See [checked eBay publication](docs/eBay-Checked-Drafts.md)
 for setup, supported policies and the sandbox acceptance checklist.
+
+### Reviewed batch publication
+
+Open **Sell → Check and publish saved drafts** to load eBay Canada business
+policies, check up to 25 raw sports-card fixed-price drafts, review the exact
+definitions and explicitly approve publication. Checking uploads photos and
+validates but does not list anything. Results and unfinished approvals persist on
+the server; uncertain outcomes never automatically retry. Begin with sandbox and
+see `docs/Batch-Publish.md` for shipping constraints, recovery and test limitations.

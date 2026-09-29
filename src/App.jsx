@@ -9,6 +9,7 @@ import { fetchMe, logout, clearToken } from "./lib/authApi.js";
 import DashboardView from "./components/DashboardView";
 import ScanView from "./components/ScanView";
 import BatchView from "./components/BatchView";
+import BatchSellView from "./components/BatchSellView";
 import CatalogView from "./components/CatalogView";
 import SetsView from "./components/SetsView";
 import GradeTracker from "./components/GradeTracker";
@@ -25,12 +26,12 @@ const NAV = [
   { v: "scan", l: "Scan", Icon: IconCamera },
   { v: "cards", l: "Cards", Icon: IconCards },
   { v: "sales", l: "Sales", Icon: IconDollar },
-  { v: "dealer", l: "Dealer", Icon: IconTools },
+  { v: "sell", l: "Sell", Icon: IconTools },
   { v: "more", l: "More", Icon: IconSettings },
 ];
 
 // Views reachable from the More menu keep the "more" nav slot highlighted.
-const MORE_VIEWS = new Set(["more", "tools", "settings"]);
+const MORE_VIEWS = new Set(["more", "tools", "settings", "dealer"]);
 
 const TOOL_TABS = [
   { v: "batch", l: "Batch" },
@@ -41,7 +42,8 @@ const TOOL_TABS = [
 ];
 
 const MORE_ITEMS = [
-  { label: "Batch Scan", desc: "Bulk photo intake and processing", target: { view: "tools", toolsTab: "batch" } },
+  { label: "Sell a batch", desc: "Resume photos, reviews and listing drafts", target: { view: "sell" } },
+  { label: "Dealer tools", desc: "Exports and handoff tools", target: { view: "dealer" } },
   { label: "Sets", desc: "Set completion tracking", target: { view: "tools", toolsTab: "sets" } },
   { label: "Grading", desc: "PSA/BGS/SGC submission tracker", target: { view: "tools", toolsTab: "grade" } },
   { label: "Watchlist", desc: "Price target alerts", target: { view: "tools", toolsTab: "watch" } },
@@ -68,7 +70,7 @@ function MoreView({ onNavigate }) {
   );
 }
 
-function ToolsView({ tab, setTab, focus, onFocusConsumed }) {
+function ToolsView({ tab, setTab, focus, onFocusConsumed, onNavigate }) {
   return (
     <div className="fade">
       <h1 className="page-title">Tools</h1>
@@ -80,7 +82,7 @@ function ToolsView({ tab, setTab, focus, onFocusConsumed }) {
           </button>
         ))}
       </div>
-      {tab === "batch" && <BatchView />}
+      {tab === "batch" && <BatchView onNavigate={onNavigate} />}
       {tab === "sets" && <SetsView />}
       {tab === "grade" && <GradeTracker focus={focus} onFocusConsumed={onFocusConsumed} />}
       {tab === "watch" && <Watchlist />}
@@ -104,6 +106,7 @@ function AppContent() {
   }, []);
 
   const handleNavigate = (target) => {
+    if (target?.view === "tools" && target?.toolsTab === "batch") target = { ...target, view: "sell" };
     if (typeof target === "string") {
       setPendingFocus(null);
       setView(target);
@@ -225,6 +228,7 @@ function AppContent() {
             usable so the user can navigate away from the broken one. */}
         <ErrorBoundary key={view} fullScreen={false}>
           {view === "dashboard" && <DashboardView onNavigate={handleNavigate} />}
+          {view === "sell" && <BatchSellView onNavigate={handleNavigate} />}
           {view === "scan" && (
             <ScanView
               onNavigate={handleNavigate}
@@ -247,6 +251,7 @@ function AppContent() {
           {view === "dealer" && <DealerModeView />}
           {view === "tools" && (
             <ToolsView
+              onNavigate={handleNavigate}
               tab={toolsTab}
               setTab={setToolsTab}
               focus={pendingFocus}
