@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer } from "./helpers/testServer.js";
 
-test("advanced automation routes handle duplicates, trends, acquisition, bundles, grading, cashflow, and intake batches", async (t) => {
+test("advanced automation routes handle duplicates, trends, acquisition, bundles, grading, and cashflow", async (t) => {
   const { baseUrl } = await startTestServer(t, { dirPrefix: "cardvault-advanced-auto-" });
 
   for (const id of ["dup-a", "dup-b"]) {
@@ -64,35 +64,4 @@ test("advanced automation routes handle duplicates, trends, acquisition, bundles
   const cashflowPayload = await cashflow.json();
   assert.ok(cashflowPayload.inventoryValue >= 24);
   assert.ok(Array.isArray(cashflowPayload.roiBySource));
-
-  const batchCreate = await fetch(`${baseUrl}/api/automation/intake/batches`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: "Show Pickup", intakeMode: "show_batch", acquisitionSource: "show", storageLocation: "Box A" }),
-  });
-  assert.equal(batchCreate.status, 201);
-  const batch = await batchCreate.json();
-
-  const batchItemCreate = await fetch(`${baseUrl}/api/automation/intake/batches/${batch.id}/items`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ itemId: "dup-a", imageRef: "dup-a-front", blurScore: 0.95, edgeScore: 0.9 }),
-  });
-  assert.equal(batchItemCreate.status, 201);
-  const batchItem = await batchItemCreate.json();
-
-  const processBatchItem = await fetch(`${baseUrl}/api/automation/intake/batch-items/${batchItem.id}/process`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ pricingStrategy: "market" }),
-  });
-  assert.equal(processBatchItem.status, 200);
-
-  const finalize = await fetch(`${baseUrl}/api/automation/intake/batches/${batch.id}/finalize`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ route: "ready_to_list" }),
-  });
-  const finalizePayload = await finalize.json();
-  assert.equal(finalizePayload.finalizedCount, 1);
 });

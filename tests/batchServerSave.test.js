@@ -2,6 +2,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
+test("batch identify runs AI calls concurrently with one batched session write", async () => {
+  const hook = await readFile(new URL("../src/hooks/useBatchDraft.js", import.meta.url), "utf8");
+  const view = await readFile(new URL("../src/components/BatchSellView.jsx", import.meta.url), "utf8");
+  assert.match(hook, /const IDENTIFY_CONCURRENCY = \d+/);
+  assert.match(hook, /mapPool\(work, IDENTIFY_CONCURRENCY/);
+  assert.match(view, /Identifying \$\{actions\.identifyProgress\.done\} of \$\{actions\.identifyProgress\.total\}/);
+  // A single batched mutate per identify run, not one localStorage rewrite per card.
+  const identifyBody = hook.slice(hook.indexOf("identify: (id)"), hook.indexOf("changeDefaults:"));
+  assert.equal((identifyBody.match(/store\.mutate\(/g) || []).length, 1);
+});
 test("legacy batch routes use the shared draft queue and never bulk-publish", async () => {
   const view = await readFile(new URL("../src/components/BatchView.jsx", import.meta.url), "utf8");
   const hook = await readFile(new URL("../src/hooks/useBatchDraft.js", import.meta.url), "utf8");

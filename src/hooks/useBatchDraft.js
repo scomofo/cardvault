@@ -1,4 +1,4 @@
-import { useEffect, useRef, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useData } from "../lib/DataContext";
 import { useToast } from "../components/Toast";
 import { useFeeModels } from "./useFeeModels";
@@ -9,6 +9,11 @@ import { loadImage, saveImage, loadData, saveData } from "../lib/storage";
 import { prepareImageForAi } from "../lib/imageForAi";
 import { aiVisualSearch } from "../lib/ai";
 import { imagesAPI, itemsAPI, listingsAPI } from "../lib/api";
+import { mapPool } from "../lib/pool";
+
+// AI identify calls are network-bound (vision + web search per card); a small
+// pool keeps a batch moving without hammering the proxy rate limit.
+const IDENTIFY_CONCURRENCY = 3;
 
 const fileData = (file) => new Promise((resolve, reject) => {
   const reader = new FileReader(); reader.onload = () => resolve(reader.result);
@@ -22,6 +27,7 @@ export function useBatchDraft() {
   const current = useRef({ data, toast, feeRate: getFeeRate("ebay") });
   current.current = { data, toast, feeRate: getFeeRate("ebay") };
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+  const [identifyProgress, setIdentifyProgress] = useState(null);
   useEffect(() => { store.init().catch(() => {}); }, []);
   const report = (promise) => promise.catch((error) => { current.current.toast.error(error.message); return false; });
   const edit = (transform) => store.getSnapshot().busy ? Promise.resolve(false) : report(store.mutate(transform));
@@ -81,7 +87,7 @@ export function useBatchDraft() {
   }
 
   return {
-    ...snapshot, data, feeRate: getFeeRate("ebay"), patch,
+    ...snapshot, data, feeRate: getFeeRate("ebay"), patch, identifyProgress,
     reload: () => report(store.reload()),
     capture: (images) => report(store.run("Saving photos", () => addCapture(images))),
     importPhotos: (files, paired) => report(store.run("Importing photos", async () => {
@@ -118,16 +124,30 @@ export function useBatchDraft() {
     })),
     identify: (id) => report(store.run("Identifying selected photos", async () => {
       const work = store.getSnapshot().session.entries.filter((entry) => entry.stage !== "saved" && entry.source === "photo" && (id ? entry.id === id : entry.selected && !entry.card.name));
-      for (const entry of work) {
-        try {
+      setIdentifyProgress({ done: 0, total: work.length });
+      try {
+        const outcomes = await mapPool(work, IDENTIFY_CONCURRENCY, async (entry) => {
           const image = await loadImage(entry.frontImgId);
           if (!image) throw new Error("Front photo unavailable; add it again");
           const response = await aiVisualSearch(image);
-          await store.mutate((session) => ({ ...session, entries: session.entries.map((row) => row.id === entry.id ? applyDraftIdentification(row, response) : row) }));
-        } catch (error) {
-          if (store.getSnapshot().error) throw error;
-          await store.mutate((session) => ({ ...session, entries: session.entries.map((row) => row.id === entry.id ? { ...row, error: error.message } : row) }));
+          setIdentifyProgress((prev) => (prev ? { ...prev, done: prev.done + 1 } : prev));
+          return response;
+        });
+        if (store.getSnapshot().error) {
+          const failure = outcomes.find((outcome) => !outcome.ok);
+          throw failure ? failure.error : new Error(store.getSnapshot().error);
         }
+        // One batched session write: each mutate rewrites the whole session to
+        // localStorage, so N per-entry writes made identify O(n^2) on big batches.
+        const outcomeById = new Map(work.map((entry, index) => [entry.id, outcomes[index]]));
+        await store.mutate((session) => ({ ...session, entries: session.entries.map((row) => {
+          const outcome = outcomeById.get(row.id);
+          if (!outcome || row.stage === "saved") return row;
+          if (!outcome.ok) return { ...row, error: outcome.error?.message || "Identification failed. Retry or enter its details." };
+          return applyDraftIdentification(row, outcome.value);
+        }) }));
+      } finally {
+        setIdentifyProgress(null);
       }
     })),
     changeDefaults: (updates) => edit((session) => ({ ...session, defaults: { ...session.defaults, ...updates } })),
