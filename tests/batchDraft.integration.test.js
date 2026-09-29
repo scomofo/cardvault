@@ -78,3 +78,23 @@ test("draft route ignores injected publish metadata and rejects invalid prices",
   assert.equal(result.body.listing.status, "draft"); assert.equal(result.body.listing.externalListingId, null);
   assert.equal(result.body.item.status, "inventory");
 });
+
+test("an ended batch listing can be relisted without deleting history or cloning inventory", async (t) => {
+  const { baseUrl } = await startTestServer(t, { dirPrefix: "cardvault-batch-relist-" });
+  const original = payload("relist-card"); await upload(baseUrl, original);
+  assert.equal((await post(baseUrl, "/api/listings/draft", original)).status, 201);
+  const ended = await fetch(`${baseUrl}/api/listings/${original.draft.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...original.draft, status: "ended" }) });
+  assert.equal(ended.status, 200);
+  const card = await (await fetch(`${baseUrl}/api/items/relist-card`)).json();
+  const entry = { ...newDraftEntry({ id: "relisting-attempt", card, source: "inventory" }),
+    identityConfirmed: true, conditionConfirmed: true, price: "35", shippingCost: "2" };
+  const body = buildDraftPayload(entry, "new-batch");
+  const result = await post(baseUrl, "/api/listings/draft", body);
+  assert.equal(result.status, 201, JSON.stringify(result.body));
+  assert.equal((await post(baseUrl, "/api/listings/draft", body)).status, 200);
+  const listings = await (await fetch(`${baseUrl}/api/listings`)).json();
+  assert.equal(listings.length, 2);
+  assert.equal(listings.find((listing) => listing.id === original.draft.id).status, "ended");
+  assert.equal(listings.find((listing) => listing.id === "draft_relisting-attempt").status, "draft");
+  assert.equal((await (await fetch(`${baseUrl}/api/items`)).json()).length, 1);
+});
