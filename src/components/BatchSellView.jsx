@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useBatchDraft } from "../hooks/useBatchDraft";
 import { CONDITIONS } from "../lib/constants";
 import { conditionLabel } from "../lib/batchDraft";
@@ -13,6 +13,31 @@ export default function BatchSellView({ onNavigate }) {
   const actions = useBatchDraft();
   const [capture, setCapture] = useState(false), [paired, setPaired] = useState(false), [filter, setFilter] = useState("all");
   const [presetName, setPresetName] = useState(""), [condition, setCondition] = useState("");
+  const [focusedId, setFocusedId] = useState(null);
+  const keyboard = useRef({ visible: [], focusedId: null, disabled: true, remove: () => {} });
+  // Keyboard review: j/k move between visible cards, d/Delete removes the focused card.
+  useEffect(() => {
+    function onKey(event) {
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.target.closest?.("input, textarea, select, [contenteditable]")) return;
+      const { visible, focusedId: currentId, disabled: locked, remove } = keyboard.current;
+      if (!visible.length) return;
+      const index = visible.findIndex((entry) => entry.id === currentId);
+      if (event.key === "j") {
+        event.preventDefault(); setFocusedId(visible[Math.min(index + 1, visible.length - 1)].id);
+      } else if (event.key === "k") {
+        event.preventDefault(); setFocusedId(visible[Math.max(index - 1, 0)].id);
+      } else if ((event.key === "d" || event.key === "Delete") && index >= 0 && !locked) {
+        event.preventDefault();
+        const entry = visible[index];
+        if (!window.confirm(`Remove ${entry.card.name || "this card"} from the batch? Existing inventory and saved listings will not be deleted.`)) return;
+        remove(entry.id);
+        setFocusedId((visible[index + 1] || visible[index - 1] || {}).id ?? null);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   if (actions.loading || actions.data.loading) return <section className="batch-sell"><h1>Sell a batch</h1><p role="status">Restoring your selling queue…</p></section>;
   if (!actions.session) return <section className="batch-sell"><h1>Sell a batch</h1><p role="alert">{actions.error || "The batch could not be loaded. Your stored data has not been cleared."}</p><button className="btn btn-primary" onClick={actions.reload}>Retry loading</button></section>;
   const { entries, defaults, presets } = actions.session;
@@ -21,6 +46,8 @@ export default function BatchSellView({ onNavigate }) {
   const readyCount = entries.filter((entry) => entry.selected && actions.readiness(entry).ready).length;
   const unfinished = entries.filter((entry) => entry.stage !== "saved");
   const selectedPhotos = unfinished.filter((entry) => entry.selected && entry.source === "photo").length;
+  const visible = entries.filter((entry) => filter === "all" || actions.readiness(entry).bucket === filter);
+  keyboard.current = { visible, focusedId, disabled, remove: actions.remove };
   const importFiles = (files) => { if (files.length) actions.importPhotos([...files], paired); };
 
   return <section className="batch-sell fade" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); if (!disabled) importFiles(event.dataTransfer.files); }}>
@@ -48,7 +75,8 @@ export default function BatchSellView({ onNavigate }) {
       <button className="btn btn-outline" disabled={disabled || !condition || !selectedPhotos} onClick={() => actions.inspectSelected(condition)}>Apply inspected condition ({selectedPhotos})</button>
     </div>}
     {!entries.length && <div className="card batch-empty"><h2>Your next sale starts here</h2><p>Photograph a stack or choose cards you already own. Your photos, edits and unfinished reviews stay together.</p></div>}
-    {entries.filter((entry) => filter === "all" || actions.readiness(entry).bucket === filter).map((entry) => <BatchDraftRow key={entry.id} entry={entry} actions={actions} disabled={disabled} onNavigate={onNavigate} />)}
+    {visible.length > 1 && <p className="batch-help batch-shortcuts">Keyboard: j/k to move between cards · d to remove</p>}
+    {visible.map((entry) => <BatchDraftRow key={entry.id} entry={entry} actions={actions} disabled={disabled} onNavigate={onNavigate} focused={entry.id === focusedId} onFocus={() => setFocusedId(entry.id)} />)}
     <BatchPublishPanel listings={actions.data.listings} useServer={actions.data.useServer} onNavigate={onNavigate} />
     {entries.length > 0 && <footer className="card batch-save-bar"><div><strong>{readyCount} selected ready for drafts</strong><p className="batch-help">{counts.review} need review · {counts.lot} held for lots / low return · {counts.saved} saved</p><p className="batch-help">Estimated proceeds use {(actions.feeRate * 100).toFixed(2)}% fees on price + buyer shipping, less postage and packaging. Not profit; acquisition cost and other charges are excluded.</p></div><div className="batch-toolbar"><button className="btn btn-primary" disabled={disabled || actions.saving || !readyCount} onClick={actions.saveSelected}>Save {readyCount} reviewed drafts</button>{counts.saved > 0 && <button className="btn btn-ghost" disabled={disabled} onClick={actions.clearFinished}>Clear finished from queue</button>}</div></footer>}
   </section>;
