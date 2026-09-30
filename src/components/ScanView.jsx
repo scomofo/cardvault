@@ -162,9 +162,9 @@ export default function ScanView({ onNavigate, pendingImage, onPendingImageConsu
           frontImg={frontImg}
           onAnalyzeCv={actions.doCvAnalyze}
           onBackCapture={actions.captureBackImg}
-          onBackRetake={() => actions.setBackImg(null)}
+          onBackRetake={() => actions.captureBackImg(null)}
           onFrontCapture={actions.captureFrontImg}
-          onFrontRetake={() => actions.setFrontImg(null)}
+          onFrontRetake={() => actions.captureFrontImg(null)}
           onManualEntry={() => setStep(2)}
           onNext={() => setStep(1)}
           onRecognize={async () => {
@@ -173,6 +173,7 @@ export default function ScanView({ onNavigate, pendingImage, onPendingImageConsu
           }}
           onVisualSearch={actions.doVisualSearch}
           visualSearching={visualSearching}
+          recognizing={recognizing}
         />
       )}
 

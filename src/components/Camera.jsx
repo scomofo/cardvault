@@ -1,124 +1,127 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { IconCamera, IconUpload, IconRefresh, IconX } from "./Icons";
+import { useCameraCapture } from "../hooks/useCameraCapture";
+import { shouldCaptureKey } from "../lib/cameraCapture";
 import { checkImageQuality } from "../lib/storage";
 
-export default function Camera({ side, image, onCapture, onRetake, compact }) {
-  const vRef = useRef(null);
-  const cRef = useRef(null);
-  const sRef = useRef(null);
-  const [live, setLive] = useState(false);
-  const [camError, setCamError] = useState(null);
+export default function Camera({ side, image, onCapture, onRetake, compact, continuous = false, disabled = false, onBusyChange }) {
+  const [capturedImage, setCapturedImage] = useState(null);
   const [qualityWarning, setQualityWarning] = useState(null);
-
-  const captureWithCheck = useCallback((dataUrl) => {
-    onCapture(dataUrl);
-    checkImageQuality(dataUrl).then(({ warning }) => setQualityWarning(warning || null)).catch(() => {});
-  }, [onCapture]);
-  const liveCameraSupported =
-    typeof window !== "undefined" &&
-    window.isSecureContext &&
-    !!navigator.mediaDevices?.getUserMedia;
-
-  const start = useCallback(async () => {
-    if (!liveCameraSupported) {
-      setCamError("Live camera needs HTTPS or localhost on this device. Use Upload instead.");
-      return;
-    }
-
-    try {
-      setCamError(null);
-      if (sRef.current) sRef.current.getTracks().forEach((t) => t.stop());
-      const s = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment", width: { ideal: 1920 } },
-      });
-      sRef.current = s;
-      if (vRef.current) {
-        vRef.current.srcObject = s;
-        await vRef.current.play();
-        setLive(true);
-      }
-    } catch (e) {
-      setCamError(e.name === "NotAllowedError" ? "Camera access denied" : "Camera unavailable");
-    }
-  }, [liveCameraSupported]);
-
-  const stop = useCallback(() => {
-    if (sRef.current) { sRef.current.getTracks().forEach((t) => t.stop()); sRef.current = null; }
-    setLive(false);
-  }, []);
-
-  const snap = useCallback(() => {
-    const v = vRef.current, c = cRef.current;
-    if (!v || !c) return;
-    c.width = v.videoWidth; c.height = v.videoHeight;
-    c.getContext("2d").drawImage(v, 0, 0);
-    captureWithCheck(c.toDataURL("image/jpeg", 0.9));
-    stop();
-  }, [captureWithCheck, stop]);
-
-  const upload = (e) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    const r = new FileReader();
-    r.onload = (ev) => captureWithCheck(ev.target.result);
-    r.readAsDataURL(f);
+  const captureWithCheck = (dataUrl) => {
+    setCapturedImage(dataUrl);
+    return onCapture(dataUrl);
   };
+  const camera = useCameraCapture({ onCapture: captureWithCheck, continuous, disabled });
+  const panelRef = useRef(null);
+  const blocked = camera.busy || camera.starting || disabled;
+  const mH = compact ? 150 : 360;
+  const qualityImage = image || capturedImage;
 
-  useEffect(() => () => stop(), [stop]);
+  useEffect(() => {
+    let active = true;
+    setQualityWarning(null);
+    if (qualityImage) {
+      checkImageQuality(qualityImage).then(({ warning }) => {
+        if (active) setQualityWarning(warning || null);
+      }).catch(() => {});
+    }
+    return () => { active = false; };
+  }, [qualityImage]);
 
-  const mH = compact ? 150 : 220;
+  useEffect(() => { onBusyChange?.(camera.busy || camera.starting); }, [camera.busy, camera.starting, onBusyChange]);
+  useEffect(() => {
+    if (camera.live && !disabled) panelRef.current?.focus();
+  }, [side, camera.live, disabled]);
+  const start = async (deviceId) => {
+    if (await camera.start(deviceId)) panelRef.current?.focus();
+  };
 
   if (image) {
     return (
-      <div className="card-elevated" style={{ flex: "1 1 140px", minWidth: 120, textAlign: "center", position: "relative", padding: 10 }}>
-        <span className="badge badge-acc" style={{ position: "absolute", top: 8, left: 8, fontSize: 9 }}>{side}</span>
-        <img src={image} alt={`${side} of card`} className="img-preview" style={{ width: "100%", maxHeight: mH, marginTop: 8 }} />
-        {qualityWarning && (
-          <div className="text-xxs mt-4" style={{ color: "var(--orange)", lineHeight: 1.3 }}>{qualityWarning}</div>
-        )}
-        <button className="btn btn-ghost btn-sm mt-6 w-full" onClick={() => { setQualityWarning(null); onRetake(); }}>
-          <IconRefresh size={12} /> Retake
+      <div className="card-elevated" style={{ flex: "1 1 140px", minWidth: 120, textAlign: "center", padding: 10 }}>
+        <span className="badge badge-acc">{side}</span>
+        <img src={image} alt={side + " of card"} className="img-preview" style={{ width: "100%", maxHeight: compact ? 150 : 220, marginTop: 8 }} />
+        {qualityWarning && <div className="text-xxs mt-4" style={{ color: "var(--orange)", lineHeight: 1.3 }}>{qualityWarning}</div>}
+        <button className="btn btn-ghost btn-sm mt-6 w-full" onClick={() => { setCapturedImage(null); setQualityWarning(null); onRetake(); }} disabled={blocked}>
+          <IconRefresh size={12} /> Retake {side}
         </button>
       </div>
     );
   }
 
   return (
-    <div style={{ flex: "1 1 140px", minWidth: 120, textAlign: "center", position: "relative", padding: 10, borderRadius: "var(--radius-lg)", border: "2px dashed var(--brd)", background: "var(--s1)" }}>
-      <span className="badge badge-dim" style={{ position: "absolute", top: 8, left: 8, fontSize: 9 }}>{side}</span>
-      {/* Rendered unconditionally so vRef is attached before start() acquires the stream. */}
-      <video
-        ref={vRef}
-        style={{ display: live ? "block" : "none", width: "100%", maxHeight: mH, borderRadius: "var(--radius)", objectFit: "cover", background: "#000" }}
-        playsInline
-        muted
-        autoPlay
+    <div
+      ref={panelRef} tabIndex={0} role="region" aria-label={side + " camera preview and keyboard shutter"}
+      onKeyDown={(event) => {
+        const capture = shouldCaptureKey(event, { ready: camera.ready, busy: blocked });
+        if (capture || (event.target === panelRef.current && (event.code === "Space" || event.key === " "))) {
+          event.preventDefault();
+        }
+        if (capture) camera.snap();
+      }}
+      style={{ flex: "1 1 140px", minWidth: 120, textAlign: "center", padding: 10, borderRadius: "var(--radius-lg)", border: "2px solid var(--brd)", background: "var(--s1)" }}
+    >
+      <div className="fw-700 mb-8" aria-live="polite">{disabled ? "Capture paused" : "Capture " + side.toUpperCase()}</div>
+      <div className="flex gap-8 mb-8 items-center flex-wrap">
+        <label className="text-xs" style={{ flex: 1, minWidth: 150 }}>
+          Camera
+          <select className="inp" aria-label="Capture camera" value={camera.deviceId} disabled={blocked} style={{ width: "100%" }} onChange={(event) => {
+            const selected = event.target.value;
+            camera.setDeviceId(selected);
+            if (camera.live) start(selected);
+          }}>
+            <option value="">Automatic / rear camera</option>
+            {camera.deviceId && !camera.devices.some((device) => device.deviceId === camera.deviceId) && <option value={camera.deviceId}>Saved camera (connect to check)</option>}
+            {camera.devices.map((device, index) => <option key={device.deviceId} value={device.deviceId}>{device.label || "Camera " + (index + 1)}</option>)}
+          </select>
+        </label>
+        <button className="btn btn-ghost btn-sm" disabled={blocked} onClick={camera.refreshDevices}>Refresh cameras</button>
+      </div>
+      {/* Keep the video mounted while requesting permission and between front/back shots. */}
+      <video ref={camera.videoRef} onClick={() => panelRef.current?.focus()}
+        style={{ display: camera.live ? "block" : "none", width: "100%", maxHeight: mH, borderRadius: "var(--radius)", objectFit: "contain", background: "#000" }}
+        playsInline muted autoPlay
       />
-      <canvas ref={cRef} style={{ display: "none" }} />
-      {live ? (
-        <div className="flex gap-8 justify-center mt-8">
-          <button onClick={snap} aria-label="Take photo" style={{ width: 48, height: 48, borderRadius: 2, border: "2px solid var(--acc)", background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transform: "rotate(45deg)" }}>
-            <div style={{ width: 24, height: 24, borderRadius: 0, background: "var(--acc)", transform: "rotate(-45deg)" }} />
-          </button>
-          <button className="btn btn-ghost btn-sm" onClick={stop}><IconX size={14} /></button>
-        </div>
-      ) : (
-        <div style={{ padding: compact ? "12px 0" : "20px 0" }}>
-          <div style={{ fontSize: compact ? 28 : 40, opacity: .25, marginBottom: 8 }}>{side === "front" ? "\ud83c\udca0" : "\ud83c\udca1"}</div>
-          <p className="text-xxs text-dim mb-8">{side}</p>
-          {camError && <p className="text-xxs text-red mb-6">{camError}</p>}
-          {!liveCameraSupported && (
-            <p className="text-xxs text-dim mb-6">Use Upload to access your camera on this device.</p>
-          )}
-          <div className="flex gap-8 justify-center">
-            <button className="btn btn-primary btn-sm" onClick={start}><IconCamera size={14} /> Camera</button>
-            <label className="btn btn-outline btn-sm" style={{ cursor: "pointer" }}>
-              <IconUpload size={14} /> Upload
-              <input type="file" accept="image/*" capture="environment" onChange={upload} style={{ display: "none" }} />
-            </label>
+      <canvas ref={camera.canvasRef} style={{ display: "none" }} />
+      {camera.live && (
+        <>
+          <div className="text-xxs text-dim mt-6">
+            {camera.settings.label || "Connected camera"}
+            {camera.settings.width && camera.settings.height ? " · Preview " + camera.settings.width + " × " + camera.settings.height : ""}
           </div>
-        </div>
+          <div className="text-xxs text-dim mt-4">
+            {[["focusMode", "Focus"], ["exposureMode", "Exposure"], ["whiteBalanceMode", "White balance"]].map(([key, label]) => label + ": " + (camera.settings[key] || "camera managed")).join(" · ")}
+            {camera.settings.torch === false ? " · Torch off" : ""}
+          </div>
+          <div className="flex gap-8 justify-center mt-8">
+            <button className="btn btn-primary" disabled={blocked || !camera.ready} aria-keyshortcuts="Space"
+              onKeyDown={(event) => { if (event.repeat) event.preventDefault(); }}
+              onClick={() => { camera.snap(); panelRef.current?.focus(); }}>
+              <IconCamera size={16} /> {camera.busy ? "Capturing…" : "Capture " + side + " · Space"}
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={camera.stop} disabled={camera.busy} aria-label="Stop camera"><IconX size={14} /></button>
+          </div>
+          {!camera.ready && <p className="text-xs mt-6">Waiting for live video. Check that the iPhone camera is connected and not paused.</p>}
+          <p className="text-xxs text-dim mt-6">Click the preview, then press Space for each photo. Shortcuts pause while using other controls.</p>
+        </>
       )}
+      {!camera.live && (
+        <button className="btn btn-primary btn-sm" disabled={blocked || !camera.supported} onClick={() => start(camera.deviceId)}>
+          <IconCamera size={14} /> {camera.starting ? "Opening camera…" : "Open Camera"}
+        </button>
+      )}
+      {!camera.supported && <p className="text-xs text-dim mt-6">Live camera needs HTTPS or localhost. Upload can use the iPhone camera instead.</p>}
+      <label className="btn btn-outline btn-sm mt-8" style={{ cursor: blocked ? "default" : "pointer", opacity: blocked ? 0.5 : 1 }}>
+        <IconUpload size={14} /> Upload {side}
+        <input type="file" accept="image/*" capture="environment" disabled={blocked} onChange={(event) => {
+          camera.upload(event.target.files?.[0]);
+          event.target.value = "";
+          panelRef.current?.focus();
+        }} style={{ display: "none" }} />
+      </label>
+      {camera.notice && <p className="text-xs text-dim mt-6" role="status">{camera.notice}</p>}
+      {qualityWarning && <p className="text-xs mt-6" role="status" style={{ color: "var(--orange)" }}>Last photo: {qualityWarning}</p>}
+      {camera.error && <p className="text-xs text-red mt-6" role="alert">{camera.error}</p>}
     </div>
   );
 }
