@@ -1,21 +1,26 @@
 import { draftPreview, conditionLabel } from "../../lib/batchDraft";
 import { CONDITIONS } from "../../lib/constants";
 import { fmtShort } from "../../lib/utils";
+import { useEffect, useRef } from "react";
 import BatchPhoto from "./BatchPhoto";
 
-export default function BatchDraftRow({ entry, actions, disabled, onNavigate }) {
+const CONFIDENCE_CLASS = { high: "badge-grn", medium: "badge-acc", low: "badge-red" };
+
+export default function BatchDraftRow({ entry, actions, disabled, onNavigate, focused = false, onFocus }) {
+  const rowRef = useRef(null);
+  useEffect(() => { if (focused) rowRef.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" }); }, [focused]);
   const status = actions.readiness(entry), preview = draftPreview(entry);
   const saved = entry.stage === "saved";
   const edit = (updates) => actions.patch(entry.id, updates);
   return (
-    <article className={`card batch-row batch-row-${status.bucket}`}>
+    <article ref={rowRef} className={`card batch-row batch-row-${status.bucket}${focused ? " batch-row-focused" : ""}`} onClick={onFocus} aria-current={focused || undefined}>
       <div className="batch-row-heading">
         <label className="batch-select">
           <input type="checkbox" checked={entry.selected} disabled={disabled || saved} onChange={(event) => edit({ selected: event.target.checked })} aria-label={`Select ${entry.card.name || "unnamed card"}`} />
           <BatchPhoto imageId={entry.frontImgId} alt={entry.card.name || "Front photo"} />
         </label>
         <div className="batch-row-name"><strong>{entry.card.name || "Card needs identification"}</strong><span>{[entry.card.year, entry.card.set, entry.card.parallel].filter(Boolean).join(" · ") || "Add card details below"}</span></div>
-        <div className="batch-row-total"><span className="badge badge-dim">{saved ? "Draft saved" : status.bucket === "lot" ? "Lot / low return" : status.ready ? "Ready for draft" : "Needs review"}</span><strong>{status.proceeds == null ? "—" : fmtShort(status.proceeds)}</strong><small>Estimated proceeds</small></div>
+        <div className="batch-row-total">{!saved && entry.confidenceLabel && <span className={`badge ${CONFIDENCE_CLASS[String(entry.confidenceLabel).toLowerCase()] || "badge-dim"}`} title="AI match label — not a calibrated probability">AI: {entry.confidenceLabel}</span>}<span className="badge badge-dim">{saved ? "Draft saved" : status.bucket === "lot" ? "Lot / low return" : status.ready ? "Ready for draft" : "Needs review"}</span><strong>{status.proceeds == null ? "—" : fmtShort(status.proceeds)}</strong><small>Estimated proceeds</small></div>
       </div>
       {entry.error && <p className="batch-error" role="alert">{entry.error}</p>}
       {!saved && status.issues.length > 0 && <p className="batch-help">{status.issues.join(" · ")}</p>}
