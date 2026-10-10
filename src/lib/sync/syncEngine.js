@@ -2,6 +2,8 @@ import { diffById } from "./diffById.js";
 
 export function createSyncEngine({ onSyncStateChange } = {}) {
   const syncTimers = {};
+  const syncTimerCallbacks = {};
+  const activePromises = new Set();
   const lastSynced = {};
   const syncInFlight = {};
   const pendingSync = {};
@@ -96,16 +98,52 @@ export function createSyncEngine({ onSyncStateChange } = {}) {
 
   function scheduleCollectionSync(key, api, current, delay = 500) {
     clearTimeout(syncTimers[key]);
-    syncTimers[key] = setTimeout(() => syncCollection(key, api, current), delay);
+    const callback = () => {
+      delete syncTimers[key];
+      delete syncTimerCallbacks[key];
+      const promise = (async () => {
+        syncCollection(key, api, current);
+      })();
+      activePromises.add(promise);
+      promise.finally(() => activePromises.delete(promise));
+      return promise;
+    };
+    syncTimerCallbacks[key] = callback;
+    syncTimers[key] = setTimeout(callback, delay);
   }
 
   function scheduleValueSync(key, syncer, value, delay = 500) {
     clearTimeout(syncTimers[key]);
-    syncTimers[key] = setTimeout(() => {
-      syncer(value).catch((error) => {
+    const callback = () => {
+      delete syncTimers[key];
+      delete syncTimerCallbacks[key];
+      const promise = syncer(value).catch((error) => {
         console.warn(`Sync error (${key}):`, error);
       });
-    }, delay);
+      activePromises.add(promise);
+      promise.finally(() => activePromises.delete(promise));
+      return promise;
+    };
+    syncTimerCallbacks[key] = callback;
+    syncTimers[key] = setTimeout(callback, delay);
+  }
+
+  async function flushSync() {
+    // 1. Immediately fire all pending scheduled timer callbacks
+    const keys = Object.keys(syncTimers);
+    for (const key of keys) {
+      clearTimeout(syncTimers[key]);
+      const cb = syncTimerCallbacks[key];
+      delete syncTimers[key];
+      delete syncTimerCallbacks[key];
+      if (cb) cb();
+    }
+    // 2. Wait for all in-flight sync promises to settle
+    while (activePromises.size > 0 || Object.values(syncInFlight).some(Boolean)) {
+      await Promise.allSettled(Array.from(activePromises));
+      // allow event loop tick for queued microtasks
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
   }
 
   function setSnapshot(snapshot) {
@@ -118,6 +156,7 @@ export function createSyncEngine({ onSyncStateChange } = {}) {
 
   return {
     clearTimers,
+    flushSync,
     scheduleCollectionSync,
     scheduleValueSync,
     setSnapshot,

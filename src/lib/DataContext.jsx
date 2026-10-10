@@ -135,6 +135,10 @@ export function DataProvider({ children }) {
     }
   }, []);
 
+  const flushSync = useCallback(() => {
+    return syncEngineRef.current.flushSync();
+  }, []);
+
   const setShipFrom = useCallback((value) => {
     _setShipFrom(value);
     saveString("addr", value);
@@ -270,6 +274,7 @@ export function DataProvider({ children }) {
     useServer,
     loading,
     syncing,
+    flushSync,
   }), [
     catalog, setCatalog,
     sales, setSales,
@@ -281,7 +286,7 @@ export function DataProvider({ children }) {
     purchases, setPurchases,
     userName, setUserName,
     shipFrom, setShipFrom,
-    useServer, loading, syncing,
+    useServer, loading, syncing, flushSync,
   ]);
 
   return <DataCtx.Provider value={value}>{children}</DataCtx.Provider>;
