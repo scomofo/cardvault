@@ -5,7 +5,7 @@
 export default function CenteringOverlay({ centering, style }) {
   if (!centering) return null;
 
-  const { lr, tb, left, right, top, bottom, is_gem, score } = centering;
+  const { lr, tb, is_gem, score } = centering;
   const gemColor = is_gem ? "#5a9e6f" : score >= 9.0 ? "#c89040" : "#c7453b";
 
   return (

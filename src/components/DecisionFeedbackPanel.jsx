@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { decisionsAPI } from "../lib/api";
 import { useToast } from "./Toast";
 import { Skeleton, Spinner } from "./Icons";
@@ -19,7 +19,7 @@ export default function DecisionFeedbackPanel() {
   const [calibration, setCalibration] = useState(null);
   const [pending, setPending] = useState({});
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     try {
       const [openRows, cal] = await Promise.all([
         decisionsAPI.list({ status: "open" }),
@@ -31,11 +31,11 @@ export default function DecisionFeedbackPanel() {
       toast.error("Failed to load decisions: " + error.message);
       setDecisions([]);
     }
-  }
+  }, [toast]);
 
   useEffect(() => {
     refresh();
-  }, []);
+  }, [refresh]);
 
   async function submit(decision, payload, successLabel) {
     setPending((prev) => ({ ...prev, [decision.id]: true }));

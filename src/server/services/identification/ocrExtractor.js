@@ -1,4 +1,4 @@
-import { get, run } from "../../database.js";
+import { run } from "../../database.js";
 import { uid } from "../../routes/shared.js";
 
 /**

@@ -1,5 +1,5 @@
-import { condOf, escapeHtml, fmtShort } from "./utils";
-import { calculateGrade, gradeToTerm, generateConditionReport, toEbayDescriptors } from "./grading";
+import { condOf, escapeHtml } from "./utils";
+import { generateConditionReport, toEbayDescriptors } from "./grading";
 
 export function genInsurancePDF(cards, owner = "") {
   const active = cards.filter((c) => c.name && c.status !== "sold");

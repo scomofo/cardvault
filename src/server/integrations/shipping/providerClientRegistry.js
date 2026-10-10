@@ -9,7 +9,6 @@ import { assertPublicOutboundUrl, fetchPublic } from "../../outboundUrlGuard.js"
 import { labelPurchaseTimeoutMs } from "./purchaseTiming.js";
 const PROVIDER_ERROR_TEXT_LIMIT = 200;
 const CANADA_POST_CLIENT_KEY = "canada_post";
-const CANADA_POST_LABEL_URL_TEMPLATE = "labels/canada-post/{trackingNumber}/{shipmentId}.pdf";
 const CANADA_POST_SHIPMENT_MEDIA_TYPE = "application/vnd.cpc.shipment-v8+xml";
 const CANADA_POST_MANIFEST_MEDIA_TYPE = "application/vnd.cpc.manifest-v8+xml";
 const CANADA_POST_DEVELOPMENT_BASE_URL = "https://ct.soa-gw.canadapost.ca";

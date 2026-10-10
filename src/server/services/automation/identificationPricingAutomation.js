@@ -1,4 +1,4 @@
-import { all, get, run } from "../../database.js";
+import { get, run } from "../../database.js";
 import { identifyCard } from "../identification/identificationService.js";
 import { refreshPricingForItem } from "../pricing/pricingService.js";
 

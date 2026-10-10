@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { IconShield, IconCheck, IconZap, IconRefresh, Spinner } from "./Icons";
+import { IconShield, IconCheck, IconZap, IconRefresh } from "./Icons";
 import { assignVaultStatus, calculateGrade, gradeToTerm, generateConditionReport } from "../lib/grading";
 
 const SUBS = ["centering", "corners", "edges", "surface"];
@@ -13,7 +13,7 @@ export default function GradingSlider({ onSave, onCancel, initialGrades, cvCente
     }
     return base;
   });
-  const [cvApplied, setCvApplied] = useState(!!cvCentering?.score && !initialGrades);
+  const [cvApplied] = useState(!!cvCentering?.score && !initialGrades);
   const [projection, setProjection] = useState(10);
   const [vault, setVault] = useState(assignVaultStatus(10));
   const [cappingAttributes, setCappingAttributes] = useState([]);

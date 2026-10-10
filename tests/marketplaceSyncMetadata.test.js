@@ -12,7 +12,6 @@ test("marketplace sold sync preserves buyer and destination metadata from the ad
   process.env.CARDVAULT_DB_PATH = dbPath;
 
   const database = await import("../src/server/database.js");
-  const shared = await import("../src/server/routes/shared.js");
   const registry = await import("../src/server/integrations/marketplaces/marketplaceRegistry.js");
   const syncService = await import("../src/server/services/marketplaces/syncService.js");
 
