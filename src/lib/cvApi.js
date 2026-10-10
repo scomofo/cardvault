@@ -39,12 +39,15 @@ export async function checkCvHealth() {
  *   processing_ms: 145,
  * }
  */
+import { prepareImageForAi } from "./imageForAi.js";
+
 export async function analyzeCentering(imageDataUrl) {
   try {
+    const preparedImage = await prepareImageForAi(imageDataUrl);
     const res = await fetch("/api/cv/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image_b64: imageDataUrl }),
+      body: JSON.stringify({ image_b64: preparedImage }),
       signal: AbortSignal.timeout(CV_TIMEOUT),
     });
 

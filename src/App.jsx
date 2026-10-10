@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, lazy, Suspense } from "react";
 import { ToastProvider } from "./components/Toast";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { DataProvider, useData } from "./lib/DataContext";
@@ -8,16 +8,17 @@ import LandingView from "./components/LandingView.jsx";
 import { fetchMe, logout, clearToken } from "./lib/authApi.js";
 import DashboardView from "./components/DashboardView";
 import ScanView from "./components/ScanView";
-import BatchView from "./components/BatchView";
-import BatchSellView from "./components/BatchSellView";
 import CatalogView from "./components/CatalogView";
-import SetsView from "./components/SetsView";
-import GradeTracker from "./components/GradeTracker";
-import Watchlist from "./components/Watchlist";
-import TradeTracker from "./components/TradeTracker";
 import SalesFlow from "./components/SalesFlow";
-import DealerModeView from "./components/DealerModeView";
-import Settings from "./components/Settings";
+
+const BatchView = lazy(() => import("./components/BatchView"));
+const BatchSellView = lazy(() => import("./components/BatchSellView"));
+const SetsView = lazy(() => import("./components/SetsView"));
+const GradeTracker = lazy(() => import("./components/GradeTracker"));
+const Watchlist = lazy(() => import("./components/Watchlist"));
+const TradeTracker = lazy(() => import("./components/TradeTracker"));
+const DealerModeView = lazy(() => import("./components/DealerModeView"));
+const Settings = lazy(() => import("./components/Settings"));
 import "./styles/app.css";
 import "./styles/catalog.css";
 
@@ -227,39 +228,41 @@ function AppContent() {
             error state into an unrelated view, and the header/nav above stay
             usable so the user can navigate away from the broken one. */}
         <ErrorBoundary key={view} fullScreen={false}>
-          {view === "dashboard" && <DashboardView onNavigate={handleNavigate} />}
-          {view === "sell" && <BatchSellView onNavigate={handleNavigate} />}
-          {view === "scan" && (
-            <ScanView
-              onNavigate={handleNavigate}
-              focus={pendingFocus}
-              onFocusConsumed={() => setPendingFocus(null)}
-              pendingImage={pendingScanImage}
-              onPendingImageConsumed={() => setPendingScanImage(null)}
-            />
-          )}
-          {view === "cards" && (
-            <CatalogView onNavigate={handleNavigate} focus={pendingFocus} onFocusConsumed={() => setPendingFocus(null)} />
-          )}
-          {view === "sales" && (
-            <SalesFlow
-              onNavigate={handleNavigate}
-              focus={pendingFocus}
-              onFocusConsumed={() => setPendingFocus(null)}
-            />
-          )}
-          {view === "dealer" && <DealerModeView />}
-          {view === "tools" && (
-            <ToolsView
-              onNavigate={handleNavigate}
-              tab={toolsTab}
-              setTab={setToolsTab}
-              focus={pendingFocus}
-              onFocusConsumed={() => setPendingFocus(null)}
-            />
-          )}
-          {view === "more" && <MoreView onNavigate={handleNavigate} />}
-          {view === "settings" && <Settings />}
+          <Suspense fallback={<div className="flex justify-center mt-20"><Spinner size={28} /></div>}>
+            {view === "dashboard" && <DashboardView onNavigate={handleNavigate} />}
+            {view === "sell" && <BatchSellView onNavigate={handleNavigate} />}
+            {view === "scan" && (
+              <ScanView
+                onNavigate={handleNavigate}
+                focus={pendingFocus}
+                onFocusConsumed={() => setPendingFocus(null)}
+                pendingImage={pendingScanImage}
+                onPendingImageConsumed={() => setPendingScanImage(null)}
+              />
+            )}
+            {view === "cards" && (
+              <CatalogView onNavigate={handleNavigate} focus={pendingFocus} onFocusConsumed={() => setPendingFocus(null)} />
+            )}
+            {view === "sales" && (
+              <SalesFlow
+                onNavigate={handleNavigate}
+                focus={pendingFocus}
+                onFocusConsumed={() => setPendingFocus(null)}
+              />
+            )}
+            {view === "dealer" && <DealerModeView />}
+            {view === "tools" && (
+              <ToolsView
+                onNavigate={handleNavigate}
+                tab={toolsTab}
+                setTab={setToolsTab}
+                focus={pendingFocus}
+                onFocusConsumed={() => setPendingFocus(null)}
+              />
+            )}
+            {view === "more" && <MoreView onNavigate={handleNavigate} />}
+            {view === "settings" && <Settings />}
+          </Suspense>
         </ErrorBoundary>
       </main>
 

@@ -285,6 +285,18 @@ test("clearTimers cancels pending scheduled syncs", async () => {
   assert.deepEqual(values, []);
 });
 
+test("flushSync immediately fires scheduled syncs and awaits in-flight operations", async () => {
+  const values = [];
+  const engine = createSyncEngine();
+  engine.scheduleValueSync("settings", async (value) => {
+    await wait(20);
+    values.push(value);
+  }, "flushed", 5000);
+
+  await engine.flushSync();
+  assert.deepEqual(values, ["flushed"]);
+});
+
 test("createCollectionSetter persists and syncs only when server-backed", () => {
   const persisted = [];
   const synced = [];
