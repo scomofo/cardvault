@@ -1,5 +1,3 @@
-import { get } from "../../database.js";
-
 /**
  * Evaluate whether a potential card acquisition is worth buying.
  * @param {object} [input]

@@ -57,71 +57,71 @@ export function DataProvider({ children }) {
   // all reference-stable, so this is safe. An unstable identity here used to
   // retrigger any effect that lists a setter as a dependency on every
   // render, e.g. the sales view's server-state refresh looping forever.
-  const setCatalog = useCallback(createCollectionSetter({
+  const setCatalog = useCallback((value) => createCollectionSetter({
     key: "catalog",
     persist: (next) => saveData("catalog", next),
     scheduleSync: (key, next) => syncEngineRef.current.scheduleCollectionSync(key, itemsAPI, next),
     setState: _setCatalog,
     useServerRef,
-  }), []);
+  })(value), []);
 
-  const setSales = useCallback(createCollectionSetter({
+  const setSales = useCallback((value) => createCollectionSetter({
     key: "sales",
     persist: (next) => saveData("sales", next),
     scheduleSync: (key, next) => syncEngineRef.current.scheduleCollectionSync(key, salesAPI, next),
     setState: _setSales,
     useServerRef,
-  }), []);
+  })(value), []);
 
-  const setOrders = useCallback(createCollectionSetter({
+  const setOrders = useCallback((value) => createCollectionSetter({
     key: "orders",
     persist: (next) => saveData("orders", next),
     scheduleSync: (key, next) => syncEngineRef.current.scheduleCollectionSync(key, ordersAPI, next),
     setState: _setOrders,
     useServerRef,
-  }), []);
+  })(value), []);
 
-  const setTrades = useCallback(createCollectionSetter({
+  const setTrades = useCallback((value) => createCollectionSetter({
     key: "trades",
     persist: (next) => saveData("trades", next),
     scheduleSync: (key, next) => syncEngineRef.current.scheduleCollectionSync(key, tradesAPI, next),
     setState: _setTrades,
     useServerRef,
-  }), []);
+  })(value), []);
 
-  const setWatchlist = useCallback(createCollectionSetter({
+  const setWatchlist = useCallback((value) => createCollectionSetter({
     key: "watchlist",
     persist: (next) => saveData("watchlist", next),
     scheduleSync: (key, next) =>
       syncEngineRef.current.scheduleCollectionSync(key, watchlistAPI, next),
     setState: _setWatchlist,
     useServerRef,
-  }), []);
+  })(value), []);
 
-  const setGradings = useCallback(createCollectionSetter({
+  const setGradings = useCallback((value) => createCollectionSetter({
     key: "gradings",
     persist: (next) => saveData("gradings", next),
     scheduleSync: (key, next) => syncEngineRef.current.scheduleCollectionSync(key, gradingsAPI, next),
     setState: _setGradings,
     useServerRef,
-  }), []);
+  })(value), []);
 
-  const setListings = useCallback(createCollectionSetter({
+  const setListings = useCallback((value) => createCollectionSetter({
     key: "listings",
     persist: (next) => saveData("listings", next),
     scheduleSync: (key, next) => syncEngineRef.current.scheduleCollectionSync(key, listingsAPI, next),
     setState: _setListings,
     useServerRef,
-  }), []);
+  })(value), []);
 
-  const setPurchases = useCallback(createCollectionSetter({
+  const setPurchases = useCallback((value) => createCollectionSetter({
     key: "purchases",
     persist: (next) => saveData("purchases", next),
     scheduleSync: (key, next) =>
       syncEngineRef.current.scheduleCollectionSync(key, purchasesAPI, next),
     setState: _setPurchases,
     useServerRef,
-  }), []);
+  })(value), []);
 
   const setUserName = useCallback((value) => {
     _setUserName(value);
@@ -233,8 +233,9 @@ export function DataProvider({ children }) {
   }, [listings]);
 
   useEffect(() => {
+    const engine = syncEngineRef.current;
     return () => {
-      syncEngineRef.current.clearTimers();
+      engine.clearTimers();
     };
   }, []);
 
@@ -242,6 +243,7 @@ export function DataProvider({ children }) {
     if (loading) return;
     backfillFrontImgPhashes(catalog, setCatalog);
     // Run once after initial load; subsequent catalog changes don't retrigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading]);
 
   const value = useMemo(() => ({

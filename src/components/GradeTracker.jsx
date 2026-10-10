@@ -16,9 +16,11 @@ export default function GradeTracker({ focus, onFocusConsumed }) {
 
   // grade_now deep links land here with an inventory item to submit —
   // prefill the new-submission form from the catalog card.
+  const focusId = focus?.id;
+
   useEffect(() => {
-    if (!focus?.id) return;
-    const card = catalog.find((c) => c.id === focus.id);
+    if (!focusId) return;
+    const card = catalog.find((c) => c.id === focusId);
     if (card) {
       setInput((previous) => ({
         ...previous,
@@ -29,7 +31,7 @@ export default function GradeTracker({ focus, onFocusConsumed }) {
       }));
     }
     onFocusConsumed?.();
-  }, [focus]);
+  }, [focusId, catalog, onFocusConsumed]);
 
   const submit = () => {
     if (!input.cardName) { toast.error("Enter card name"); return; }

@@ -73,11 +73,16 @@ export default function SalesFlow({ onNavigate, focus, onFocusConsumed }) {
   // switch to the tab holding the record, then highlight and scroll to it.
   // inventory_item focuses carry an intent — "list" opens the create form
   // preselected; "reprice" opens the reprice panel on the item's listing.
+  const focusId = focus?.id;
+  const focusType = focus?.type;
+  const focusIntent = focus?.intent;
+  const focusPrice = focus?.price;
+
   useEffect(() => {
-    if (!focus?.id) return;
-    if (focus.type === "inventory_item") {
-      if (focus.intent === "list") {
-        const existing = listings.find((listing) => listing.cardId === focus.id && !["sold", "ended"].includes(listing.status));
+    if (!focusId) return;
+    if (focusType === "inventory_item") {
+      if (focusIntent === "list") {
+        const existing = listings.find((listing) => listing.cardId === focusId && !["sold", "ended"].includes(listing.status));
         if (existing) {
           setTab("active");
           setHighlightId(existing.id);
@@ -85,16 +90,16 @@ export default function SalesFlow({ onNavigate, focus, onFocusConsumed }) {
         } else {
           setTab("active");
           setShowCreate(true);
-          setNewListing((previous) => ({ ...previous, cardId: focus.id, startPrice: proposedListingPrice(catalog.find((card) => card.id === focus.id)) }));
+          setNewListing((previous) => ({ ...previous, cardId: focusId, startPrice: proposedListingPrice(catalog.find((card) => card.id === focusId)) }));
         }
       } else {
-        const listing = listings.find((l) => l.cardId === focus.id && l.status === "active");
+        const listing = listings.find((l) => l.cardId === focusId && l.status === "active");
         if (listing) {
           setTab("active");
           setHighlightId(listing.id);
-          if (focus.intent === "reprice") {
+          if (focusIntent === "reprice") {
             setRepricingId(listing.id);
-            setRepriceVal(String(focus.price ?? listing.startPrice ?? ""));
+            setRepriceVal(String(focusPrice ?? listing.startPrice ?? ""));
             setSellingId(null);
           }
         }
@@ -103,17 +108,17 @@ export default function SalesFlow({ onNavigate, focus, onFocusConsumed }) {
       return;
     }
     const targetTab =
-      focus.type === "order" ? "orders"
-        : focus.type === "purchase" ? "purchases"
-        : focus.type === "listing" || focus.type === "sale"
-          ? (listings.find((l) => l.id === focus.id && ["active", "draft", "ready"].includes(l.status)) ? "active" : "completed")
+      focusType === "order" ? "orders"
+        : focusType === "purchase" ? "purchases"
+        : focusType === "listing" || focusType === "sale"
+          ? (listings.find((l) => l.id === focusId && ["active", "draft", "ready"].includes(l.status)) ? "active" : "completed")
           : null;
     if (targetTab) {
       setTab(targetTab);
-      setHighlightId(focus.id);
+      setHighlightId(focusId);
     }
     onFocusConsumed?.();
-  }, [focus]);
+  }, [focusId, focusType, focusIntent, focusPrice, catalog, listings, onFocusConsumed]);
 
   useEffect(() => {
     if (!highlightId) return;

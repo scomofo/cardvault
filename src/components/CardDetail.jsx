@@ -44,7 +44,7 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
   const [showQuickList, setShowQuickList] = useState(false);
   const [quickListPlatform, setQuickListPlatform] = useState("ebay");
   const [quickListPrice, setQuickListPrice] = useState("");
-  const [quickListFormat, setQuickListFormat] = useState("fixed");
+  const [quickListFormat] = useState("fixed");
   const [decisions, setDecisions] = useState([]);
   const [decisionLoading, setDecisionLoading] = useState(false);
   const [autoIdPricing, setAutoIdPricing] = useState(false);
@@ -56,7 +56,9 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
   // retry against the same record). A retry after markSold's sale succeeds
   // but its order fails must reuse the same ids, or it mints a duplicate
   // sale instead of completing the missing order.
-  const saleAttemptRef = useRef(null);
+  const _saleAttemptRef = useRef(null);
+
+  const listedOnJoined = (detail?.listedOn || []).join("|");
 
   useEffect(() => {
     let cancelled = false;
@@ -81,7 +83,7 @@ export default function CardDetail({ detail, detailFrontImg, detailBackImg, cata
     return () => {
       cancelled = true;
     };
-  }, [detail?.id, detail?.status, (detail?.listedOn || []).join("|")]);
+  }, [detail?.id, detail?.status, listedOnJoined]);
   const toggleListed = (id, platform) => {
     setCatalog((p) => p.map((c) => c.id === id ? toggleCardListing(c, platform) : c));
   };

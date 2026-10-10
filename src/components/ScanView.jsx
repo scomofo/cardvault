@@ -84,7 +84,7 @@ export default function ScanView({ onNavigate, pendingImage, onPendingImageConsu
     actions.captureFrontImg(pendingImage);
     actions.setStep?.(0);
     onPendingImageConsumed?.();
-  }, [pendingImage]);
+  }, [pendingImage, actions, onPendingImageConsumed]);
 
   const { setCard, setListing, setShowCvOverlay, setShowGrading, setStep } = actions;
   const {
